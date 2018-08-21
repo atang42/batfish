@@ -26,13 +26,15 @@ public class SmtManyAnswerElement extends AnswerElement {
 
   @Override
   public String prettyPrint() {
+    StringBuilder acc = new StringBuilder();
     if (_result != null) {
       for (Map.Entry<String, VerificationResult> e : _result.entrySet()) {
         VerificationResult r = e.getValue();
         if (!r.isVerified()) {
-          return r.prettyPrint(e.getKey());
+          acc.append(r.prettyPrint(e.getKey()));
         }
       }
+      return acc.toString();
     }
     return "\nVerified";
   }

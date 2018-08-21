@@ -19,12 +19,11 @@ class UnsatCore {
 
   private Map<String, BoolExpr> _trackingVars;
 
-  private int _trackingNum;
+  private static int _trackingNum = 0;
 
   UnsatCore(boolean doTrack) {
     _doTrack = doTrack;
     _trackingVars = new HashMap<>();
-    _trackingNum = 0;
   }
 
   void track(Solver solver, Context ctx, BoolExpr be) {

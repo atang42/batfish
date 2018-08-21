@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.microsoft.z3.BoolExpr;
 import java.util.SortedMap;
 import java.util.SortedSet;
+import java.util.TreeSet;
 import javax.annotation.Nullable;
 
 /**
@@ -214,10 +215,11 @@ public class VerificationResult {
 
     if (enc.getUnsatCore().getDoTrack()) {
       System.out.println("================= Unsat Core ================");
-      for (BoolExpr be : enc.getSolver().getUnsatCore()) {
-        BoolExpr constraint = enc.getUnsatCore().getTrackingVars().get(be.toString());
+      TreeSet<String> sorted = new TreeSet<>(enc.getUnsatCore().getTrackingVars().keySet());
+      for (String be : sorted) {
+        BoolExpr constraint = enc.getUnsatCore().getTrackingVars().get(be);
         System.out.println("Var: " + be);
-        System.out.println(constraint);
+        System.out.println(constraint.simplify());
         System.out.println();
       }
     }

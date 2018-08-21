@@ -1024,9 +1024,9 @@ public class Graph {
     }
 
     // Don't use ospf over edges to hosts / external
-    if ((ge.getPeer() == null || isHost(ge.getPeer())) && proto.isOspf()) {
-      return false;
-    }
+    //if ((ge.getPeer() == null || isHost(ge.getPeer())) && proto.isOspf()) {
+    //  return false;
+    //}
 
     // Only use specified edges from static routes
     if (proto.isStatic()) {

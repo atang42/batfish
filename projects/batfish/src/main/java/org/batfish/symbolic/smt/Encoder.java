@@ -577,7 +577,8 @@ public class Encoder {
         if ("true".equals(valuation.get(r.getPermitted()))) {
           SortedMap<String, String> recordMap = new TreeMap<>();
           GraphEdge ge = lge.getEdge();
-          String nodeIface = ge.getRouter() + "," + ge.getStart().getName() + " (BGP)";
+          String nodeIface =
+              ge.getRouter() + "," + ge.getStart().getName() + " (" + r.getProto().name() + ")";
           envModel.put(nodeIface, recordMap);
           if (r.getPrefixLength() != null) {
             String x = valuation.get(r.getPrefixLength());
@@ -761,6 +762,8 @@ public class Encoder {
 
     long start = System.currentTimeMillis();
     Status status = _solver.check();
+    //System.out.println("========= SOLVER =========");
+    //System.out.println(_solver);
     long time = System.currentTimeMillis() - start;
 
     VerificationStats stats = null;
@@ -785,8 +788,10 @@ public class Encoder {
 
     if (status == Status.UNSATISFIABLE) {
       VerificationResult res = new VerificationResult(true, null, null, null, null, null, stats);
+      res.debug(mainSlice,false, null);
       return new Tuple<>(res, null);
     } else if (status == Status.UNKNOWN) {
+      System.err.println(getSolver().getReasonUnknown());
       throw new BatfishException("ERROR: satisfiability unknown");
     } else {
       VerificationResult result;
@@ -807,6 +812,7 @@ public class Encoder {
 
         result =
             new VerificationResult(false, model, packetModel, envModel, fwdModel, failures, stats);
+        result.debug(mainSlice,false, null);
 
         if (!_question.getMinimize()) {
           break;

@@ -120,6 +120,7 @@ import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.IpsecVpn;
+import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.RipNeighbor;
 import org.batfish.datamodel.RipProcess;
 import org.batfish.datamodel.SubRange;
@@ -4426,6 +4427,12 @@ public class Batfish extends PluginConsumer implements IBatfish {
   public AnswerElement smtForwarding(HeaderQuestion q) {
     PropertyChecker p = new PropertyChecker(new BDDPacket(), this, _settings);
     return p.checkForwarding(q);
+  }
+
+  @Override public AnswerElement smtDifference(HeaderQuestion q, Pattern nodeRegex, Prefix prefix,
+      int maxLength) {
+    PropertyChecker p = new PropertyChecker(this, _settings);
+    return p.checkMultiple(q, nodeRegex, prefix, maxLength);
   }
 
   @Override

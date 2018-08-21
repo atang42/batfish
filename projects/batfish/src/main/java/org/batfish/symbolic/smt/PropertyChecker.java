@@ -6,9 +6,14 @@ import com.microsoft.z3.BoolExpr;
 import com.microsoft.z3.Context;
 import com.microsoft.z3.Expr;
 import com.microsoft.z3.Model;
+import com.microsoft.z3.Solver;
+import com.microsoft.z3.Status;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +26,7 @@ import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -36,6 +42,7 @@ import org.batfish.datamodel.EmptyIpSpace;
 import org.batfish.datamodel.Flow;
 import org.batfish.datamodel.FlowHistory;
 import org.batfish.datamodel.HeaderSpace;
+import org.batfish.datamodel.InterfaceAddress;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpWildcard;
 import org.batfish.datamodel.Prefix;
@@ -346,6 +353,648 @@ public class PropertyChecker {
     return new SmtOneAnswerElement(result);
   }
 
+  private Tuple<Map<GraphEdge, GraphEdge>, Long> bruteForceMatch(
+      Map<GraphEdge, GraphEdge> acc,
+      List<GraphEdge> edges1,
+      List<GraphEdge> edges2,
+      BiFunction<GraphEdge, GraphEdge, Long> scorer) {
+    if (edges1.isEmpty() || edges2.isEmpty()) {
+
+      long score =
+          acc.entrySet()
+              .stream()
+              .map(ent -> scorer.apply(ent.getKey(), ent.getValue()))
+              .reduce(Long::sum)
+              .get();
+      return new Tuple<>(new HashMap<>(acc), score);
+    }
+    List<GraphEdge> newEdges1;
+    List<GraphEdge> newEdges2;
+
+    GraphEdge ge1 = edges1.get(0);
+    long bestScore = Long.MAX_VALUE;
+    Map<GraphEdge, GraphEdge> bestMap = null;
+    for (GraphEdge ge2 : edges2) {
+      acc.put(ge1, ge2);
+      newEdges1 = new ArrayList<>(edges1);
+      newEdges1.remove(ge1);
+      newEdges2 = new ArrayList<>(edges2);
+      newEdges2.remove(ge2);
+      Tuple<Map<GraphEdge, GraphEdge>, Long> result =
+          bruteForceMatch(acc, newEdges1, newEdges2, scorer);
+      if (result.getSecond() < bestScore) {
+        bestMap = result.getFirst();
+        bestScore = result.getSecond();
+      }
+      acc.remove(ge1);
+    }
+    return new Tuple<>(bestMap, bestScore);
+  }
+
+  private Map<GraphEdge, GraphEdge> getInterfaceMatch(
+      String router1,
+      String router2,
+      List<GraphEdge> edges1,
+      List<GraphEdge> edges2,
+      String method) {
+    Map<GraphEdge, GraphEdge> matchingInterfaces;
+    Map<String, GraphEdge> interfaces1 =
+        edges1
+            .stream()
+            .collect(Collectors.toMap(ge -> ge.getStart().getName(), Function.identity()));
+    Map<String, GraphEdge> interfaces2 =
+        edges2
+            .stream()
+            .collect(Collectors.toMap(ge -> ge.getStart().getName(), Function.identity()));
+
+    if (method.equals("ip")) {
+      /*
+      IP based matching:
+      First tries to pick unique best matches for each interface
+      Then does a brute force matching among remaining interfaces
+       */
+      BiFunction<GraphEdge, GraphEdge, Long> calculateIPScore =
+          (edge1, edge2) -> {
+            InterfaceAddress addr1 = edge1.getStart().getAddress();
+            InterfaceAddress addr2 = edge2.getStart().getAddress();
+            return Math.abs(addr1.getIp().asLong() - addr2.getIp().asLong());
+          };
+      if (edges1.size() != edges2.size()) {
+        System.err.print("Different number of interfaces");
+      }
+      Map<GraphEdge, Tuple<GraphEdge, Long>> best1to2 = new HashMap<>();
+      Map<GraphEdge, Tuple<GraphEdge, Long>> best2to1 = new HashMap<>();
+      for (GraphEdge ge1 : edges1) {
+        best1to2.put(ge1, new Tuple<>(null, Long.MAX_VALUE));
+        for (GraphEdge ge2 : edges2) {
+          long prevScore1to2 = best1to2.get(ge1).getSecond();
+          long newScore = calculateIPScore.apply(ge1, ge2);
+          if (newScore < prevScore1to2) {
+            best1to2.put(ge1, new Tuple<>(ge2, newScore));
+          } else if (newScore == prevScore1to2) {
+            best1to2.put(ge1, new Tuple<>(null, newScore));
+          }
+
+          long prevScore2to1 =
+              best2to1.get(ge2) == null ? Long.MAX_VALUE : best2to1.get(ge2).getSecond();
+          if (newScore < prevScore2to1) {
+            best2to1.put(ge2, new Tuple<>(ge1, newScore));
+          } else if (newScore == prevScore2to1) {
+            best2to1.put(ge2, new Tuple<>(null, newScore));
+          }
+        }
+      }
+      // Match interfaces that are each others' bests
+      matchingInterfaces = new HashMap<>();
+      for (GraphEdge ge1 : new ArrayList<>(edges1)) {
+        GraphEdge ge2 = best1to2.get(ge1).getFirst();
+        if (ge2 != null
+            && best2to1.get(ge2).getFirst() != null
+            && best2to1.get(ge2).getFirst().equals(ge1)) {
+          matchingInterfaces.put(ge1, ge2);
+          edges1.remove(ge1);
+          edges2.remove(ge2);
+        }
+      }
+      // Do brute force search with remaining edges
+      if (!edges1.isEmpty() && !edges2.isEmpty()) {
+        Map<GraphEdge, GraphEdge> others =
+            edges2.size() < edges1.size()
+                ? bruteForceMatch(new HashMap<>(), edges2, edges1, calculateIPScore).getFirst()
+                : bruteForceMatch(new HashMap<>(), edges1, edges2, calculateIPScore).getFirst();
+        matchingInterfaces.putAll(others);
+      }
+    } else {
+      /*
+      Name based matching:
+      Matches interfaces with the same name
+       */
+
+      matchingInterfaces = new HashMap<>();
+      for (GraphEdge edge : edges1) {
+        if (interfaces2.keySet().contains(edge.getStart().getName())) {
+          matchingInterfaces.put(edge, interfaces2.get(edge.getStart().getName()));
+        } else {
+          System.err.println("interfaces do not match: " + router1 + " " + edge);
+        }
+      }
+      for (GraphEdge edge : edges2) {
+        if (!interfaces1.keySet().contains(edge.getStart().getName())) {
+          System.err.println("interfaces do not match: " + router2 + " " + edge);
+        }
+      }
+    }
+
+    return matchingInterfaces;
+  }
+
+  public AnswerElement checkMultiple(
+      HeaderQuestion question, Pattern routerRegex, Prefix prefix, int maxLength) {
+    Graph graph = new Graph(_batfish);
+    List<String> routers = PatternUtils.findMatchingNodes(graph, routerRegex, Pattern.compile(""));
+    if (routers.size() > 2) {
+      System.out.println(
+          "Only comparing first 2 routers: " + routers.get(0) + " " + routers.get(1));
+      routers = Arrays.asList(routers.get(0), routers.get(1));
+    }
+    // Generate subgraphs
+    Set<String> node1 = new TreeSet<>();
+    node1.add(routers.get(0));
+    Set<String> node2 = new TreeSet<>();
+    node2.add(routers.get(1));
+    Graph g1 = new Graph(_batfish, null, node1);
+    Graph g2 = new Graph(_batfish, null, node2);
+
+    // Get edges
+    Pattern all = Pattern.compile(".*");
+    Pattern none = Pattern.compile("");
+    Pattern r1 = Pattern.compile(routers.get(0));
+    Pattern r2 = Pattern.compile(routers.get(1));
+    List<GraphEdge> edges1 = PatternUtils.findMatchingEdges(g1, r1, none, all, none);
+    List<GraphEdge> edges2 = PatternUtils.findMatchingEdges(g2, r2, none, all, none);
+
+    // Match interfaces
+    Map<GraphEdge, GraphEdge> matchingInterfaces =
+        getInterfaceMatch(routers.get(0), routers.get(1), edges1, edges2, "ip");
+    matchingInterfaces.entrySet().forEach(System.out::println);
+
+    HeaderQuestion q = new HeaderQuestion(question);
+    q.setFailures(0);
+
+    Encoder encoder1 = new Encoder(_settings, g1, q);
+    Encoder encoder2 = new Encoder(encoder1, g2);
+    encoder1.computeEncoding();
+    addEnvironmentConstraints(encoder1, q.getBaseEnvironmentType());
+    encoder2.computeEncoding();
+    addEnvironmentConstraints(encoder2, q.getBaseEnvironmentType());
+    Context ctx = encoder2.getCtx();
+
+    // Equate packet fields in both symbolic packets
+    SymbolicPacket pkt1 = encoder1.getMainSlice().getSymbolicPacket();
+    SymbolicPacket pkt2 = encoder2.getMainSlice().getSymbolicPacket();
+    encoder2.add(pkt1.mkEqual(pkt2));
+
+    // Ignore IP address of interfaces
+    BoolExpr ignored =
+        ignoreExactInterfaces(
+            ctx, graph, encoder2.getMainSlice().getSymbolicPacket().getDstIp(), routers);
+    encoder2.add(ignored);
+
+    // Equal Environments on adjacent links
+    System.out.println("ENV");
+    encoder1
+        .getMainSlice()
+        .getLogicalGraph()
+        .getEnvironmentVars()
+        .entrySet()
+        .forEach(System.out::println);
+    encoder2
+        .getMainSlice()
+        .getLogicalGraph()
+        .getEnvironmentVars()
+        .entrySet()
+        .forEach(System.out::println);
+    Stream<Entry<LogicalEdge, SymbolicRoute>> envStream1 =
+        encoder1.getMainSlice().getLogicalGraph().getEnvironmentVars().entrySet().stream();
+    Map<GraphEdge, SymbolicRoute> realToEnv1 =
+        envStream1.collect(
+            Collectors.toMap((ent) -> ent.getKey().getEdge(), Entry::getValue));
+    Stream<Entry<LogicalEdge, SymbolicRoute>> envStream2 =
+        encoder2.getMainSlice().getLogicalGraph().getEnvironmentVars().entrySet().stream();
+    Map<GraphEdge, SymbolicRoute> realToEnv2 =
+        envStream2.collect(
+            Collectors.toMap((ent) -> ent.getKey().getEdge(), Entry::getValue));
+    for (GraphEdge ge1 : matchingInterfaces.keySet()) {
+      GraphEdge ge2 = matchingInterfaces.get(ge1);
+      SymbolicRoute env1 = realToEnv1.get(ge1);
+      SymbolicRoute env2 = realToEnv2.get(ge2);
+      if (env1 != null && env2 != null) {
+        BoolExpr envEqual = symRouteEqual(ctx, env1, env2);
+        encoder2.add(envEqual);
+      }
+    }
+    // Add constraints on forwarding
+    BoolExpr sameForwarding = ctx.mkBool(true);
+    for (Entry<GraphEdge, GraphEdge> entry : matchingInterfaces.entrySet()) {
+      GraphEdge edge1 = entry.getKey();
+      GraphEdge edge2 = entry.getValue();
+
+      EncoderSlice mainSlice1 = encoder1.getMainSlice();
+      EncoderSlice mainSlice2 = encoder2.getMainSlice();
+      BoolExpr dataFwd1 =
+          mainSlice1.getSymbolicDecisions().getDataForwarding().get(routers.get(0), edge1);
+      BoolExpr dataFwd2 =
+          mainSlice2.getSymbolicDecisions().getDataForwarding().get(routers.get(1), edge2);
+      assert (dataFwd1 != null);
+      assert (dataFwd2 != null);
+      sameForwarding = ctx.mkAnd(sameForwarding, ctx.mkEq(dataFwd1, dataFwd2));
+
+    }
+    // Add constraints on incoming ACL
+    BoolExpr sameIncomingACL =
+        getIncomingACLEquivalence(
+            ctx, encoder1.getMainSlice(), encoder2.getMainSlice(), matchingInterfaces);
+    BoolExpr sameRouteExport =
+        getRouteExportEquivalence(
+            ctx, encoder1.getMainSlice(), encoder2.getMainSlice(), matchingInterfaces);
+    BoolExpr sameBehavior = ctx.mkAnd(sameForwarding, sameIncomingACL, sameRouteExport);
+
+    BoolExpr[] assertions =
+        Arrays.stream(encoder2.getSolver().getAssertions())
+            .map(Expr::simplify)
+            .toArray(BoolExpr[]::new);
+    encoder2.add(ctx.mkNot(ctx.mkAnd(sameBehavior)));
+    Arrays.stream(encoder2.getSolver().getAssertions())
+        .map(Expr::simplify)
+        .forEach(System.out::println);
+
+    // Creating solver to test that all dstIps in prefix have a difference
+    // Get assertions before requiring forwarding
+    Solver noneEquivalent = ctx.mkSolver();
+    SymbolicPacket packet = encoder2.getMainSlice().getSymbolicPacket();
+    BitVecExpr dstIp = packet.getDstIp();
+    Expr[] packetFields = {
+      packet.getSrcIp(),
+      packet.getDstPort(),
+      packet.getSrcPort(),
+      packet.getIpProtocol(),
+      packet.getIcmpCode(),
+      packet.getIcmpType()
+    };
+    List<Expr> inputFields = new ArrayList<>(Arrays.asList(packetFields));
+    Expr[] notPacketVars =
+        encoder2
+            .getAllVariables()
+            .values()
+            .stream()
+            .filter(expr -> !expr.equals(dstIp))
+            .toArray(Expr[]::new);
+
+    BoolExpr conjunction = ctx.mkAnd(assertions);
+    BoolExpr implies = ctx.mkImplies(conjunction, sameBehavior);
+    BoolExpr forall = ctx.mkForall(notPacketVars, implies, 1, null, null, null, null);
+    noneEquivalent.add(forall);
+    noneEquivalent.add(ignored);
+
+    // Loop to test longer prefixes
+    TreeMap<String, VerificationResult> results = new TreeMap<>();
+    ArrayDeque<Prefix> prefixQueue = new ArrayDeque<>();
+    prefixQueue.push(prefix);
+    Set<Prefix> verified = new TreeSet<>();
+    int prevDepth = 0;
+    while (!prefixQueue.isEmpty()) {
+      Prefix currPrefix = prefixQueue.pop();
+      int shift = 32 - currPrefix.getPrefixLength();
+      if (currPrefix.getPrefixLength() > prevDepth) {
+        prevDepth = currPrefix.getPrefixLength();
+        System.out.println(prevDepth);
+      }
+      encoder2.getSolver().push();
+
+      // Add constraint on prefix
+      BitVecExpr pfxIpExpr = ctx.mkBV(currPrefix.getStartIp().asLong(), 32);
+      BitVecExpr shiftExpr = ctx.mkBV(shift, 32);
+      BoolExpr matchPrefix =
+          ctx.mkEq(ctx.mkBVLSHR(dstIp, shiftExpr), ctx.mkBVLSHR(pfxIpExpr, shiftExpr));
+      encoder2.add(matchPrefix);
+
+      VerificationResult result = encoder2.verify().getFirst();
+      encoder2.getSolver().pop();
+
+      // Check that no ip address equivalent
+      boolean doForalls = true;
+      if (doForalls) {
+        if (!result.isVerified() && currPrefix.getPrefixLength() < maxLength) {
+          noneEquivalent.push();
+          noneEquivalent.add(matchPrefix);
+          Status neStatus = noneEquivalent.check();
+          if (neStatus.equals(Status.UNSATISFIABLE)) {
+            results.put(currPrefix.toString(), result);
+          } else {
+            if (neStatus.equals(Status.UNKNOWN)) {
+              System.out.println(noneEquivalent.getReasonUnknown());
+            }
+            prefixQueue.addAll(genLongerPrefix(currPrefix, currPrefix.getPrefixLength() + 1));
+          }
+          noneEquivalent.pop();
+        } else if (result.isVerified()) {
+          verified.add(currPrefix);
+        } else if (currPrefix.getPrefixLength() >= maxLength) {
+          results.put(currPrefix.toString(), result);
+        }
+      } else {
+        if (!result.isVerified() && currPrefix.getPrefixLength() < maxLength) {
+          prefixQueue.addAll(genLongerPrefix(currPrefix, currPrefix.getPrefixLength() + 1));
+        } else if (result.isVerified()) {
+          verified.add(currPrefix);
+        } else if (currPrefix.getPrefixLength() >= maxLength) {
+          results.put(currPrefix.toString(), result);
+        }
+      }
+    }
+
+    // Print prefixes where equivalent
+    Comparator<Prefix> pfxLenCompare =
+        (a, b) -> {
+          if (a.getPrefixLength() < b.getPrefixLength()) {
+            return -1;
+          } else if (a.getPrefixLength() > b.getPrefixLength()) {
+            return 1;
+          }
+          return a.compareTo(b);
+        };
+    verified.stream().sorted(pfxLenCompare).forEach(System.out::println);
+
+    return new SmtManyAnswerElement(results);
+  }
+
+  /*
+  Create longer prefixes that cover an original prefix
+   */
+  private Set<Prefix> genLongerPrefix(Prefix prefix, int length) {
+    Set<Prefix> ret = new TreeSet<>();
+    long bits = prefix.getStartIp().asLong();
+    for (int i = 0; i < 1L << (length - prefix.getPrefixLength()); i++) {
+      ret.add(new Prefix(new Ip(bits), length));
+      bits += 1L << (32 - length);
+    }
+    return ret;
+  }
+
+  /*
+   * Creates a boolean variable representing destinations we don't want
+   * to consider due to local differences.
+   */
+  private BoolExpr ignoreExactInterfaces(
+      Context ctx, Graph graph, Expr dstIp, List<String> routers) {
+    BoolExpr validDest = ctx.mkBool(true);
+    for (GraphEdge ge : graph.getAllEdges()) {
+      long address = ge.getStart().getAddress().getIp().asLong();
+      validDest = ctx.mkAnd(validDest, ctx.mkNot(ctx.mkEq(dstIp, ctx.mkBV(address, 32))));
+    }
+    return validDest;
+  }
+
+  /*
+  Expression for Incoming ACL Equivalence
+   */
+  private BoolExpr getIncomingACLEquivalence(
+      Context ctx, EncoderSlice slice1, EncoderSlice slice2, Map<GraphEdge, GraphEdge> intfMatch) {
+    BoolExpr ret = ctx.mkTrue();
+    Map<GraphEdge, BoolExpr> acl1 = slice1.getIncomingAcls();
+    Map<GraphEdge, BoolExpr> acl2 = slice2.getIncomingAcls();
+    for (Entry<GraphEdge, GraphEdge> ent : intfMatch.entrySet()) {
+      GraphEdge first = ent.getKey();
+      GraphEdge second = ent.getValue();
+      if (acl1.containsKey(first) && acl2.containsKey(second)) {
+        ret = ctx.mkAnd(ret, ctx.mkEq(acl1.get(first), acl2.get(second)));
+      } else if (acl1.containsKey(first)) {
+        ret = ctx.mkAnd(ret, acl1.get(first));
+      } else if (acl2.containsKey(second)) {
+        ret = ctx.mkAnd(ret, acl2.get(second));
+      }
+    }
+    return ret;
+  }
+
+  private BoolExpr getRouteExportEquivalence(
+      Context ctx, EncoderSlice slice1, EncoderSlice slice2, Map<GraphEdge, GraphEdge> intfMatch) {
+    BoolExpr ret = ctx.mkTrue();
+    System.out.println("Slice 1:");
+    slice1
+        .getLogicalGraph()
+        .getLogicalEdges()
+        .forEach(
+            (a, b, c) -> {
+              System.out.println(a + " " + b.name());
+              for (List<LogicalEdge> d : c) {
+                for (LogicalEdge le : d) {
+                  System.out.println(le.getEdgeType() + " " + le.getEdge());
+                }
+              }
+            });
+    System.out.println("Slice 2:");
+    slice2
+        .getLogicalGraph()
+        .getLogicalEdges()
+        .forEach(
+            (a, b, c) -> {
+              System.out.println(a + " " + b.name());
+              for (List<LogicalEdge> d : c) {
+                for (LogicalEdge le : d) {
+                  System.out.println(le.getEdgeType() + " " + le.getEdge());
+                }
+              }
+            });
+    Map<Protocol, List<ArrayList<LogicalEdge>>> slice1EdgeMap = new HashMap<>();
+    Map<Protocol, List<ArrayList<LogicalEdge>>> slice2EdgeMap = new HashMap<>();
+    slice1.getLogicalGraph().getLogicalEdges().forEach((a, b) -> slice1EdgeMap.putAll(b));
+    slice2.getLogicalGraph().getLogicalEdges().forEach((a, b) -> slice2EdgeMap.putAll(b));
+    for (Protocol proto : slice1EdgeMap.keySet()) {
+      if (!slice2EdgeMap.containsKey(proto)) {
+        continue;
+      }
+      List<LogicalEdge> slice1Edges =
+          slice1EdgeMap.get(proto).stream().flatMap(List::stream).collect(Collectors.toList());
+      List<LogicalEdge> slice2Edges =
+          slice2EdgeMap.get(proto).stream().flatMap(List::stream).collect(Collectors.toList());
+
+      for (LogicalEdge le1 : slice1Edges) {
+        for (LogicalEdge le2 : slice2Edges) {
+          if (le1.getEdgeType().equals(EdgeType.EXPORT)
+              && le2.getEdgeType().equals(EdgeType.EXPORT)
+              && intfMatch.get(le1.getEdge()).equals(le2.getEdge())) {
+            ret =
+                ctx.mkAnd(
+                    ret, symRouteEqual(ctx, le1.getSymbolicRecord(), le2.getSymbolicRecord()));
+          }
+        }
+      }
+    }
+
+    System.out.println(ret.simplify());
+
+    return ret;
+  }
+
+  private BoolExpr symRouteEqual(Context ctx, SymbolicRoute route1, SymbolicRoute route2) {
+    if ((route1.getProto().isBgp() && route2.getProto().isBgp())
+        || (route1.getProto().isOspf() && route2.getProto().isOspf())) {
+
+      BoolExpr ret = ctx.mkEq(route1.getPermitted(), route2.getPermitted());
+      ret = ctx.mkAnd(ret, ctx.mkEq(route1.getMetric(), route2.getMetric()));
+      ret = ctx.mkAnd(ret, ctx.mkEq(route1.getPrefixLength(), route2.getPrefixLength()));
+      if (route1.getProto().isOspf()
+          && route2.getProto().isOspf()
+          && route1.getOspfType() != null
+          && route2.getOspfType() != null) {
+        ret =
+            ctx.mkAnd(
+                ret, ctx.mkEq(route1.getOspfType().getBitVec(), route2.getOspfType().getBitVec()));
+      }
+      return ret;
+    }
+    return ctx.mkTrue();
+  }
+
+  /*
+  Add packet bound constraints to a solver
+   */
+  private void addSolverPacketConstraints(SymbolicPacket packet, Solver solver, Context ctx) {
+
+    ArithExpr upperBound4 = ctx.mkInt((long) Math.pow(2, 4));
+    ArithExpr upperBound8 = ctx.mkInt((long) Math.pow(2, 8));
+    ArithExpr upperBound16 = ctx.mkInt((long) Math.pow(2, 16));
+    ArithExpr upperBound32 = ctx.mkInt((long) Math.pow(2, 32));
+    ArithExpr zero = ctx.mkInt(0);
+
+    // Valid 16 bit integer
+    solver.add(ctx.mkGe(packet.getDstPort(), zero));
+    solver.add(ctx.mkGe(packet.getSrcPort(), zero));
+    solver.add(ctx.mkLt(packet.getDstPort(), upperBound16));
+    solver.add(ctx.mkLt(packet.getSrcPort(), upperBound16));
+
+    // Valid 8 bit integer
+    solver.add(ctx.mkGe(packet.getIcmpType(), zero));
+    solver.add(ctx.mkGe(packet.getIpProtocol(), zero));
+    solver.add(ctx.mkLt(packet.getIcmpType(), upperBound8));
+    solver.add(ctx.mkLe(packet.getIpProtocol(), upperBound8));
+
+    // Valid 4 bit integer
+    solver.add(ctx.mkGe(packet.getIcmpCode(), zero));
+    solver.add(ctx.mkLt(packet.getIcmpCode(), upperBound4));
+  }
+
+  public AnswerElement checkTwoRouters(
+      HeaderQuestion question, Pattern routerRegex, Prefix prefix, int maxLength) {
+    Graph graph = new Graph(_batfish);
+    List<String> routers = PatternUtils.findMatchingNodes(graph, routerRegex, Pattern.compile(""));
+    if (routers.size() > 2) {
+      System.out.println("Only matching 1st router: " + routers.get(0));
+    }
+
+    HeaderQuestion q = new HeaderQuestion(question);
+    q.setFailures(0);
+
+    TreeSet<String> node1 = new TreeSet<>();
+    node1.add(routers.get(0));
+    TreeSet<String> node2 = new TreeSet<>();
+    node2.add(routers.get(1));
+    Graph g1 = new Graph(_batfish, null, node1);
+    Graph g2 = new Graph(_batfish, null, node2);
+
+    Encoder encoder1 = new Encoder(_settings, g1, q);
+    Encoder encoder2 = new Encoder(_settings, g2, q);
+    //    Encoder encoder3 = new Encoder(encoder1, g2);
+    //    Encoder encoder4 = new Encoder(encoder2, g1);
+    Encoder encoder5 = new Encoder(_settings, graph, q);
+    encoder1.computeEncoding();
+    addEnvironmentConstraints(encoder1, q.getBaseEnvironmentType());
+    encoder2.computeEncoding();
+    addEnvironmentConstraints(encoder2, q.getBaseEnvironmentType());
+    //    encoder3.computeEncoding();
+    //    addEnvironmentConstraints(encoder3, q.getBaseEnvironmentType());
+    //    encoder4.computeEncoding();
+    //    addEnvironmentConstraints(encoder4, q.getBaseEnvironmentType());
+    encoder5.computeEncoding();
+    addEnvironmentConstraints(encoder5, q.getBaseEnvironmentType());
+
+    VerificationResult result1 = encoder1.verify().getFirst();
+    VerificationResult result2 = encoder2.verify().getFirst();
+    //    VerificationResult result3 = encoder3.verify().getFirst();
+    //    VerificationResult result4 = encoder4.verify().getFirst();
+    VerificationResult result5 = encoder5.verify().getFirst();
+
+    SortedMap<String, VerificationResult> results = new TreeMap<>();
+    results.put("1", result1);
+    results.put("2", result2);
+    //    results.put("1+2", result3);
+    //    results.put("2+1", result4);
+    results.put("both", result5);
+
+    return new SmtManyAnswerElement(results);
+  }
+
+  /*
+  Check each assertion returns a list of possible constraints for each input variable
+   */
+  private Map<Expr, Collection<Expr>> getInputConstraints(Expr[] assertions, Set<Expr> inputVars) {
+    // Using a Map<String, Exp> instead of a set to remove equivalent expressions that are not equal
+    Map<Expr, Map<String, Expr>> map = new TreeMap<>();
+    for (Expr assertion : assertions) {
+      // Skip assertions that must always be true
+      if (inputVars.contains(assertion)) {
+        continue;
+      }
+      getConstraintsBool(assertion.simplify(), inputVars, map);
+    }
+    return map.entrySet()
+        .stream()
+        .collect(Collectors.toMap(Entry::getKey, ent -> ent.getValue().values()));
+  }
+
+  /*
+  Recursively descends through one assertion to find boolean expression containing input variable
+   */
+  private void getConstraintsBool(
+      Expr assertion, Set<Expr> inputVars, Map<Expr, Map<String, Expr>> map) {
+    if (inputVars.contains(assertion)) {
+      map.putIfAbsent(assertion, new TreeMap<>());
+      map.get(assertion).put(assertion.toString(), assertion);
+    } else if (assertion.isApp()) {
+      for (Expr arg : assertion.getArgs()) {
+        if (arg.isBool()) {
+          getConstraintsBool(arg, inputVars, map);
+        } else {
+          Expr e = getConstraintsNotBool(arg, inputVars, map);
+          if (e != null) {
+            map.putIfAbsent(e, new TreeMap<>());
+            map.get(e).put(assertion.toString(), assertion);
+          }
+        }
+      }
+    }
+  }
+
+  /*
+  Recursively check if non-boolean expression contains input variables and returns it
+   */
+  @Nullable
+  private Expr getConstraintsNotBool(
+      Expr expr, Set<Expr> inputVars, Map<Expr, Map<String, Expr>> map) {
+    if (expr.isString()) {
+      System.err.println("IS STRING: " + expr);
+    }
+    if (inputVars.contains(expr)) {
+      // System.err.println("SORT: " + expr.getSort());
+      return expr;
+    }
+    Expr ret = null;
+    if (expr.isApp()) {
+      for (Expr arg : expr.getArgs()) {
+        if (arg.isBool()) {
+          getConstraintsBool(arg, inputVars, map);
+        } else {
+          if (getConstraintsNotBool(arg, inputVars, map) != null) {
+            ret = getConstraintsNotBool(arg, inputVars, map);
+          }
+        }
+      }
+    }
+    return ret;
+  }
+
+  private void addHashConstraint(Encoder encoder, int value) {
+    Context ctx = encoder.getCtx();
+    BitVecExpr dstIP = encoder.getMainSlice().getSymbolicPacket().getDstIp();
+    BitVecExpr b1 = ctx.mkExtract(31, 24, dstIP);
+    BitVecExpr b2 = ctx.mkBVAdd(b1, ctx.mkExtract(23, 16, dstIP));
+    BitVecExpr b3 = ctx.mkBVAdd(b2, ctx.mkExtract(15, 8, dstIP));
+    // BitVecExpr b4 = ctx.mkBVAdd(b3, ctx.mkExtract( 7,  0, dstIP));
+    BitVecExpr mod = ctx.mkBVURem(b3, ctx.mkBV(16, 8));
+    encoder.add(ctx.mkEq(mod, ctx.mkBV(value, 8)));
+  }
+
   /*
    * General purpose logic for checking a property that holds that
    * handles the various flags and parameters for a query with endpoints
@@ -558,6 +1207,7 @@ public class PropertyChecker {
         q,
         (enc, srcRouters, destPorts) -> {
           PropertyAdder pa = new PropertyAdder(enc.getMainSlice());
+          System.out.println(pa.instrumentReachability(destPorts));
           return pa.instrumentReachability(destPorts);
         },
         (vp) -> {
@@ -583,8 +1233,7 @@ public class PropertyChecker {
                       .stream()
                       .collect(
                           Collectors.toMap(
-                              Map.Entry::getKey,
-                              entry -> ce.isTrue(entry.getValue()) ^ q.getNegate()));
+                              Entry::getKey, entry -> ce.isTrue(entry.getValue()) ^ q.getNegate()));
               fh = ce.buildFlowHistory(testrigName, vp.getSrcRouters(), vp.getEnc(), reachVals);
             }
             return new SmtReachabilityAnswerElement(vp.getResult(), fh);
@@ -763,14 +1412,14 @@ public class PropertyChecker {
     for (String router : toCheck) {
       Map<GraphEdge, BoolExpr> edges = slice.getSymbolicDecisions().getDataForwarding().get(router);
       BoolExpr doesNotFwd = ctx.mkBool(true);
-      for (Map.Entry<GraphEdge, BoolExpr> entry : edges.entrySet()) {
+      for (Entry<GraphEdge, BoolExpr> entry : edges.entrySet()) {
         BoolExpr dataFwd = entry.getValue();
         doesNotFwd = ctx.mkAnd(doesNotFwd, ctx.mkNot(dataFwd));
       }
       BoolExpr isFwdTo = ctx.mkBool(false);
       Set<String> neighbors = graph.getNeighbors().get(router);
       for (String n : neighbors) {
-        for (Map.Entry<GraphEdge, BoolExpr> entry :
+        for (Entry<GraphEdge, BoolExpr> entry :
             slice.getSymbolicDecisions().getDataForwarding().get(n).entrySet()) {
           GraphEdge ge = entry.getKey();
           BoolExpr fwd = entry.getValue();
@@ -810,7 +1459,7 @@ public class PropertyChecker {
     Map<String, BoolExpr> reachableVars = pa.instrumentReachability(destPorts);
 
     BoolExpr acc = enc.mkFalse();
-    for (Map.Entry<String, Configuration> entry : graph.getConfigurations().entrySet()) {
+    for (Entry<String, Configuration> entry : graph.getConfigurations().entrySet()) {
       String router = entry.getKey();
       BoolExpr reach = reachableVars.get(router);
       BoolExpr all = enc.mkTrue();
@@ -1001,7 +1650,7 @@ public class PropertyChecker {
 
                 // Set communities equal
                 BoolExpr equalComms = e1.mkTrue();
-                for (Map.Entry<CommunityVar, BoolExpr> entry : vars1.getCommunities().entrySet()) {
+                for (Entry<CommunityVar, BoolExpr> entry : vars1.getCommunities().entrySet()) {
                   CommunityVar cvar = entry.getKey();
                   BoolExpr ce1 = entry.getValue();
                   BoolExpr ce2 = vars2.getCommunities().get(cvar);
@@ -1014,37 +1663,33 @@ public class PropertyChecker {
                 // off, but give a warning of the difference
                 BoolExpr unsetComms = e1.mkTrue();
 
-                for (Map.Entry<CommunityVar, BoolExpr> entry : vars1.getCommunities().entrySet()) {
+                for (Entry<CommunityVar, BoolExpr> entry : vars1.getCommunities().entrySet()) {
                   CommunityVar cvar = entry.getKey();
                   BoolExpr ce1 = entry.getValue();
                   BoolExpr ce2 = vars2.getCommunities().get(cvar);
                   if (ce2 == null) {
-                    if (!communities.contains(cvar.getValue())) {
-                      communities.add(cvar.getValue());
-                      /* String msg =
-                       String.format(
-                           "Warning: community %s found for router %s but not %s.",
-                           cvar.getValue(), conf1.getEnvName(), conf2.getEnvName());
-                      System.out.println(msg); */
-                    }
+                    /* String msg =
+                     String.format(
+                         "Warning: community %s found for router %s but not %s.",
+                         cvar.getValue(), conf1.getEnvName(), conf2.getEnvName());
+                    System.out.println(msg); */
+                    communities.add(cvar.getValue());
                     unsetComms = e1.mkAnd(unsetComms, e1.mkNot(ce1));
                   }
                 }
 
                 // Do the same thing for communities missing from the other side
-                for (Map.Entry<CommunityVar, BoolExpr> entry : vars2.getCommunities().entrySet()) {
+                for (Entry<CommunityVar, BoolExpr> entry : vars2.getCommunities().entrySet()) {
                   CommunityVar cvar = entry.getKey();
                   BoolExpr ce2 = entry.getValue();
                   BoolExpr ce1 = vars1.getCommunities().get(cvar);
                   if (ce1 == null) {
-                    if (!communities.contains(cvar.getValue())) {
-                      communities.add(cvar.getValue());
-                      /* String msg =
-                       String.format(
-                           "Warning: community %s found for router %s but not %s.",
-                           cvar.getValue(), conf2.getEnvName(), conf1.getEnvName());
-                      System.out.println(msg); */
-                    }
+                    /* String msg =
+                     String.format(
+                         "Warning: community %s found for router %s but not %s.",
+                         cvar.getValue(), conf2.getEnvName(), conf1.getEnvName());
+                    System.out.println(msg); */
+                    communities.add(cvar.getValue());
                     unsetComms = e1.mkAnd(unsetComms, e1.mkNot(ce2));
                   }
                 }

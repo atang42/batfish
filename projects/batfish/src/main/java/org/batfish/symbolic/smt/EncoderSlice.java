@@ -276,6 +276,7 @@ class EncoderSlice {
                   outbound.getName());
 
           BoolExpr outAcl = getCtx().mkBoolConst(outName);
+          _encoder.getAllVariables().put(outName, outAcl);
           BoolExpr outAclFunc = computeACL(outbound);
           add(mkEq(outAcl, outAclFunc));
           _outboundAcls.put(ge, outAcl);
@@ -289,6 +290,7 @@ class EncoderSlice {
                   _encoder.getId(), _sliceName, router, i.getName(), "INBOUND", inbound.getName());
 
           BoolExpr inAcl = getCtx().mkBoolConst(inName);
+          _encoder.getAllVariables().put(inName, inAcl);
           BoolExpr inAclFunc = computeACL(inbound);
           add(mkEq(inAcl, inAclFunc));
           _inboundAcls.put(ge, inAcl);
@@ -835,18 +837,63 @@ class EncoderSlice {
                       address = n.getPeerAddress().toString();
                     }
                     String ifaceName = "ENV-" + address;
-                    String name =
-                        String.format(
-                            "%d_%s%s_%s_%s_%s",
-                            _encoder.getId(),
-                            _sliceName,
-                            router,
-                            proto.name(),
-                            "EXPORT",
-                            ifaceName);
-                    SymbolicRoute vars =
-                        new SymbolicRoute(
-                            this, name, router, proto, _optimizations, null, ge.isAbstract());
+                    String name = String.format("%d_%s%s_%s_%s_%s",
+                        _encoder.getId(),
+                        _sliceName,
+                        router,
+                        proto.name(),
+                        "EXPORT",
+                        ifaceName);
+                    SymbolicRoute vars = new SymbolicRoute(this, name, router, proto, _optimizations, null, ge.isAbstract());
+                    getAllSymbolicRecords().add(vars);
+                    _logicalGraph.getEnvironmentVars().put(e, vars);
+                  }
+                }
+              }
+            }
+          }
+        } else if (proto.isOspf()) {
+          List<ArrayList<LogicalEdge>> les = _logicalGraph.getLogicalEdges().get(router, proto);
+          System.out.println("Logical Ospf Edges");
+          for (ArrayList<LogicalEdge> arr : les) {
+            arr.stream().forEach(le -> {
+              System.out.println(le.getEdge());
+              System.out.println(le.getEdgeType());
+            });
+          }
+          assert (les != null);
+          for (ArrayList<LogicalEdge> eList : les) {
+            for (LogicalEdge e : eList) {
+              if (e.getEdgeType() == EdgeType.IMPORT) {
+                GraphEdge ge = e.getEdge();
+                if (ge.getEnd() == null) {
+                  if (!isMainSlice()) {
+                    LogicalGraph lg = _encoder.getMainSlice().getLogicalGraph();
+                    SymbolicRoute r = lg.getEnvironmentVars().get(e);
+                    _logicalGraph.getEnvironmentVars().put(e, r);
+                  } else {
+                    String address;
+                    if (ge.getStart().getAddress() == null) {
+                      address = "null";
+                    } else {
+                      address = ge.getStart().getAddress().toString();
+                    }
+                    String ifaceName = "ENV-" + address;
+                    String name = String.format("%d_%s%s_%s_%s_%s",
+                        _encoder.getId(),
+                        _sliceName,
+                        router,
+                        proto.name(),
+                        "EXPORT",
+                        ifaceName);
+                    SymbolicRoute vars = new SymbolicRoute(
+                        this,
+                        name,
+                        router,
+                        proto,
+                        _optimizations,
+                        null,
+                        ge.isAbstract());
                     getAllSymbolicRecords().add(vars);
                     _logicalGraph.getEnvironmentVars().put(e, vars);
                   }
