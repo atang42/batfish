@@ -388,6 +388,8 @@ public final class InferRoles {
     // produce a role-level topology and the list of nodes in each edge's source role
     // that have an edge to some node in the edge's target role
     SortedMap<RoleEdge, SortedSet<String>> roleEdges = new TreeMap<>();
+
+    Set<String> roles = new TreeSet<>();
     for (Edge e : _topology.getEdges()) {
       String n1 = e.getNode1();
       String n2 = e.getNode2();
@@ -400,6 +402,8 @@ public final class InferRoles {
         if (role1.equals(role2)) {
           continue;
         }
+        roles.add(role1);
+        roles.add(role2);
         RoleEdge redge = new RoleEdge(role1, role2);
         SortedSet<String> roleEdgeNodes = roleEdges.getOrDefault(redge, new TreeSet<>());
         roleEdgeNodes.add(n1);
@@ -419,10 +423,27 @@ public final class InferRoles {
     SortedMap<String, SortedSet<String>> roleNodesMap = regexToRoleNodesMap(regex, _nodes);
 
     double supportSum = 0.0;
+    double supportSum2 = 0.0;
+/*    for (String r1 : roles) {
+      for (String r2 : roles) {
+        RoleEdge redge = new RoleEdge(r1, r2);
+        int count = roleEdges.getOrDefault(redge, new TreeSet<>()).size();
+        double contribution = (double) count / roleNodesMap.get(redge.getRole1()).size();
+        double contribution2 = Double.max(contribution, 1-contribution);
+        supportSum += (double) count / roleNodesMap.get(redge.getRole1()).size();
+        supportSum2 += contribution2;
+        System.out.println(redge);
+        System.out.println(contribution);
+        System.out.println(contribution2);
+      }
+    }*/
     for (Map.Entry<RoleEdge, SortedSet<String>> roleEdgeCount : roleEdges.entrySet()) {
       RoleEdge redge = roleEdgeCount.getKey();
       int count = roleEdgeCount.getValue().size();
+      double contribution = (double) count / roleNodesMap.get(redge.getRole1()).size();
+      double contribution2 = Double.max(contribution, 1 - contribution);
       supportSum += (double) count / roleNodesMap.get(redge.getRole1()).size();
+      supportSum2 += contribution2;
     }
     return supportSum / numEdges;
   }

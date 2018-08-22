@@ -705,6 +705,18 @@ public class PropertyChecker {
         };
     verified.stream().sorted(pfxLenCompare).forEach(System.out::println);
 
+    // Create verified version
+    for (String resultPrefix : results.keySet()) {
+      Prefix pfx = Prefix.parse(resultPrefix);
+      BitVecExpr pfxIpExpr = ctx.mkBV(pfx.getStartIp().asLong(), 32);
+      BitVecExpr shiftExpr = ctx.mkBV(32 - pfx.getPrefixLength(), 32);
+      BoolExpr matchPrefix =
+          ctx.mkEq(ctx.mkBVLSHR(dstIp, shiftExpr), ctx.mkBVLSHR(pfxIpExpr, shiftExpr));
+      encoder2.add(matchPrefix);
+    }
+    //System.out.println(encoder2.getSolver());
+    //System.out.println(encoder2.getSolver().check());
+
     return new SmtManyAnswerElement(results);
   }
 
@@ -831,6 +843,20 @@ public class PropertyChecker {
         ret =
             ctx.mkAnd(
                 ret, ctx.mkEq(route1.getOspfType().getBitVec(), route2.getOspfType().getBitVec()));
+      } else if (route1.getProto().isBgp()) {
+        // Equal communities
+        Map<CommunityVar, BoolExpr> comm1 = route1.getCommunities();
+        Map<CommunityVar, BoolExpr> comm2 = route2.getCommunities();
+        Set<CommunityVar> commSet = new HashSet<>(comm1.keySet());
+        commSet.addAll(comm2.keySet());
+        System.out.println("-------------- COMMUNITIES -------------");
+        for(CommunityVar cv : commSet) {
+          System.out.println(cv);
+          if(comm1.containsKey(cv) && comm2.containsKey(cv)) {
+            System.out.println(comm1.get(cv) + " " + comm2.get(cv));
+            ret = ctx.mkAnd(ret, ctx.mkEq(comm1.get(cv), comm2.get(cv)));
+          }
+        }
       }
       return ret;
     }

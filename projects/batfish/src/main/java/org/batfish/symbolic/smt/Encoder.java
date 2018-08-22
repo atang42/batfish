@@ -788,7 +788,7 @@ public class Encoder {
 
     if (status == Status.UNSATISFIABLE) {
       VerificationResult res = new VerificationResult(true, null, null, null, null, null, stats);
-      res.debug(mainSlice,false, null);
+      //res.debug(mainSlice,false, null);
       return new Tuple<>(res, null);
     } else if (status == Status.UNKNOWN) {
       System.err.println(getSolver().getReasonUnknown());
@@ -812,7 +812,7 @@ public class Encoder {
 
         result =
             new VerificationResult(false, model, packetModel, envModel, fwdModel, failures, stats);
-        result.debug(mainSlice,false, null);
+        //result.debug(mainSlice,false, null);
 
         if (!_question.getMinimize()) {
           break;
