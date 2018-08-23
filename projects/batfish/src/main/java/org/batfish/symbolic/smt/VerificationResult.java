@@ -155,16 +155,37 @@ public class VerificationResult {
 
   private String prettyPrintIncomingACL() {
     StringBuilder sb = new StringBuilder();
-    boolean isFirst = true;
-    for(String var : getModel().keySet()) {
+    if (_model != null) {
+      boolean isFirst = true;
+      for (String var : getModel().keySet()) {
 
-      if (var.contains("_INBOUND_") && getModel().get(var).equals("false")) {
-        if (isFirst) {
-          sb.append("\nIncoming ACL:\n");
-          sb.append("----------------------\n");
-          isFirst = false;
+        if (var.contains("_INBOUND_") && getModel().get(var).equals("false")) {
+          if (isFirst) {
+            sb.append("\nIncoming ACL:\n");
+            sb.append("----------------------\n");
+            isFirst = false;
+          }
+          sb.append(var).append(" : ").append("BLOCKED\n");
         }
-        sb.append(var).append(" : ").append("BLOCKED\n");
+      }
+    }
+    return sb.toString();
+  }
+
+  private String prettyPrintRouteExport() {
+    StringBuilder sb = new StringBuilder();
+    if (_model != null) {
+      boolean isFirst = true;
+      for (String var : getModel().keySet()) {
+
+        if (var.contains("EXPORT_") && !var.contains("ENV")) {
+          if (isFirst) {
+            sb.append("\nExported Messages:\n");
+            sb.append("----------------------\n");
+            isFirst = false;
+          }
+          sb.append(var).append(" : ").append(getModel().get(var) + "\n");
+        }
       }
     }
     return sb.toString();
@@ -185,6 +206,7 @@ public class VerificationResult {
       sb.append(prettyPrintEnv());
       sb.append(prettyPrintForwarding());
       sb.append(prettyPrintIncomingACL());
+      sb.append(prettyPrintRouteExport());
       sb.append(prettyPrintFailures());
       if (_stats != null) {
         sb.append(_stats.prettyPrint());

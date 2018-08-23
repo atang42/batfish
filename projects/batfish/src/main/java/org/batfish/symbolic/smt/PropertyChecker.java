@@ -456,12 +456,25 @@ public class PropertyChecker {
           edges2.remove(ge2);
         }
       }
+      // Do name matching
+      for (GraphEdge edge : new ArrayList<>(edges1)) {
+        if (interfaces2.keySet().contains(edge.getStart().getName())) {
+          matchingInterfaces.put(edge, interfaces2.get(edge.getStart().getName()));
+          edges1.remove(edge);
+          edges2.remove(interfaces2.get(edge.getStart().getName()));
+        } else {
+          System.err.println("interfaces do not match: " + router1 + " " + edge);
+        }
+      }
+      for (GraphEdge edge : edges2) {
+        if (!interfaces1.keySet().contains(edge.getStart().getName())) {
+          System.err.println("interfaces do not match: " + router2 + " " + edge);
+        }
+      }
       // Do brute force search with remaining edges
       if (!edges1.isEmpty() && !edges2.isEmpty()) {
         Map<GraphEdge, GraphEdge> others =
-            edges2.size() < edges1.size()
-                ? bruteForceMatch(new HashMap<>(), edges2, edges1, calculateIPScore).getFirst()
-                : bruteForceMatch(new HashMap<>(), edges1, edges2, calculateIPScore).getFirst();
+            bruteForceMatch(new HashMap<>(), edges1, edges2, calculateIPScore).getFirst();
         matchingInterfaces.putAll(others);
       }
     } else {
@@ -487,6 +500,8 @@ public class PropertyChecker {
 
     return matchingInterfaces;
   }
+
+
 
   public AnswerElement checkMultiple(
       HeaderQuestion question, Pattern routerRegex, Prefix prefix, int maxLength) {
@@ -815,6 +830,7 @@ public class PropertyChecker {
         for (LogicalEdge le2 : slice2Edges) {
           if (le1.getEdgeType().equals(EdgeType.EXPORT)
               && le2.getEdgeType().equals(EdgeType.EXPORT)
+              && intfMatch.containsKey(le1.getEdge())
               && intfMatch.get(le1.getEdge()).equals(le2.getEdge())) {
             ret =
                 ctx.mkAnd(

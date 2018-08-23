@@ -4431,7 +4431,7 @@ public class Batfish extends PluginConsumer implements IBatfish {
 
   @Override public AnswerElement smtDifference(HeaderQuestion q, Pattern nodeRegex, Prefix prefix,
       int maxLength) {
-    PropertyChecker p = new PropertyChecker(this, _settings);
+    PropertyChecker p = new PropertyChecker(new BDDPacket(), this, _settings);
     return p.checkMultiple(q, nodeRegex, prefix, maxLength);
   }
 
