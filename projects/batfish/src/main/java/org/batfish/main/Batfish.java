@@ -205,6 +205,7 @@ import org.batfish.symbolic.bdd.BDDAcl;
 import org.batfish.symbolic.bdd.BDDPacket;
 import org.batfish.symbolic.bdd.BDDSourceManager;
 import org.batfish.symbolic.bdd.HeaderSpaceToBDD;
+import org.batfish.symbolic.smt.DifferenceChecker;
 import org.batfish.symbolic.smt.PropertyChecker;
 import org.batfish.vendor.VendorConfiguration;
 import org.batfish.z3.AclIdentifier;
@@ -4431,7 +4432,7 @@ public class Batfish extends PluginConsumer implements IBatfish {
 
   @Override public AnswerElement smtDifference(HeaderQuestion q, Pattern nodeRegex, Prefix prefix,
       int maxLength) {
-    PropertyChecker p = new PropertyChecker(new BDDPacket(), this, _settings);
+    DifferenceChecker p = new DifferenceChecker(this, _settings);
     return p.checkMultiple(q, nodeRegex, prefix, maxLength);
   }
 
