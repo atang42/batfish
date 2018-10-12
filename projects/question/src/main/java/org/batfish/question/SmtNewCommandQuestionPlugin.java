@@ -28,6 +28,7 @@ public class SmtNewCommandQuestionPlugin extends QuestionPlugin {
 
       Pattern routerRegex;
       Prefix prefix = Prefix.parse(q.getPrefix());
+      String ignoreInterfaces = q._ignoreInterfaces;
 
       try {
         routerRegex = Pattern.compile(q.getRouterRegex());
@@ -38,7 +39,7 @@ public class SmtNewCommandQuestionPlugin extends QuestionPlugin {
             e);
       }
 
-      return _batfish.smtDifference(q, routerRegex, prefix, q.getMaxLength());
+      return _batfish.smtDifference(q, routerRegex, prefix, q.getMaxLength(), ignoreInterfaces);
     }
   }
 
@@ -47,15 +48,18 @@ public class SmtNewCommandQuestionPlugin extends QuestionPlugin {
     private static final String NODE_REGEX_VAR = "nodeRegex";
     private static final String NODE_PREFIX_VAR = "prefix";
     private static final String NODE_MAX_LENGTH_VAR = "maxLength";
+    private static final String IGNORE_INTERFACES_VAR = "ignoreInterfaces";
 
     private String _routerRegex;
     private String _prefix;
     private int _maxLength;
+    private String _ignoreInterfaces;
 
     public DifferenceQuestion() {
       _routerRegex = ".*";
       _prefix = "0.0.0.0/0";
-      _maxLength = 24;
+      _maxLength = 32;
+      _ignoreInterfaces = "exact";
     }
 
     @JsonProperty(NODE_REGEX_VAR)
@@ -86,6 +90,16 @@ public class SmtNewCommandQuestionPlugin extends QuestionPlugin {
     @JsonProperty(NODE_MAX_LENGTH_VAR)
     public void setMaxLength(int maxLength) {
       _maxLength = maxLength;
+    }
+
+    @JsonProperty(IGNORE_INTERFACES_VAR)
+    public String getIgnoreInterfaces() {
+      return _ignoreInterfaces;
+    }
+
+    @JsonProperty(IGNORE_INTERFACES_VAR)
+    public void setIgnoreInterfaces(String ignoreInterfaces) {
+      _ignoreInterfaces = ignoreInterfaces;
     }
 
     @Override

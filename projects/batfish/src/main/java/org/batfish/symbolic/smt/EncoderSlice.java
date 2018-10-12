@@ -854,13 +854,6 @@ class EncoderSlice {
           }
         } else if (proto.isOspf()) {
           List<ArrayList<LogicalEdge>> les = _logicalGraph.getLogicalEdges().get(router, proto);
-          System.out.println("Logical Ospf Edges");
-          for (ArrayList<LogicalEdge> arr : les) {
-            arr.stream().forEach(le -> {
-              System.out.println(le.getEdge());
-              System.out.println(le.getEdgeType());
-            });
-          }
           assert (les != null);
           for (ArrayList<LogicalEdge> eList : les) {
             for (LogicalEdge e : eList) {
