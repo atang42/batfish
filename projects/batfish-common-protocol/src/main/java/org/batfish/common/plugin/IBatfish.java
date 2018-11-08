@@ -201,7 +201,11 @@ public interface IBatfish extends IPluginConsumer {
 
   AnswerElement smtForwarding(HeaderQuestion q);
 
-  AnswerElement smtDifference(HeaderQuestion q, Pattern routerRegex, Prefix prefix, int maxLength, String ignoreInterfaces);
+  AnswerElement smtSrcDifference(HeaderQuestion q, Pattern nodeRegex, Prefix srcPrefix,
+      Prefix dstPrefix, int maxLength, String ignoreInterfaces);
+
+  AnswerElement smtDstDifference(HeaderQuestion q, Pattern nodeRegex, Prefix srcPrefix,
+      Prefix dstPrefix, int maxLength, String ignoreInterfaces);
 
   AnswerElement smtLoadBalance(HeaderLocationQuestion q, int threshold);
 

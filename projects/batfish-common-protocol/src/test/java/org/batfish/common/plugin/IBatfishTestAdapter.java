@@ -386,8 +386,13 @@ public class IBatfishTestAdapter implements IBatfish {
     throw new UnsupportedOperationException();
   }
 
-  @Override public AnswerElement smtDifference(HeaderQuestion q, Pattern routerRegex, Prefix prefix,
-      int maxLength, String ignoreIntefaces) {
+  @Override public AnswerElement smtSrcDifference(HeaderQuestion q, Pattern nodeRegex,
+      Prefix srcPrefix, Prefix dstPrefix, int maxLength, String ignoreInterfaces) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override public AnswerElement smtDstDifference(HeaderQuestion q, Pattern nodeRegex,
+      Prefix srcPrefix, Prefix dstPrefix, int maxLength, String ignoreInterfaces) {
     throw new UnsupportedOperationException();
   }
 

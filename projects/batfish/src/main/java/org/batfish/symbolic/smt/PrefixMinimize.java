@@ -36,6 +36,8 @@ public class PrefixMinimize {
     @Override public String toString() {
       return "Empty";
     }
+
+    private static final long serialVersionUID = 1L;
   }
 
   public static class PrefixReprTerm extends PrefixRepr {

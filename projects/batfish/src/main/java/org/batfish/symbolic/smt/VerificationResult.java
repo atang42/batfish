@@ -159,13 +159,17 @@ public class VerificationResult {
       boolean isFirst = true;
       for (String var : getModel().keySet()) {
 
-        if (var.contains("_INBOUND_") && getModel().get(var).equals("false")) {
+        if (var.contains("_INBOUND_")) {
           if (isFirst) {
             sb.append("\nIncoming ACL:\n");
             sb.append("----------------------\n");
             isFirst = false;
           }
-          sb.append(var).append(" : ").append("BLOCKED\n");
+          if (getModel().get(var).equals("false")) {
+            sb.append(var).append(" : ").append("BLOCKED\n");
+          } else {
+            sb.append(var).append(" : ").append("ALLOWED\n");
+          }
         }
       }
     }
