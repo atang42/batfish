@@ -24,7 +24,6 @@ import org.batfish.datamodel.Flow;
 import org.batfish.datamodel.FlowHistory;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpAccessList;
-import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.Topology;
 import org.batfish.datamodel.answers.AclLinesAnswerElementInterface;
 import org.batfish.datamodel.answers.AclLinesAnswerElementInterface.AclSpecs;
@@ -39,6 +38,7 @@ import org.batfish.datamodel.collections.BgpAdvertisementsByVrf;
 import org.batfish.datamodel.collections.RoutesByVrf;
 import org.batfish.datamodel.pojo.Environment;
 import org.batfish.datamodel.questions.Question;
+import org.batfish.datamodel.questions.smt.DifferenceQuestion;
 import org.batfish.datamodel.questions.smt.HeaderLocationQuestion;
 import org.batfish.datamodel.questions.smt.HeaderQuestion;
 import org.batfish.datamodel.questions.smt.RoleQuestion;
@@ -386,13 +386,15 @@ public class IBatfishTestAdapter implements IBatfish {
     throw new UnsupportedOperationException();
   }
 
-  @Override public AnswerElement smtSrcDifference(HeaderQuestion q, Pattern nodeRegex,
-      Prefix srcPrefix, Prefix dstPrefix, int maxLength, String ignoreInterfaces) {
+  @Override public AnswerElement smtSrcDifference(DifferenceQuestion q, Pattern nodeRegex) {
     throw new UnsupportedOperationException();
   }
 
-  @Override public AnswerElement smtDstDifference(HeaderQuestion q, Pattern nodeRegex,
-      Prefix srcPrefix, Prefix dstPrefix, int maxLength, String ignoreInterfaces) {
+  @Override public AnswerElement smtDstDifference(DifferenceQuestion q, Pattern nodeRegex) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override public AnswerElement smtDstPortDifference(DifferenceQuestion q, Pattern nodeRegex) {
     throw new UnsupportedOperationException();
   }
 

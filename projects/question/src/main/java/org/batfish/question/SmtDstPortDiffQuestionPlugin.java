@@ -11,9 +11,10 @@ import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.questions.Question;
 import org.batfish.datamodel.questions.smt.DifferenceQuestion;
+import org.batfish.question.SmtDstDiffQuestionPlugin.DstDifferenceQuestion;
 
 @AutoService(Plugin.class)
-public class SmtDstDiffQuestionPlugin extends QuestionPlugin {
+public class SmtDstPortDiffQuestionPlugin extends QuestionPlugin {
 
   public static class DifferenceAnswerer extends Answerer {
 
@@ -23,7 +24,7 @@ public class SmtDstDiffQuestionPlugin extends QuestionPlugin {
 
     @Override
     public AnswerElement answer() {
-      DstDifferenceQuestion q = (DstDifferenceQuestion) _question;
+      DstPortDifferenceQuestion q = (DstPortDifferenceQuestion) _question;
 
       Pattern routerRegex;
 
@@ -36,15 +37,15 @@ public class SmtDstDiffQuestionPlugin extends QuestionPlugin {
             e);
       }
 
-      return _batfish.smtDstDifference(q, routerRegex);
+      return _batfish.smtDstPortDifference(q, routerRegex);
     }
   }
 
-  public static class DstDifferenceQuestion extends DifferenceQuestion {
+  public static class DstPortDifferenceQuestion extends DifferenceQuestion {
 
     @Override
     public String getName() {
-      return "smt-dst-diff";
+      return "smt-dst-port-diff";
     }
   }
 
@@ -55,6 +56,6 @@ public class SmtDstDiffQuestionPlugin extends QuestionPlugin {
 
   @Override
   protected Question createQuestion() {
-    return new DstDifferenceQuestion();
+    return new DstPortDifferenceQuestion();
   }
 }

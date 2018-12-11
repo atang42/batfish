@@ -1,6 +1,5 @@
 package org.batfish.question;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.auto.service.AutoService;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -12,7 +11,7 @@ import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.questions.Question;
 import org.batfish.datamodel.questions.smt.DifferenceQuestion;
-import org.batfish.datamodel.questions.smt.HeaderQuestion;
+import org.batfish.question.SmtDstDiffQuestionPlugin.DstDifferenceQuestion;
 
 @AutoService(Plugin.class)
 public class SmtSrcDiffQuestionPlugin extends QuestionPlugin {
@@ -25,12 +24,9 @@ public class SmtSrcDiffQuestionPlugin extends QuestionPlugin {
 
     @Override
     public AnswerElement answer() {
-      DifferenceQuestion q = (DifferenceQuestion) _question;
+      SrcDifferenceQuestion q = (SrcDifferenceQuestion) _question;
 
       Pattern routerRegex;
-      Prefix srcPrefix = Prefix.parse(q.getSrcPrefix());
-      Prefix dstPrefix = Prefix.parse(q.getDstPrefix());
-      String ignoreInterfaces = q.getIgnoreInterfaces();
 
       try {
         routerRegex = Pattern.compile(q.getRouterRegex());
@@ -41,7 +37,7 @@ public class SmtSrcDiffQuestionPlugin extends QuestionPlugin {
             e);
       }
 
-      return _batfish.smtSrcDifference(q, routerRegex, srcPrefix, dstPrefix, q.getMaxLength(), ignoreInterfaces);
+      return _batfish.smtSrcDifference(q, routerRegex);
     }
   }
 
@@ -60,6 +56,6 @@ public class SmtSrcDiffQuestionPlugin extends QuestionPlugin {
 
   @Override
   protected Question createQuestion() {
-    return new DifferenceQuestion();
+    return new SrcDifferenceQuestion();
   }
 }

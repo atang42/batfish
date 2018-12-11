@@ -1,5 +1,6 @@
 package org.batfish.symbolic.smt;
 
+import com.microsoft.z3.ArithExpr;
 import com.microsoft.z3.BitVecExpr;
 import com.microsoft.z3.BoolExpr;
 import com.microsoft.z3.Context;
@@ -31,7 +32,9 @@ import org.batfish.config.Settings;
 import org.batfish.datamodel.InterfaceAddress;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.answers.AnswerElement;
+import org.batfish.datamodel.questions.smt.DifferenceQuestion;
 import org.batfish.datamodel.questions.smt.EnvironmentType;
 import org.batfish.datamodel.questions.smt.HeaderQuestion;
 import org.batfish.symbolic.CommunityVar;
@@ -90,51 +93,182 @@ public class DifferenceChecker {
     return new Tuple<>(bestMap, bestScore);
   }
 
-  private Map<GraphEdge, GraphEdge> getInterfaceMatchGroupedByName(
-      String router1, String router2, List<GraphEdge> edges1, List<GraphEdge> edges2) {
+  static private class IntfDecl {
+    public enum IntfType {
+      ETHERNET,
+      LOOPBACK,
+      MANAGEMENT,
+      VLAN,
+      CHANNEL,
+      NULL_INTF,
+      OTHER,
+      DUMMY,
+    }
+
+    public IntfType type;
+    public String strPart;
+    public String numPart;
+    public InterfaceAddress address;
+
+    public IntfDecl(GraphEdge edge) {
+      String intfName = edge.getStart().getName();
+      InterfaceAddress intfAddr = edge.getStart().getAddress();
+
+      strPart = intfName.replaceAll("[^A-Za-z]", "");
+      numPart = intfName.replaceAll("[A-Za-z]", "");
+      address = intfAddr;
+
+      if (strPart.toLowerCase().contains("ethernet")) {
+        type = IntfType.ETHERNET;
+      } else if (strPart.toLowerCase().contains("loopback")) {
+        type = IntfType.LOOPBACK;
+      } else if (strPart.toLowerCase().contains("management")
+              || strPart.toLowerCase().contains("mgmt")) {
+        type = IntfType.MANAGEMENT;
+      } else if (strPart.toLowerCase().contains("vlan")) {
+        type = IntfType.VLAN;
+      } else if (strPart.toLowerCase().contains("null")) {
+        type = IntfType.NULL_INTF;
+      } else if (strPart.toLowerCase().contains("channel")) {
+        type = IntfType.CHANNEL;
+      } else {
+        type = IntfType.OTHER;
+      }
+
+      System.out.println(strPart + " " + type);
+    }
+
+
+    public double getNoMatchCost() {
+      if (type == IntfType.VLAN) {
+        return VLAN_NO_MATCH_COST;
+      } else if (type == IntfType.ETHERNET) {
+        return ETHERNET_NO_MATCH_COST;
+      }
+      return DEFAULT_NO_MATCH_COST;
+    }
+
+    public static final int MAX_DISTANCE = 10000;
+
+    public static final double VLAN_NO_MATCH_COST = 1;
+    public static final double ETHERNET_NO_MATCH_COST = 500;
+    public static final double DEFAULT_NO_MATCH_COST = MAX_DISTANCE / 2;
+
+    public static double intfNameDist(IntfDecl decl1, IntfDecl decl2) {
+      if (decl1.type != decl2.type || decl1.type == IntfType.NULL_INTF
+          || decl2.type == IntfType.NULL_INTF) {
+        return MAX_DISTANCE;
+      }
+      String nums1[] = decl1.numPart.split("[^0-9]");
+      String nums2[] = decl2.numPart.split("[^0-9]");
+
+      if(decl1.type == IntfType.ETHERNET) {
+
+        // Arbitrary numbers, hopefully make reasonable in future
+        double sum1, sum2;
+        if (nums1.length == 3) {
+          sum1 = 200 * Integer.parseInt(nums1[0]) + 50 * Integer.parseInt(nums1[1]) + Integer.parseInt(nums1[2]);
+        } else if (nums1.length == 2){
+          sum1 = 200 * Integer.parseInt(nums1[0]) + Integer.parseInt(nums1[1]);
+        } else {
+          sum1 = Arrays.stream(nums1).mapToInt(Integer::parseInt).sum();
+        }
+        if (nums2.length == 3) {
+          sum2 = 200 * Integer.parseInt(nums2[0]) + 50 * Integer.parseInt(nums2[1]) + Integer.parseInt(nums2[2]);
+        } else if (nums2.length == 2){
+          sum2 = 200 * Integer.parseInt(nums2[0]) + Integer.parseInt(nums2[1]);
+        } else {
+          sum2 = Arrays.stream(nums2).mapToInt(Integer::parseInt).sum();
+        }
+        return Math.pow(Math.abs(sum2 - sum1), 1.00001);
+      } else {
+        double sum = 0;
+        for (int i = 0; i < nums1.length; i++) {
+          // Exponent acts as tiebreak between equal distances
+          // This way, consistent differences are preferred over inconsistent differences
+          sum +=
+              Math.pow(Math.abs(Integer.parseInt(nums1[i]) - Integer.parseInt(nums2[i])), 1.00001);
+        }
+        return sum;
+      }
+    }
+  }
+
+  private Map<GraphEdge, GraphEdge> getInterfaceMatchGroupedByName(Encoder encoder, List<GraphEdge> edges1, List<GraphEdge> edges2) {
     Map<GraphEdge, GraphEdge> matchingInterfaces = new HashMap<>();
-    Map<String, GraphEdge> interfaces1 =
-        edges1
-            .stream()
-            .collect(Collectors.toMap(ge -> ge.getStart().getName(), Function.identity()));
-    Map<String, GraphEdge> interfaces2 =
-        edges2
-            .stream()
-            .collect(Collectors.toMap(ge -> ge.getStart().getName(), Function.identity()));
 
-    class NameToInterfaces {
-      Map<String, GraphEdge> intfMap = new TreeMap<>();
+    /*
+    Name based matching:
+    Matches interfaces with the same name
+     */
+
+    Map<GraphEdge, IntfDecl> edgeToDecl = new HashMap<>();
+    for(GraphEdge edge : edges1) {
+      edgeToDecl.put(edge, new IntfDecl(edge));
     }
-    Map<String, NameToInterfaces> intf1ByType = new TreeMap<>();
-    Map<String, NameToInterfaces> intf2ByType = new TreeMap<>();
+    for(GraphEdge edge : edges2) {
+      edgeToDecl.put(edge, new IntfDecl(edge));
+    }
 
-    for (String name : interfaces1.keySet()) {
-      String type = name.replaceAll("\\d", "");
-      if (!intf1ByType.containsKey(type)) {
-        intf1ByType.put(type, new NameToInterfaces());
+    int sumLen = edges1.size() + edges2.size();
+    double[][] edgeDistances = new double[sumLen][sumLen];
+
+    for (int i = 0; i < edges1.size(); i++) {
+      GraphEdge edge1 = edges1.get(i);
+      IntfDecl decl1 = edgeToDecl.get(edge1);
+      for (int j = 0; j < edges2.size(); j++) {
+        GraphEdge edge2 = edges2.get(j);
+        IntfDecl decl2 = edgeToDecl.get(edge2);
+        edgeDistances[i][j] = IntfDecl.intfNameDist(decl1, decl2);
       }
-      intf1ByType.get(type).intfMap.put(name, interfaces1.get(name));
-    }
-    for (String name : interfaces2.keySet()) {
-      String type = name.replaceAll("\\d", "");
-      if (!intf2ByType.containsKey(type)) {
-        intf2ByType.put(type, new NameToInterfaces());
+      for (int j = edges2.size(); j < sumLen; j++) {
+        edgeDistances[i][j] = decl1.getNoMatchCost();
       }
-      intf2ByType.get(type).intfMap.put(name, interfaces2.get(name));
+    }
+    for (int i = edges1.size(); i < sumLen; i++) {
+      for (int j = 0; j < edges2.size(); j++) {
+        GraphEdge edge2 = edges2.get(j);
+        IntfDecl decl2 = edgeToDecl.get(edge2);
+        edgeDistances[i][j] = decl2.getNoMatchCost();
+      }
+      for (int j = edges2.size(); j < sumLen; j++) {
+        edgeDistances[i][j] = 0;
+      }
     }
 
-    Map<String, GraphEdge> intf1Unmatched = new TreeMap<>();
-    Map<String, GraphEdge> intf2Unmatched = new TreeMap<>();
+    // Hungarian matching algorithm
+    HungarianAlgorithm bestMatch = new HungarianAlgorithm(edgeDistances);
+    int[] result = bestMatch.execute();
+
+    // Get match
+    for(int i = 0; i < edges1.size(); i++) {
+      GraphEdge edge1 = edges1.get(i);
+      if (result[i] >= edges2.size() || result[i] == -1) {
+        System.err.println("interfaces do not match: " + edge1.getRouter() + " " + edge1 + " " + i + " " + result[i]);
+      } else {
+        GraphEdge edge2 = edges2.get(result[i]);
+        matchingInterfaces.put(edge1, edge2);
+      }
+    }
+    for(int j = 0; j < edges2.size(); j++) {
+      boolean found = false;
+      for (int i = 0; i < edges1.size(); i++) {
+        if (result[i] == j) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        GraphEdge edge2 = edges2.get(j);
+        System.err.println("interfaces do not match: " + edge2.getRouter() + " " + edge2 + " " + j);
+      }
+    }
 
     return matchingInterfaces;
   }
 
-  private Map<GraphEdge, GraphEdge> getInterfaceMatch(
-      String router1,
-      String router2,
-      List<GraphEdge> edges1,
-      List<GraphEdge> edges2,
-      String method) {
+  private Map<GraphEdge, GraphEdge> getInterfaceMatch(String router1, String router2,
+      List<GraphEdge> edges1, List<GraphEdge> edges2) {
     Map<GraphEdge, GraphEdge> matchingInterfaces;
     Map<String, GraphEdge> interfaces1 =
         edges1
@@ -145,94 +279,42 @@ public class DifferenceChecker {
             .stream()
             .collect(Collectors.toMap(ge -> ge.getStart().getName(), Function.identity()));
 
-    if (method.equals("ip")) {
-      /*
-      IP based matching:
-      First tries to pick unique best matches for each interface
-      Then does a brute force matching among remaining interfaces
-       */
-      BiFunction<GraphEdge, GraphEdge, Long> calculateIPScore =
-          (edge1, edge2) -> {
-            InterfaceAddress addr1 = edge1.getStart().getAddress();
-            InterfaceAddress addr2 = edge2.getStart().getAddress();
-            return Math.abs(addr1.getIp().asLong() - addr2.getIp().asLong());
-          };
-      if (edges1.size() != edges2.size()) {
-        System.err.print("Different number of interfaces");
-      }
-      Map<GraphEdge, Tuple<GraphEdge, Long>> best1to2 = new HashMap<>();
-      Map<GraphEdge, Tuple<GraphEdge, Long>> best2to1 = new HashMap<>();
-      for (GraphEdge ge1 : edges1) {
-        best1to2.put(ge1, new Tuple<>(null, Long.MAX_VALUE));
-        for (GraphEdge ge2 : edges2) {
-          long prevScore1to2 = best1to2.get(ge1).getSecond();
-          long newScore = calculateIPScore.apply(ge1, ge2);
-          if (newScore < prevScore1to2) {
-            best1to2.put(ge1, new Tuple<>(ge2, newScore));
-          } else if (newScore == prevScore1to2) {
-            best1to2.put(ge1, new Tuple<>(null, newScore));
-          }
-
-          long prevScore2to1 =
-              best2to1.get(ge2) == null ? Long.MAX_VALUE : best2to1.get(ge2).getSecond();
-          if (newScore < prevScore2to1) {
-            best2to1.put(ge2, new Tuple<>(ge1, newScore));
-          } else if (newScore == prevScore2to1) {
-            best2to1.put(ge2, new Tuple<>(null, newScore));
-          }
-        }
-      }
-      // Match interfaces that are each others' bests
-      matchingInterfaces = new HashMap<>();
-      for (GraphEdge ge1 : new ArrayList<>(edges1)) {
-        GraphEdge ge2 = best1to2.get(ge1).getFirst();
-        if (ge2 != null
-            && best2to1.get(ge2).getFirst() != null
-            && best2to1.get(ge2).getFirst().equals(ge1)) {
-          matchingInterfaces.put(ge1, ge2);
-          edges1.remove(ge1);
-          edges2.remove(ge2);
-        }
-      }
-      // Do name matching
-      for (GraphEdge edge : new ArrayList<>(edges1)) {
-        if (interfaces2.keySet().contains(edge.getStart().getName())) {
-          matchingInterfaces.put(edge, interfaces2.get(edge.getStart().getName()));
-          edges1.remove(edge);
-          edges2.remove(interfaces2.get(edge.getStart().getName()));
-        } else {
-          System.err.println("interfaces do not match: " + router1 + " " + edge);
-        }
-      }
-      for (GraphEdge edge : edges2) {
-        if (!interfaces1.keySet().contains(edge.getStart().getName())) {
-          System.err.println("interfaces do not match: " + router2 + " " + edge);
-        }
-      }
-      // Do brute force search with remaining edges
-      if (!edges1.isEmpty() && !edges2.isEmpty()) {
-        Map<GraphEdge, GraphEdge> others =
-            bruteForceMatch(new HashMap<>(), edges1, edges2, calculateIPScore).getFirst();
-        matchingInterfaces.putAll(others);
-      }
-    } else {
       /*
       Name based matching:
       Matches interfaces with the same name
        */
 
-      matchingInterfaces = new HashMap<>();
-      for (GraphEdge edge : edges1) {
-        if (interfaces2.keySet().contains(edge.getStart().getName())) {
-          matchingInterfaces.put(edge, interfaces2.get(edge.getStart().getName()));
-        } else {
-          System.err.println("interfaces do not match: " + router1 + " " + edge);
-        }
+      // Split by string part
+    Map<String, Set<String>> intfByType1 = new TreeMap<>();
+    for (String s : interfaces1.keySet()) {
+      String sPart = s.replaceAll("[^A-Za-z]", "");
+      String nPart = s.replaceAll("[A-Za-z]", "");
+      Set<String> updatedSet = intfByType1.getOrDefault(sPart, new TreeSet<>());
+      updatedSet.add(nPart);
+      intfByType1.put(sPart, updatedSet);
+    }
+    Map<String, Set<String>> intfByType2 = new TreeMap<>();
+    for (String s : interfaces2.keySet()) {
+      String sPart = s.replaceAll("[^A-Za-z]", "");
+      String nPart = s.replaceAll("[A-Za-z]", "");
+      Set<String> updatedSet = intfByType2.getOrDefault(sPart, new TreeSet<>());
+      updatedSet.add(nPart);
+      intfByType2.put(sPart, updatedSet);
+    }
+
+    matchingInterfaces = new HashMap<>();
+    for (GraphEdge edge : edges1) {
+      String sPart = edge.getStart().getName().replaceAll("[^A-Za-z]", "");
+      String nPart = edge.getStart().getName().replaceAll("[A-Za-z]", "");
+      if (intfByType2.containsKey(sPart) && intfByType2.get(sPart).contains(nPart)) {
+        matchingInterfaces.put(edge, interfaces2.get(edge.getStart().getName()));
+      } else {
+        System.err.println("interfaces do not match: " + router1 + " " + edge);
       }
-      for (GraphEdge edge : edges2) {
-        if (!interfaces1.keySet().contains(edge.getStart().getName())) {
-          System.err.println("interfaces do not match: " + router2 + " " + edge);
-        }
+    }
+    for (GraphEdge edge : edges2) {
+      if (!interfaces1.keySet().contains(edge.getStart().getName())) {
+        System.err.println("interfaces do not match: " + router2 + " " + edge);
       }
     }
 
@@ -266,14 +348,16 @@ public class DifferenceChecker {
     }
 
     // No environment for unmatched interfaces
-    for(Entry<LogicalEdge, SymbolicRoute> ent : encoder1.getMainSlice().getLogicalGraph().getEnvironmentVars().entrySet()) {
-      if(!matchingInterfaces.containsKey(ent.getKey().getEdge())) {
+    for (Entry<LogicalEdge, SymbolicRoute> ent :
+        encoder1.getMainSlice().getLogicalGraph().getEnvironmentVars().entrySet()) {
+      if (!matchingInterfaces.containsKey(ent.getKey().getEdge())) {
         BoolExpr notPermitted = ctx.mkNot(ent.getValue().getPermitted());
         ret = ctx.mkAnd(ret, notPermitted);
       }
     }
-    for(Entry<LogicalEdge, SymbolicRoute> ent : encoder2.getMainSlice().getLogicalGraph().getEnvironmentVars().entrySet()) {
-      if(!matchingInterfaces.containsValue(ent.getKey().getEdge())) {
+    for (Entry<LogicalEdge, SymbolicRoute> ent :
+        encoder2.getMainSlice().getLogicalGraph().getEnvironmentVars().entrySet()) {
+      if (!matchingInterfaces.containsValue(ent.getKey().getEdge())) {
         BoolExpr notPermitted = ctx.mkNot(ent.getValue().getPermitted());
         ret = ctx.mkAnd(ret, notPermitted);
       }
@@ -308,293 +392,111 @@ public class DifferenceChecker {
     return sameForwarding;
   }
 
-  public AnswerElement checkDiff(
-      HeaderQuestion question, Pattern routerRegex, Prefix prefix, int maxLength) {
-    Graph graph = new Graph(_batfish);
-    List<String> routers = PatternUtils.findMatchingNodes(graph, routerRegex, Pattern.compile(""));
-    if (routers.size() > 2) {
-      System.out.println(
-          "Only comparing first 2 routers: " + routers.get(0) + " " + routers.get(1));
-      routers = Arrays.asList(routers.get(0), routers.get(1));
-    }
-    // Generate subgraphs
-    Set<String> node1 = new TreeSet<>();
-    node1.add(routers.get(0));
-    Set<String> node2 = new TreeSet<>();
-    node2.add(routers.get(1));
-    Graph g1 = new Graph(_batfish, null, node1);
-    Graph g2 = new Graph(_batfish, null, node2);
+  public BoolExpr matchPacket(SymbolicPacket packet, SrcDstPair sdp, Context ctx) {
+    Prefix currDstPrefix = sdp.dst;
+    Prefix currSrcPrefix = sdp.src;
+    SubRange currDstPort = sdp.dstPorts;
+    SubRange currSrcPort = sdp.srcPorts;
 
-    // Get edges
-    Pattern all = Pattern.compile(".*");
-    Pattern none = Pattern.compile("");
-    Pattern r1 = Pattern.compile(routers.get(0));
-    Pattern r2 = Pattern.compile(routers.get(1));
-    List<GraphEdge> edges1 = PatternUtils.findMatchingEdges(g1, r1, none, all, none);
-    List<GraphEdge> edges2 = PatternUtils.findMatchingEdges(g2, r2, none, all, none);
-
-    // Match interfaces
-    Map<GraphEdge, GraphEdge> matchingInterfaces =
-        getInterfaceMatch(routers.get(0), routers.get(1), edges1, edges2, "ip");
-    //    matchingInterfaces.entrySet().forEach(System.out::println);
-
-    HeaderQuestion q = new HeaderQuestion(question);
-    q.setFailures(0);
-
-    Encoder encoder1 = new Encoder(_settings, g1, q);
-    Encoder encoder2 = new Encoder(encoder1, g2);
-    encoder1.computeEncoding();
-    addEnvironmentConstraints(encoder1, q.getBaseEnvironmentType());
-    encoder2.computeEncoding();
-    addEnvironmentConstraints(encoder2, q.getBaseEnvironmentType());
-    Context ctx = encoder2.getCtx();
-
-    // Equate packet fields in both symbolic packets
-    SymbolicPacket pkt1 = encoder1.getMainSlice().getSymbolicPacket();
-    SymbolicPacket pkt2 = encoder2.getMainSlice().getSymbolicPacket();
-    encoder2.add(pkt1.mkEqual(pkt2));
-
-    // Ignore IP address of interfaces
-    BoolExpr ignored =
-        ignoreExactInterfaces(
-            ctx, graph, encoder2.getMainSlice().getSymbolicPacket().getDstIp(), routers);
-    encoder2.add(ignored);
-
-    // Equal Environments on adjacent links
-    BoolExpr equalEnv = getEqualEnv(encoder1, encoder2, matchingInterfaces);
-    encoder2.add(equalEnv);
-
-    // Constraints on forwarding
-    BoolExpr sameForwarding = getEqualForwarding(encoder1, encoder2, routers, matchingInterfaces);
-
-    // Constraints on incoming ACL
-    BoolExpr sameIncomingACL =
-        getIncomingACLEquivalence(
-            ctx, encoder1.getMainSlice(), encoder2.getMainSlice(), matchingInterfaces);
-
-    // Constraints on route exports
-    BoolExpr sameRouteExport =
-        getRouteExportEquivalence(
-            ctx, encoder1.getMainSlice(), encoder2.getMainSlice(), matchingInterfaces);
-
-    BoolExpr sameBehavior = ctx.mkAnd(sameForwarding, sameIncomingACL, sameRouteExport);
-
-    BoolExpr[] assertions =
-        Arrays.stream(encoder2.getSolver().getAssertions())
-            .map(Expr::simplify)
-            .toArray(BoolExpr[]::new);
-
-    encoder2.add(ctx.mkNot(ctx.mkAnd(sameBehavior)));
-    //    Arrays.stream(encoder2.getSolver().getAssertions())
-    //        .map(Expr::simplify)
-    //        .forEach(System.out::println);
-
-    // Creating solver to test that all dstIps in prefix have a difference
-    // Get assertions before requiring forwarding
-    Solver dstNoneEquivalent = ctx.mkSolver();
-    Solver srcNoneEquivalent = ctx.mkSolver();
-    SymbolicPacket packet = encoder2.getMainSlice().getSymbolicPacket();
     BitVecExpr dstIp = packet.getDstIp();
     BitVecExpr srcIp = packet.getSrcIp();
+    ArithExpr srcPort = packet.getSrcPort();
+    ArithExpr dstPort = packet.getDstPort();
+    int dstShift = 32 - currDstPrefix.getPrefixLength();
+    int srcShift = 32 - currSrcPrefix.getPrefixLength();
 
+    // Add constraint on prefix
+    BitVecExpr dstPfxIpExpr = ctx.mkBV(currDstPrefix.getStartIp().asLong(), 32);
+    BitVecExpr dstShiftExpr = ctx.mkBV(dstShift, 32);
+    BoolExpr matchDstPrefix =
+        ctx.mkEq(ctx.mkBVLSHR(dstIp, dstShiftExpr), ctx.mkBVLSHR(dstPfxIpExpr, dstShiftExpr));
+
+    BitVecExpr srcPfxIpExpr = ctx.mkBV(currSrcPrefix.getStartIp().asLong(), 32);
+    BitVecExpr srcShiftExpr = ctx.mkBV(srcShift, 32);
+    BoolExpr matchSrcPrefix =
+        ctx.mkEq(ctx.mkBVLSHR(srcIp, srcShiftExpr), ctx.mkBVLSHR(srcPfxIpExpr, srcShiftExpr));
+
+    // Add constraints on port numbers
+    ArithExpr minSrcPort = ctx.mkInt(currSrcPort.getStart());
+    ArithExpr maxSrcPort = ctx.mkInt(currSrcPort.getEnd());
+    BoolExpr matchSrcPort = ctx.mkAnd(ctx.mkLe(minSrcPort, srcPort), ctx.mkLe(srcPort, maxSrcPort));
+
+    ArithExpr minDstPort = ctx.mkInt(currDstPort.getStart());
+    ArithExpr maxDstPort = ctx.mkInt(currDstPort.getEnd());
+    BoolExpr matchDstPort = ctx.mkAnd(ctx.mkLe(minDstPort, dstPort), ctx.mkLe(dstPort, maxDstPort));
+
+    return ctx.mkAnd(matchDstPort, matchDstPrefix, matchSrcPort, matchSrcPrefix);
+  }
+
+  public TreeMap<String, VerificationResult> searchAllDst(
+      DifferenceQuestion question,
+      Encoder encoder,
+      BoolExpr noneConstraint,
+      BoolExpr ignored,
+      Map<GraphEdge, GraphEdge> matchingInterfaces) {
+    long before = System.currentTimeMillis();
+    TreeMap<String, VerificationResult> results = new TreeMap<>();
+    Context ctx = encoder.getCtx();
+
+    Prefix dstStart = Prefix.parse(question.getDstPrefix());
+    Prefix srcPrefix = Prefix.parse(question.getSrcPrefix());
+    SubRange srcPortRange = question.getSrcPortRange();
+    SubRange dstPortRange = question.getDstPortRange();
+    int maxLength = question.getMaxLength();
+
+    BitVecExpr dstIp = encoder.getMainSlice().getSymbolicPacket().getDstIp();
+    BitVecExpr srcIp = encoder.getMainSlice().getSymbolicPacket().getSrcIp();
+
+    ArrayDeque<SrcDstPair> dstPrefixQueue = new ArrayDeque<>();
+    dstPrefixQueue.push(new SrcDstPair(srcPrefix, dstStart, srcPortRange, dstPortRange));
+    Set<SrcDstPair> similarities = new HashSet<>();
+    Set<SrcDstPair> differences = new HashSet<>();
+    int prevDstDepth = 0;
+
+    Solver dstNoneEquivalent = ctx.mkSolver();
     Expr[] notDstVars =
-        encoder2
+        encoder
             .getAllVariables()
             .values()
             .stream()
             .filter(expr -> !expr.equals(dstIp))
             .toArray(Expr[]::new);
-    Expr[] notSrcVars =
-        encoder2
-            .getAllVariables()
-            .values()
-            .stream()
-            .filter(expr -> !expr.equals(srcIp))
-            .toArray(Expr[]::new);
-
-    BoolExpr conjunction = ctx.mkAnd(assertions);
-    BoolExpr implies = ctx.mkImplies(conjunction, sameBehavior);
-    BoolExpr forall = ctx.mkForall(notDstVars, implies, 1, null, null, null, null);
-    dstNoneEquivalent.add(forall);
-
-    TreeMap<String, VerificationResult> results = new TreeMap<>();
-
-    ArrayDeque<SrcDstPair> dstPrefixQueue = new ArrayDeque<>();
-    ArrayDeque<SrcDstPair> srcPrefixQueue = new ArrayDeque<>();
-    dstPrefixQueue.push(new SrcDstPair(Prefix.parse("0.0.0.0/0"), prefix));
-    Set<SrcDstPair> similarities = new HashSet<>();
-    Set<SrcDstPair> differences = new HashSet<>();
-    int prevDstDepth = 0;
 
     // Loop to test longer dst prefixes
     while (!dstPrefixQueue.isEmpty()) {
       SrcDstPair sdp = dstPrefixQueue.pop();
-      Prefix currSrcPrefix = sdp.src;
       Prefix currDstPrefix = sdp.dst;
       int dstShift = 32 - currDstPrefix.getPrefixLength();
-      int srcShift = 32 - currSrcPrefix.getPrefixLength();
       if (currDstPrefix.getPrefixLength() > prevDstDepth) {
         prevDstDepth = currDstPrefix.getPrefixLength();
-        // System.out.println(prevDstDepth);
       }
-      encoder2.getSolver().push();
+      encoder.getSolver().push();
 
-      // Add constraint on prefix
-      BitVecExpr dstPfxIpExpr = ctx.mkBV(currDstPrefix.getStartIp().asLong(), 32);
-      BitVecExpr dstShiftExpr = ctx.mkBV(dstShift, 32);
-      BoolExpr matchDstPrefix =
-          ctx.mkEq(ctx.mkBVLSHR(dstIp, dstShiftExpr), ctx.mkBVLSHR(dstPfxIpExpr, dstShiftExpr));
-      BitVecExpr srcPfxIpExpr = ctx.mkBV(currSrcPrefix.getStartIp().asLong(), 32);
-      BitVecExpr srcShiftExpr = ctx.mkBV(srcShift, 32);
-      BoolExpr matchSrcPrefix =
-          ctx.mkEq(ctx.mkBVLSHR(srcIp, srcShiftExpr), ctx.mkBVLSHR(srcPfxIpExpr, srcShiftExpr));
+      BoolExpr matchPacketConstraints =
+          matchPacket(encoder.getMainSlice().getSymbolicPacket(), sdp, ctx);
+      encoder.add(matchPacketConstraints);
 
-      encoder2.add(matchDstPrefix);
-      encoder2.add(matchSrcPrefix);
+      org.batfish.symbolic.smt.VerificationResult result = encoder.verify().getFirst();
 
-      VerificationResult result = encoder2.verify().getFirst();
-
-      encoder2.getSolver().pop();
+      encoder.getSolver().pop();
 
       // Check that no ip address equivalent for destinations
       if (!result.isVerified() && currDstPrefix.getPrefixLength() < maxLength) {
         dstNoneEquivalent.push();
+
+        BoolExpr fullConstraint = ctx.mkImplies(matchPacketConstraints, noneConstraint);
+        BoolExpr forall = ctx.mkForall(notDstVars, fullConstraint, 1, null, null, null, null);
+        dstNoneEquivalent.add(forall);
+        dstNoneEquivalent.add(ignored);
+
+        BitVecExpr dstPfxIpExpr = ctx.mkBV(currDstPrefix.getStartIp().asLong(), 32);
+        BitVecExpr dstShiftExpr = ctx.mkBV(dstShift, 32);
+        BoolExpr matchDstPrefix =
+            ctx.mkEq(ctx.mkBVLSHR(dstIp, dstShiftExpr), ctx.mkBVLSHR(dstPfxIpExpr, dstShiftExpr));
         dstNoneEquivalent.add(matchDstPrefix);
 
+
         Status neStatus = dstNoneEquivalent.check();
-
-        if (neStatus.equals(Status.UNSATISFIABLE)) {
-          srcPrefixQueue.add(sdp);
-        } else {
-          if (neStatus.equals(Status.UNKNOWN)) {
-            // System.out.println("Unknown");
-            // System.out.println(dstNoneEquivalent.getReasonUnknown());
-          }
-          dstPrefixQueue.addAll(genLongerDstPrefix(sdp));
-        }
-        dstNoneEquivalent.pop();
-      } else if (result.isVerified()) {
-        similarities.add(sdp);
-      } else if (currDstPrefix.getPrefixLength() >= maxLength) {
-        srcPrefixQueue.add(sdp);
-      }
-    }
-
-    int prevSrcDepth = -1;
-    // loop for longer src prefixes
-    while (!srcPrefixQueue.isEmpty()) {
-
-      SrcDstPair sdp = srcPrefixQueue.pop();
-      Prefix currSrcPrefix = sdp.src;
-      Prefix currDstPrefix = sdp.dst;
-      int dstShift = 32 - currDstPrefix.getPrefixLength();
-      int srcShift = 32 - currSrcPrefix.getPrefixLength();
-      if (currSrcPrefix.getPrefixLength() > prevSrcDepth) {
-        prevSrcDepth = currSrcPrefix.getPrefixLength();
-        //        System.out.println(prevSrcDepth);
-      }
-      encoder2.getSolver().push();
-
-      // Add constraint on prefix
-      BitVecExpr dstPfxIpExpr = ctx.mkBV(currDstPrefix.getStartIp().asLong(), 32);
-      BitVecExpr dstShiftExpr = ctx.mkBV(dstShift, 32);
-      BoolExpr matchDstPrefix =
-          ctx.mkEq(ctx.mkBVLSHR(dstIp, dstShiftExpr), ctx.mkBVLSHR(dstPfxIpExpr, dstShiftExpr));
-      BitVecExpr srcPfxIpExpr = ctx.mkBV(currSrcPrefix.getStartIp().asLong(), 32);
-      BitVecExpr srcShiftExpr = ctx.mkBV(srcShift, 32);
-      BoolExpr matchSrcPrefix =
-          ctx.mkEq(ctx.mkBVLSHR(srcIp, srcShiftExpr), ctx.mkBVLSHR(srcPfxIpExpr, srcShiftExpr));
-
-      encoder2.add(matchDstPrefix);
-      encoder2.add(matchSrcPrefix);
-
-      VerificationResult result = encoder2.verify().getFirst();
-      //      System.out.println("RUN: " + (endTime - startTime));
-
-      encoder2.getSolver().pop();
-
-      // Check that no ip address equivalent
-      if (!result.isVerified() && currSrcPrefix.getPrefixLength() < maxLength) {
-        srcNoneEquivalent.push();
-        BoolExpr srcImplies = ctx.mkImplies(matchDstPrefix, implies);
-        BoolExpr srcForall = ctx.mkForall(notSrcVars, srcImplies, 1, null, null, null, null);
-        srcNoneEquivalent.add(srcForall);
-
-        srcNoneEquivalent.add(matchSrcPrefix);
-
-        Status neStatus = srcNoneEquivalent.check();
-
-        if (neStatus.equals(Status.UNSATISFIABLE)) {
-          results.put(sdp.toString(), result);
-          differences.add(sdp);
-        } else {
-          if (neStatus.equals(Status.UNKNOWN)) {
-            // System.out.println("Unknown");
-            // System.out.println(srcNoneEquivalent.getReasonUnknown());
-          }
-          srcPrefixQueue.addAll(genLongerSrcPrefix(sdp));
-        }
-        srcNoneEquivalent.pop();
-      } else if (result.isVerified()) {
-        similarities.add(sdp);
-      } else if (currSrcPrefix.getPrefixLength() >= maxLength) {
-        results.put(sdp.toString(), result);
-        differences.add(sdp);
-      }
-    }
-
-    printDstDifferences(differences, similarities, matchingInterfaces);
-
-    return new SmtManyAnswerElement(results);
-  }
-
-  public TreeMap<String, VerificationResult> searchAllDst(
-      Encoder constraints, Solver noneConstraint, BitVecExpr dstIp, BitVecExpr srcIp, Prefix dstStart, Prefix srcPrefix, int maxLength, Map<GraphEdge, GraphEdge> matchingInterfaces) {
-    TreeMap<String, VerificationResult> results = new TreeMap<>();
-    Context ctx = constraints.getCtx();
-
-    ArrayDeque<SrcDstPair> dstPrefixQueue = new ArrayDeque<>();
-    dstPrefixQueue.push(new SrcDstPair(srcPrefix, dstStart));
-    Set<SrcDstPair> similarities = new HashSet<>();
-    Set<SrcDstPair> differences = new HashSet<>();
-    int prevDstDepth = 0;
-
-    // Loop to test longer dst prefixes
-    while (!dstPrefixQueue.isEmpty()) {
-      SrcDstPair sdp = dstPrefixQueue.pop();
-      Prefix currDstPrefix = sdp.dst;
-      Prefix currSrcPrefix = sdp.src;
-      int dstShift = 32 - currDstPrefix.getPrefixLength();
-      int srcShift = 32 - currSrcPrefix.getPrefixLength();
-      if (currDstPrefix.getPrefixLength() > prevDstDepth) {
-        prevDstDepth = currDstPrefix.getPrefixLength();
-      }
-      constraints.getSolver().push();
-
-      // Add constraint on prefix
-      BitVecExpr dstPfxIpExpr = ctx.mkBV(currDstPrefix.getStartIp().asLong(), 32);
-      BitVecExpr dstShiftExpr = ctx.mkBV(dstShift, 32);
-      BoolExpr matchDstPrefix =
-          ctx.mkEq(ctx.mkBVLSHR(dstIp, dstShiftExpr), ctx.mkBVLSHR(dstPfxIpExpr, dstShiftExpr));
-      constraints.add(matchDstPrefix);
-      BitVecExpr srcPfxIpExpr = ctx.mkBV(currSrcPrefix.getStartIp().asLong(), 32);
-      BitVecExpr srcShiftExpr = ctx.mkBV(srcShift, 32);
-      BoolExpr matchSrcPrefix =
-          ctx.mkEq(ctx.mkBVLSHR(srcIp, srcShiftExpr), ctx.mkBVLSHR(srcPfxIpExpr, srcShiftExpr));
-      constraints.add(matchSrcPrefix);
-
-      org.batfish.symbolic.smt.VerificationResult result = constraints.verify().getFirst();
-
-      constraints.getSolver().pop();
-
-      // Check that no ip address equivalent for destinations
-      if (!result.isVerified() && currDstPrefix.getPrefixLength() < maxLength) {
-        noneConstraint.push();
-        noneConstraint.add(matchDstPrefix);
-
-        long forallStartTime = System.currentTimeMillis();
-        Status neStatus = noneConstraint.check();
-
         if (neStatus.equals(Status.UNSATISFIABLE)) {
           differences.add(sdp);
           results.put(sdp.toString(), result);
@@ -604,7 +506,7 @@ public class DifferenceChecker {
           }
           dstPrefixQueue.addAll(genLongerDstPrefix(sdp));
         }
-        noneConstraint.pop();
+        dstNoneEquivalent.pop();
       } else if (result.isVerified()) {
         similarities.add(sdp);
       } else if (currDstPrefix.getPrefixLength() >= maxLength) {
@@ -618,53 +520,75 @@ public class DifferenceChecker {
   }
 
   public TreeMap<String, VerificationResult> searchAllSrc(
-      Encoder constraints, Solver noneConstraint, BitVecExpr srcIp, BitVecExpr dstIp, Prefix srcStart, Prefix dstPrefix, int maxLength,  Map<GraphEdge, GraphEdge> matchingInterfaces) {
+      DifferenceQuestion question,
+      Encoder encoder,
+      BoolExpr noneConstraint,
+      BoolExpr ignored,
+      Map<GraphEdge, GraphEdge> matchingInterfaces) {
     TreeMap<String, VerificationResult> results = new TreeMap<>();
-    Context ctx = constraints.getCtx();
+    Context ctx = encoder.getCtx();
+    Prefix dstPrefix = Prefix.parse(question.getDstPrefix());
+    Prefix srcStart = Prefix.parse(question.getSrcPrefix());
+    SubRange srcPortRange = question.getSrcPortRange();
+    SubRange dstPortRange = question.getDstPortRange();
+    int maxLength = question.getMaxLength();
+
+    BitVecExpr srcIp = encoder.getMainSlice().getSymbolicPacket().getSrcIp();
 
     ArrayDeque<SrcDstPair> srcPrefixQueue = new ArrayDeque<>();
-    srcPrefixQueue.push(new SrcDstPair(srcStart, dstPrefix));
+    srcPrefixQueue.push(new SrcDstPair(srcStart, dstPrefix, srcPortRange, dstPortRange));
     Set<SrcDstPair> similarities = new HashSet<>();
     Set<SrcDstPair> differences = new HashSet<>();
-    int prevDstDepth = 0;
+
+    Solver srcNoneEquivalent = ctx.mkSolver();
+    Expr[] notSrcVars =
+        encoder
+            .getAllVariables()
+            .values()
+            .stream()
+            .filter(expr -> !expr.equals(srcIp))
+            .toArray(Expr[]::new);
 
     // Loop to test longer src prefixes
+    long makeSolverTime = 0;
+    long solverCheckTime = 0;
     while (!srcPrefixQueue.isEmpty()) {
       SrcDstPair sdp = srcPrefixQueue.pop();
-      Prefix currDstPrefix = sdp.dst;
       Prefix currSrcPrefix = sdp.src;
-      int dstShift = 32 - currDstPrefix.getPrefixLength();
       int srcShift = 32 - currSrcPrefix.getPrefixLength();
-      if (currDstPrefix.getPrefixLength() > prevDstDepth) {
-        prevDstDepth = currDstPrefix.getPrefixLength();
-      }
-      constraints.getSolver().push();
+      encoder.getSolver().push();
 
-      // Add constraint on prefix
-      BitVecExpr dstPfxIpExpr = ctx.mkBV(currDstPrefix.getStartIp().asLong(), 32);
-      BitVecExpr dstShiftExpr = ctx.mkBV(dstShift, 32);
-      BoolExpr matchDstPrefix =
-          ctx.mkEq(ctx.mkBVLSHR(dstIp, dstShiftExpr), ctx.mkBVLSHR(dstPfxIpExpr, dstShiftExpr));
-      constraints.add(matchDstPrefix);
-      BitVecExpr srcPfxIpExpr = ctx.mkBV(currSrcPrefix.getStartIp().asLong(), 32);
-      BitVecExpr srcShiftExpr = ctx.mkBV(srcShift, 32);
-      BoolExpr matchSrcPrefix =
-          ctx.mkEq(ctx.mkBVLSHR(srcIp, srcShiftExpr), ctx.mkBVLSHR(srcPfxIpExpr, srcShiftExpr));
-      constraints.add(matchSrcPrefix);
+      BoolExpr matchPacketConstraints =
+          matchPacket(encoder.getMainSlice().getSymbolicPacket(), sdp, ctx);
+      encoder.add(matchPacketConstraints);
 
-      constraints.add(matchSrcPrefix);
+      org.batfish.symbolic.smt.VerificationResult result = encoder.verify().getFirst();
 
-      org.batfish.symbolic.smt.VerificationResult result = constraints.verify().getFirst();
+      encoder.getSolver().pop();
 
-      constraints.getSolver().pop();
 
       // Check that no ip address equivalent for destinations
       if (!result.isVerified() && currSrcPrefix.getPrefixLength() < maxLength) {
-        noneConstraint.push();
-        noneConstraint.add(matchSrcPrefix);
+        srcNoneEquivalent.push();
 
-        Status neStatus = noneConstraint.check();
+        long before = System.currentTimeMillis();
+        BoolExpr fullConstraints = ctx.mkImplies(matchPacketConstraints, noneConstraint);
+        BoolExpr forall = ctx.mkForall(notSrcVars, fullConstraints, 1, null, null, null, null);
+        srcNoneEquivalent.add(forall);
+        srcNoneEquivalent.add(ignored);
 
+        BitVecExpr srcPfxIpExpr = ctx.mkBV(currSrcPrefix.getStartIp().asLong(), 32);
+        BitVecExpr srcShiftExpr = ctx.mkBV(srcShift, 32);
+        BoolExpr matchSrcPrefix =
+            ctx.mkEq(ctx.mkBVLSHR(srcIp, srcShiftExpr), ctx.mkBVLSHR(srcPfxIpExpr, srcShiftExpr));
+        srcNoneEquivalent.add(matchSrcPrefix);
+        long after = System.currentTimeMillis();
+        makeSolverTime += after - before;
+
+        before = System.currentTimeMillis();
+        Status neStatus = srcNoneEquivalent.check();
+        after = System.currentTimeMillis();
+        solverCheckTime += after - before;
         if (neStatus.equals(Status.UNSATISFIABLE)) {
           differences.add(sdp);
           results.put(sdp.toString(), result);
@@ -674,16 +598,278 @@ public class DifferenceChecker {
           }
           srcPrefixQueue.addAll(genLongerSrcPrefix(sdp));
         }
-        noneConstraint.pop();
+        srcNoneEquivalent.pop();
       } else if (result.isVerified()) {
         similarities.add(sdp);
-      } else if (currDstPrefix.getPrefixLength() >= maxLength) {
+      } else if (currSrcPrefix.getPrefixLength() >= maxLength) {
         differences.add(sdp);
         results.put(sdp.toString(), result);
       }
     }
 
+    System.out.println("*******************");
+    System.out.println(makeSolverTime);
+    System.out.println(solverCheckTime);
+    System.out.println("*******************");
+
     printSrcDifferences(differences, similarities);
+
+    return results;
+  }
+
+  public TreeMap<String, VerificationResult> searchAllPairs(
+      DifferenceQuestion question,
+      Encoder encoder,
+      BoolExpr noneConstraint,
+      BoolExpr ignored,
+      Map<GraphEdge, GraphEdge> matchingInterfaces) {
+    long before = System.currentTimeMillis();
+    TreeMap<String, VerificationResult> results = new TreeMap<>();
+    Context ctx = encoder.getCtx();
+
+    Prefix dstStart = Prefix.parse(question.getDstPrefix());
+    Prefix srcPrefix = Prefix.parse(question.getSrcPrefix());
+    SubRange srcPortRange = question.getSrcPortRange();
+    SubRange dstPortRange = question.getDstPortRange();
+    int maxLength = question.getMaxLength();
+
+    BitVecExpr dstIp = encoder.getMainSlice().getSymbolicPacket().getDstIp();
+    BitVecExpr srcIp = encoder.getMainSlice().getSymbolicPacket().getSrcIp();
+
+    ArrayDeque<SrcDstPair> dstPrefixQueue = new ArrayDeque<>();
+    dstPrefixQueue.push(new SrcDstPair(srcPrefix, dstStart, srcPortRange, dstPortRange));
+    Set<SrcDstPair> similarities = new HashSet<>();
+    Set<SrcDstPair> differences = new HashSet<>();
+    int prevDstDepth = 0;
+
+    Solver dstNoneEquivalent = ctx.mkSolver();
+    Expr[] notDstVars =
+        encoder
+            .getAllVariables()
+            .values()
+            .stream()
+            .filter(expr -> !expr.equals(dstIp))
+            .toArray(Expr[]::new);
+
+    // Loop to test longer dst prefixes
+    while (!dstPrefixQueue.isEmpty()) {
+      SrcDstPair sdp = dstPrefixQueue.pop();
+      Prefix currDstPrefix = sdp.dst;
+      int dstShift = 32 - currDstPrefix.getPrefixLength();
+      if (currDstPrefix.getPrefixLength() > prevDstDepth) {
+        prevDstDepth = currDstPrefix.getPrefixLength();
+      }
+      encoder.getSolver().push();
+
+      BoolExpr matchPacketConstraints =
+          matchPacket(encoder.getMainSlice().getSymbolicPacket(), sdp, ctx);
+      encoder.add(matchPacketConstraints);
+
+      org.batfish.symbolic.smt.VerificationResult result = encoder.verify().getFirst();
+
+      encoder.getSolver().pop();
+
+      // Check that no ip address equivalent for destinations
+      if (!result.isVerified() && currDstPrefix.getPrefixLength() < maxLength) {
+        dstNoneEquivalent.push();
+
+        BoolExpr fullConstraint = ctx.mkImplies(matchPacketConstraints, noneConstraint);
+        BoolExpr forall = ctx.mkForall(notDstVars, fullConstraint, 1, null, null, null, null);
+        dstNoneEquivalent.add(forall);
+        dstNoneEquivalent.add(ignored);
+
+        BitVecExpr dstPfxIpExpr = ctx.mkBV(currDstPrefix.getStartIp().asLong(), 32);
+        BitVecExpr dstShiftExpr = ctx.mkBV(dstShift, 32);
+        BoolExpr matchDstPrefix =
+            ctx.mkEq(ctx.mkBVLSHR(dstIp, dstShiftExpr), ctx.mkBVLSHR(dstPfxIpExpr, dstShiftExpr));
+        dstNoneEquivalent.add(matchDstPrefix);
+
+        Status neStatus = dstNoneEquivalent.check();
+        if (neStatus.equals(Status.UNSATISFIABLE)) {
+          differences.add(sdp);
+        } else {
+          if (neStatus.equals(Status.UNKNOWN)) {
+            System.out.println("Unknown");
+          }
+          dstPrefixQueue.addAll(genLongerDstPrefix(sdp));
+        }
+        dstNoneEquivalent.pop();
+      } else if (result.isVerified()) {
+        similarities.add(sdp);
+      } else if (currDstPrefix.getPrefixLength() >= maxLength) {
+        differences.add(sdp);
+      }
+    }
+
+    for (SrcDstPair sdp : differences) {
+      System.out.println(sdp);
+      question.setDstPrefix(sdp.getDst().toString());
+      question.setSrcPrefix(sdp.getSrc().toString());
+      question.setDstPortRange(sdp.getDstPorts());
+      question.setSrcPortRange(sdp.getSrcPorts());
+      results.putAll(searchAllSrc(question, encoder, noneConstraint, ignored, matchingInterfaces));
+    }
+
+    Solver checkPair = ctx.mkSolver();
+    Expr[] notSrcDstVars =
+        encoder
+            .getAllVariables()
+            .values()
+            .stream()
+            .filter(expr -> !expr.equals(srcIp) && !expr.equals(dstIp))
+            .toArray(Expr[]::new);
+    for(String res : results.keySet()) {
+      checkPair.push();
+
+      String[] ips = res.split(" ");
+      SrcDstPair sdp = new SrcDstPair(Prefix.parse(ips[0]), Prefix.parse(ips[1]), new SubRange(0, 65535), new SubRange(0, 65535));
+      Prefix currDstPrefix = sdp.dst;
+      int dstShift = 32 - currDstPrefix.getPrefixLength();
+      Prefix currSrcPrefix = sdp.src;
+      int srcShift = 32 - currSrcPrefix.getPrefixLength();
+
+      BoolExpr matchPacketConstraints =
+          matchPacket(encoder.getMainSlice().getSymbolicPacket(), sdp, ctx);
+
+      BoolExpr fullConstraint = ctx.mkImplies(matchPacketConstraints, noneConstraint);
+
+      BoolExpr forall = ctx.mkForall(notSrcDstVars, fullConstraint, 1, null, null, null, null);
+      checkPair.add(forall);
+      checkPair.add(ignored);
+
+      BitVecExpr dstPfxIpExpr = ctx.mkBV(sdp.dst.getStartIp().asLong(), 32);
+      BitVecExpr dstShiftExpr = ctx.mkBV(dstShift, 32);
+      BoolExpr matchDstPrefix =
+          ctx.mkEq(ctx.mkBVLSHR(dstIp, dstShiftExpr), ctx.mkBVLSHR(dstPfxIpExpr, dstShiftExpr));
+      checkPair.add(matchDstPrefix);
+
+      BitVecExpr srcPfxIpExpr = ctx.mkBV(sdp.src.getStartIp().asLong(), 32);
+      BitVecExpr srcShiftExpr = ctx.mkBV(srcShift, 32);
+      BoolExpr matchSrcPrefix =
+          ctx.mkEq(ctx.mkBVLSHR(srcIp, srcShiftExpr), ctx.mkBVLSHR(srcPfxIpExpr, srcShiftExpr));
+      checkPair.add(matchSrcPrefix);
+
+      Status status = checkPair.check();
+      if (status.equals(Status.SATISFIABLE)) {
+        System.out.println(sdp + " is equivalent for some src/dst pairs");
+      }
+
+      checkPair.pop();
+    }
+
+    System.out.println("TIME: " + (System.currentTimeMillis() - before));
+
+    return results;
+  }
+
+  public TreeMap<String, VerificationResult> searchAllDstPorts(
+      DifferenceQuestion question,
+      Encoder constraints,
+      BoolExpr noneConstraint,
+      BoolExpr ignore,
+      Map<GraphEdge, GraphEdge> matchingInterfaces) {
+    TreeMap<String, VerificationResult> results = new TreeMap<>();
+    Context ctx = constraints.getCtx();
+    Prefix dstPrefix = Prefix.parse(question.getDstPrefix());
+    Prefix srcPrefix = Prefix.parse(question.getSrcPrefix());
+    SubRange srcPortRange = question.getSrcPortRange();
+    SubRange dstPortRange = question.getDstPortRange();
+
+    ArithExpr dstPort = constraints.getMainSlice().getSymbolicPacket().getDstPort();
+
+    // Build check for none equivalent
+    Solver dstPortNoneEquivalent = ctx.mkSolver();
+    Expr[] notDstPortVars =
+        constraints
+            .getAllVariables()
+            .values()
+            .stream()
+            .filter(expr -> !expr.equals(dstPort))
+            .toArray(Expr[]::new);
+
+    ArrayDeque<SrcDstPair> SymbolicPacketQueue = new ArrayDeque<>();
+    SymbolicPacketQueue.push(new SrcDstPair(srcPrefix, dstPrefix, srcPortRange, dstPortRange));
+    Set<SrcDstPair> similarities = new HashSet<>();
+    Set<SrcDstPair> differences = new HashSet<>();
+
+    // Loop to test longer src prefixes
+    while (!SymbolicPacketQueue.isEmpty()) {
+      SrcDstPair sdp = SymbolicPacketQueue.pop();
+      SubRange currDstPort = sdp.getDstPorts();
+      System.out.println(currDstPort);
+      constraints.getSolver().push();
+
+      BoolExpr matchPacketConstraints =
+          matchPacket(constraints.getMainSlice().getSymbolicPacket(), sdp, ctx);
+      constraints.add(matchPacketConstraints);
+
+      org.batfish.symbolic.smt.VerificationResult result = constraints.verify().getFirst();
+
+      constraints.getSolver().pop();
+
+      // Check that no ip address equivalent for destinations
+      if (!result.isVerified() && currDstPort.getEnd() - currDstPort.getStart() > 0) {
+        dstPortNoneEquivalent.push();
+
+        BoolExpr fullConstraints = ctx.mkImplies(matchPacketConstraints, noneConstraint);
+        BoolExpr forall = ctx.mkForall(notDstPortVars, fullConstraints, 1, null, null, null, null);
+        dstPortNoneEquivalent.add(forall);
+
+        ArithExpr maxDstPort = ctx.mkInt(currDstPort.getEnd());
+        ArithExpr minDstPort = ctx.mkInt(currDstPort.getStart());
+        BoolExpr matchDstPort = ctx.mkAnd(ctx.mkLe(minDstPort, dstPort), ctx.mkLe(dstPort, maxDstPort));
+        dstPortNoneEquivalent.add(matchDstPort);
+        dstPortNoneEquivalent.add(ignore);
+
+        Status neStatus = dstPortNoneEquivalent.check();
+
+        if (neStatus.equals(Status.UNSATISFIABLE)) {
+          differences.add(sdp);
+          results.put(sdp.dstPorts.toString(), result);
+        } else {
+          if (neStatus.equals(Status.UNKNOWN)) {
+            System.out.println("Unknown");
+          }
+          SymbolicPacketQueue.addAll(genDstPortSubranges(sdp));
+        }
+        dstPortNoneEquivalent.pop();
+      } else if (result.isVerified()) {
+        similarities.add(sdp);
+      } else if (currDstPort.getEnd() - currDstPort.getStart() == 0) {
+        differences.add(sdp);
+        results.put(sdp.dstPorts.toString(), result);
+      }
+    }
+
+    Comparator<SubRange> dstPortSort = new Comparator<SubRange>() {
+      @Override public int compare(SubRange a, SubRange b) {
+        return a.getStart() - b.getStart();
+      }
+    };
+    List<SubRange> diffList = differences.stream()
+        .map(SrcDstPair::getDstPorts)
+        .sorted(dstPortSort)
+        .collect(Collectors.toList());
+
+    System.out.println("--------------------");
+    System.out.println("DST PORT DIFFERENCES");
+    SubRange prev = null;
+    for(SubRange r : diffList) {
+      if (prev == null) {
+        prev = r;
+      } else if (prev.getEnd() + 1 >= r.getStart()) {
+        prev = new SubRange(prev.getStart(), r.getEnd());
+      } else {
+        System.out.println(prev);
+        prev = r;
+      }
+    }
+    if (prev != null) {
+      System.out.println(prev);
+    } else {
+      System.out.println("NONE");
+    }
+    System.out.println("--------------------");
 
     return results;
   }
@@ -692,12 +878,23 @@ public class DifferenceChecker {
     printDstDifferences(differences, similarities, null);
   }
 
-  private void printDstDifferences(Set<SrcDstPair> differences, Set<SrcDstPair> similarities, Map<GraphEdge, GraphEdge> matchingInterfaces) {
-    printDifferences(differences, similarities, SrcDstPair::getSrc, SrcDstPair::getDst,"SRC:", "DST:", matchingInterfaces);
+  private void printDstDifferences(
+      Set<SrcDstPair> differences,
+      Set<SrcDstPair> similarities,
+      Map<GraphEdge, GraphEdge> matchingInterfaces) {
+    printDifferences(
+        differences,
+        similarities,
+        SrcDstPair::getSrc,
+        SrcDstPair::getDst,
+        "SRC:",
+        "DST:",
+        matchingInterfaces);
   }
 
   private void printSrcDifferences(Set<SrcDstPair> differences, Set<SrcDstPair> similarities) {
-    printDifferences(differences, similarities, SrcDstPair::getDst, SrcDstPair::getSrc, "DST:", "SRC:", null);
+    printDifferences(
+        differences, similarities, SrcDstPair::getDst, SrcDstPair::getSrc, "DST:", "SRC:", null);
   }
 
   private void printDifferences(
@@ -729,13 +926,7 @@ public class DifferenceChecker {
     System.out.println("------------------------------");
   }
 
-  public AnswerElement checkDstDiff(
-      HeaderQuestion question,
-      Pattern routerRegex,
-      Prefix srcPrefix,
-      Prefix dstPrefix,
-      int maxLength,
-      String ignoreInterfaces) {
+  public AnswerElement checkDstDiff(DifferenceQuestion question, Pattern routerRegex) {
     Graph graph = new Graph(_batfish);
     List<String> routers = PatternUtils.findMatchingNodes(graph, routerRegex, Pattern.compile(""));
     if (routers.size() > 2) {
@@ -761,11 +952,6 @@ public class DifferenceChecker {
     List<GraphEdge> edges1 = PatternUtils.findMatchingEdges(g1, r1, none, all, none);
     List<GraphEdge> edges2 = PatternUtils.findMatchingEdges(g2, r2, none, all, none);
 
-    // Match interfaces
-    Map<GraphEdge, GraphEdge> matchingInterfaces =
-        getInterfaceMatch(routers.get(0), routers.get(1), edges1, edges2, "name");
-    matchingInterfaces.entrySet().forEach(System.out::println);
-
     HeaderQuestion q = new HeaderQuestion(question);
     q.setFailures(0);
 
@@ -777,6 +963,12 @@ public class DifferenceChecker {
     addEnvironmentConstraints(encoder2, q.getBaseEnvironmentType());
     Context ctx = encoder2.getCtx();
 
+    // Match interfaces
+    Map<GraphEdge, GraphEdge> matchingInterfaces =
+        getInterfaceMatchGroupedByName(encoder2, edges1, edges2);
+    matchingInterfaces.entrySet().forEach(System.out::println);
+
+
     // Equate packet fields in both symbolic packets
     SymbolicPacket pkt1 = encoder1.getMainSlice().getSymbolicPacket();
     SymbolicPacket pkt2 = encoder2.getMainSlice().getSymbolicPacket();
@@ -784,22 +976,22 @@ public class DifferenceChecker {
 
     // Exclude ignored IP addresses
     BoolExpr ignored;
-    if (ignoreInterfaces.equalsIgnoreCase("subnet")) {
+    if (question.getIgnoreInterfaces().equalsIgnoreCase("subnet")) {
       // Ignore subnets of every interface
       ignored =
           ignoreInterfaceSubnets(
               ctx, graph, encoder1.getMainSlice().getSymbolicPacket().getDstIp(), routers);
-    } else if (ignoreInterfaces.equalsIgnoreCase("exact")) {
+    } else if (question.getIgnoreInterfaces().equalsIgnoreCase("exact")) {
       // Ignore exact IP address of interfaces
       ignored =
           ignoreExactInterfaces(
               ctx, graph, encoder2.getMainSlice().getSymbolicPacket().getDstIp(), routers);
-    } else if (ignoreInterfaces.equalsIgnoreCase("none")) {
+    } else if (question.getIgnoreInterfaces().equalsIgnoreCase("none")) {
       // Don't ignore
       ignored = ctx.mkTrue();
     } else {
       throw new IllegalArgumentException(
-          "Illegal value for ignoreInterfaces: '" + ignoreInterfaces + "'\n");
+          "Illegal value for ignoreInterfaces: '" + question.getIgnoreInterfaces() + "'\n");
     }
     encoder2.add(ignored);
 
@@ -850,18 +1042,12 @@ public class DifferenceChecker {
     dstNoneEquivalent.add(ignored);
 
     TreeMap<String, VerificationResult> results =
-        searchAllDst(encoder2, dstNoneEquivalent, dstIp, srcIp, dstPrefix, srcPrefix, maxLength, matchingInterfaces);
+        searchAllDst(question, encoder2, implies, ignored, matchingInterfaces);
 
     return new SmtManyAnswerElement(results);
   }
 
-  public AnswerElement checkSrcDiff(
-      HeaderQuestion question,
-      Pattern routerRegex,
-      Prefix srcPrefix,
-      Prefix dstPrefix,
-      int maxLength,
-      String ignoreInterfaces) {
+  public AnswerElement checkSrcDiff(DifferenceQuestion question, Pattern routerRegex) {
     Graph graph = new Graph(_batfish);
     List<String> routers = PatternUtils.findMatchingNodes(graph, routerRegex, Pattern.compile(""));
     if (routers.size() > 2) {
@@ -887,11 +1073,6 @@ public class DifferenceChecker {
     List<GraphEdge> edges1 = PatternUtils.findMatchingEdges(g1, r1, none, all, none);
     List<GraphEdge> edges2 = PatternUtils.findMatchingEdges(g2, r2, none, all, none);
 
-    // Match interfaces
-    Map<GraphEdge, GraphEdge> matchingInterfaces =
-        getInterfaceMatch(routers.get(0), routers.get(1), edges1, edges2, "name");
-    matchingInterfaces.entrySet().forEach(System.out::println);
-
     HeaderQuestion q = new HeaderQuestion(question);
     q.setFailures(0);
 
@@ -903,6 +1084,11 @@ public class DifferenceChecker {
     addEnvironmentConstraints(encoder2, q.getBaseEnvironmentType());
     Context ctx = encoder2.getCtx();
 
+    // Match interfaces
+    Map<GraphEdge, GraphEdge> matchingInterfaces =
+        getInterfaceMatchGroupedByName(encoder2, edges1, edges2);
+    matchingInterfaces.entrySet().forEach(System.out::println);
+
     // Equate packet fields in both symbolic packets
     SymbolicPacket pkt1 = encoder1.getMainSlice().getSymbolicPacket();
     SymbolicPacket pkt2 = encoder2.getMainSlice().getSymbolicPacket();
@@ -910,22 +1096,22 @@ public class DifferenceChecker {
 
     // Exclude ignored IP addresses
     BoolExpr ignored;
-    if (ignoreInterfaces.equalsIgnoreCase("subnet")) {
+    if (question.getIgnoreInterfaces().equalsIgnoreCase("subnet")) {
       // Ignore subnets of every interface
       ignored =
           ignoreInterfaceSubnets(
               ctx, graph, encoder1.getMainSlice().getSymbolicPacket().getDstIp(), routers);
-    } else if (ignoreInterfaces.equalsIgnoreCase("exact")) {
+    } else if (question.getIgnoreInterfaces().equalsIgnoreCase("exact")) {
       // Ignore exact IP address of interfaces
       ignored =
           ignoreExactInterfaces(
               ctx, graph, encoder2.getMainSlice().getSymbolicPacket().getDstIp(), routers);
-    } else if (ignoreInterfaces.equalsIgnoreCase("none")) {
+    } else if (question.getIgnoreInterfaces().equalsIgnoreCase("none")) {
       // Don't ignore
       ignored = ctx.mkTrue();
     } else {
       throw new IllegalArgumentException(
-          "Illegal value for ignoreInterfaces: '" + ignoreInterfaces + "'\n");
+          "Illegal value for ignoreInterfaces: '" + question.getIgnoreInterfaces() + "'\n");
     }
     encoder2.add(ignored);
 
@@ -943,8 +1129,8 @@ public class DifferenceChecker {
 
     // Constraints on route exports
     BoolExpr sameRouteExport =
-            getRouteExportEquivalence(
-                ctx, encoder1.getMainSlice(), encoder2.getMainSlice(), matchingInterfaces);
+        getRouteExportEquivalence(
+            ctx, encoder1.getMainSlice(), encoder2.getMainSlice(), matchingInterfaces);
 
     BoolExpr sameBehavior = ctx.mkAnd(sameForwarding, sameIncomingACL, sameRouteExport);
 
@@ -976,7 +1162,121 @@ public class DifferenceChecker {
     srcNoneEquivalent.add(ignored);
 
     TreeMap<String, VerificationResult> results =
-        searchAllSrc(encoder2, srcNoneEquivalent, srcIp, dstIp, srcPrefix, dstPrefix, maxLength, matchingInterfaces);
+        searchAllSrc(question, encoder2, implies, ignored, matchingInterfaces);
+
+    return new SmtManyAnswerElement(results);
+  }
+
+  public AnswerElement checkDstPortDiff(DifferenceQuestion question, Pattern routerRegex) {
+    Graph graph = new Graph(_batfish);
+    List<String> routers = PatternUtils.findMatchingNodes(graph, routerRegex, Pattern.compile(""));
+    if (routers.size() > 2) {
+      System.out.println(
+          "Only comparing first 2 routers: " + routers.get(0) + " " + routers.get(1));
+      routers = Arrays.asList(routers.get(0), routers.get(1));
+    }
+    System.out.println("Comparing routers: " + routers.get(0) + " and " + routers.get(1));
+
+    // Generate subgraphs
+    Set<String> node1 = new TreeSet<>();
+    node1.add(routers.get(0));
+    Set<String> node2 = new TreeSet<>();
+    node2.add(routers.get(1));
+    Graph g1 = new Graph(_batfish, null, node1);
+    Graph g2 = new Graph(_batfish, null, node2);
+
+    // Get edges
+    Pattern all = Pattern.compile(".*");
+    Pattern none = Pattern.compile("");
+    Pattern r1 = Pattern.compile(routers.get(0));
+    Pattern r2 = Pattern.compile(routers.get(1));
+    List<GraphEdge> edges1 = PatternUtils.findMatchingEdges(g1, r1, none, all, none);
+    List<GraphEdge> edges2 = PatternUtils.findMatchingEdges(g2, r2, none, all, none);
+
+    HeaderQuestion q = new HeaderQuestion(question);
+    q.setFailures(0);
+
+    Encoder encoder1 = new Encoder(_settings, g1, q);
+    Encoder encoder2 = new Encoder(encoder1, g2);
+    encoder1.computeEncoding();
+    addEnvironmentConstraints(encoder1, q.getBaseEnvironmentType());
+    encoder2.computeEncoding();
+    addEnvironmentConstraints(encoder2, q.getBaseEnvironmentType());
+    Context ctx = encoder2.getCtx();
+
+    // Match interfaces
+    Map<GraphEdge, GraphEdge> matchingInterfaces =
+        getInterfaceMatchGroupedByName(encoder2, edges1, edges2);
+    matchingInterfaces.entrySet().forEach(System.out::println);
+
+    // Equate packet fields in both symbolic packets
+    SymbolicPacket pkt1 = encoder1.getMainSlice().getSymbolicPacket();
+    SymbolicPacket pkt2 = encoder2.getMainSlice().getSymbolicPacket();
+    encoder2.add(pkt1.mkEqual(pkt2));
+
+    // Exclude ignored IP addresses
+    BoolExpr ignored;
+    if (question.getIgnoreInterfaces().equalsIgnoreCase("subnet")) {
+      // Ignore subnets of every interface
+      ignored =
+          ignoreInterfaceSubnets(
+              ctx, graph, encoder1.getMainSlice().getSymbolicPacket().getDstIp(), routers);
+    } else if (question.getIgnoreInterfaces().equalsIgnoreCase("exact")) {
+      // Ignore exact IP address of interfaces
+      ignored =
+          ignoreExactInterfaces(
+              ctx, graph, encoder2.getMainSlice().getSymbolicPacket().getDstIp(), routers);
+    } else if (question.getIgnoreInterfaces().equalsIgnoreCase("none")) {
+      // Don't ignore
+      ignored = ctx.mkTrue();
+    } else {
+      throw new IllegalArgumentException(
+          "Illegal value for ignoreInterfaces: '" + question.getIgnoreInterfaces() + "'\n");
+    }
+    encoder2.add(ignored);
+
+    // Equal Environments on adjacent links
+    BoolExpr equalEnv = getEqualEnv(encoder1, encoder2, matchingInterfaces);
+    encoder2.add(equalEnv);
+
+    // Constraints on forwarding
+    BoolExpr sameForwarding = getEqualForwarding(encoder1, encoder2, routers, matchingInterfaces);
+
+    // Constraints on incoming ACL
+    BoolExpr sameIncomingACL =
+        getIncomingACLEquivalence(
+            ctx, encoder1.getMainSlice(), encoder2.getMainSlice(), matchingInterfaces);
+
+    // Constraints on route exports
+    BoolExpr sameRouteExport =
+        getRouteExportEquivalence(
+            ctx, encoder1.getMainSlice(), encoder2.getMainSlice(), matchingInterfaces);
+
+    BoolExpr sameBehavior = ctx.mkAnd(sameForwarding, sameIncomingACL, sameRouteExport);
+
+    BoolExpr[] sameInputConstraints =
+        Arrays.stream(encoder2.getSolver().getAssertions())
+            .map(Expr::simplify)
+            .toArray(BoolExpr[]::new);
+
+    encoder2.add(ctx.mkNot(ctx.mkAnd(sameBehavior)));
+
+    // Creating solver to test that all dstIps in prefix have a difference
+    SymbolicPacket packet = encoder2.getMainSlice().getSymbolicPacket();
+    ArithExpr dstPort = packet.getDstPort();
+    Expr[] notDstPortVars =
+        encoder2
+            .getAllVariables()
+            .values()
+            .stream()
+            .filter(expr -> !expr.equals(dstPort))
+            .toArray(Expr[]::new);
+
+    BoolExpr sameInputs = ctx.mkAnd(sameInputConstraints);
+    BoolExpr implies = ctx.mkImplies(sameInputs, sameBehavior);
+
+    TreeMap<String, VerificationResult> results =
+        searchAllDstPorts(question, encoder2, implies, ignored, matchingInterfaces);
 
     return new SmtManyAnswerElement(results);
   }
@@ -984,10 +1284,14 @@ public class DifferenceChecker {
   private class SrcDstPair {
     public Prefix src;
     public Prefix dst;
+    public SubRange srcPorts;
+    public SubRange dstPorts;
 
-    SrcDstPair(Prefix s, Prefix d) {
+    SrcDstPair(Prefix s, Prefix d, SubRange sp, SubRange dp) {
       src = s;
       dst = d;
+      srcPorts = sp;
+      dstPorts = dp;
     }
 
     public Prefix getSrc() {
@@ -998,6 +1302,14 @@ public class DifferenceChecker {
       return dst;
     }
 
+    public SubRange getSrcPorts() {
+      return srcPorts;
+    }
+
+    public SubRange getDstPorts() {
+      return dstPorts;
+    }
+
     @Override
     public String toString() {
       return src.toString() + " " + dst.toString();
@@ -1005,12 +1317,13 @@ public class DifferenceChecker {
   }
 
   Map<Prefix, Set<Prefix>> separatePackets(
-      Set<SrcDstPair> set, Function<SrcDstPair, Prefix> grouping, Function<SrcDstPair, Prefix> result) {
+      Set<SrcDstPair> set,
+      Function<SrcDstPair, Prefix> grouping,
+      Function<SrcDstPair, Prefix> result) {
     Map<Prefix, Set<Prefix>> ret =
         set.stream()
             .collect(
-                Collectors.groupingBy(
-                    grouping, Collectors.mapping(result, Collectors.toSet())));
+                Collectors.groupingBy(grouping, Collectors.mapping(result, Collectors.toSet())));
     return ret;
   }
 
@@ -1024,7 +1337,7 @@ public class DifferenceChecker {
     for (int i = 0; i < 2; i++) {
       long nextDstBit = 1L << (31 - dstLength);
       Prefix newDst = new Prefix(new Ip(dstBits + i * nextDstBit), dstLength + 1);
-      ret.add(new SrcDstPair(sdp.src, newDst));
+      ret.add(new SrcDstPair(sdp.src, newDst, sdp.srcPorts, sdp.dstPorts));
     }
     return ret;
   }
@@ -1038,8 +1351,20 @@ public class DifferenceChecker {
     for (int i = 0; i < 2; i++) {
       long nextDstBit = 1L << (31 - srcLength);
       Prefix newSrc = new Prefix(new Ip(srcBits + i * nextDstBit), srcLength + 1);
-      ret.add(new SrcDstPair(newSrc, sdp.dst));
+      ret.add(new SrcDstPair(newSrc, sdp.dst, sdp.srcPorts, sdp.dstPorts));
     }
+    return ret;
+  }
+
+  private Set<SrcDstPair> genDstPortSubranges(SrcDstPair sdp) {
+    Set<SrcDstPair> ret = new HashSet<>();
+
+    int half = (sdp.dstPorts.getStart() + sdp.dstPorts.getEnd()) / 2;
+    SubRange first = new SubRange(sdp.dstPorts.getStart(), half);
+    SubRange second = new SubRange(half + 1, sdp.dstPorts.getEnd());
+
+    ret.add(new SrcDstPair(sdp.src, sdp.dst, sdp.srcPorts, first));
+    ret.add(new SrcDstPair(sdp.src, sdp.dst, sdp.srcPorts, second));
     return ret;
   }
 
@@ -1106,7 +1431,7 @@ public class DifferenceChecker {
   private Set<Prefix> removeParallelLinks(
       Set<Prefix> r, Map<GraphEdge, GraphEdge> matchingInterfaces) {
 
-    if(matchingInterfaces == null) {
+    if (matchingInterfaces == null) {
       return r;
     }
 
@@ -1330,6 +1655,7 @@ public class DifferenceChecker {
    */
   private void minimizePrefixes(Set<Prefix> differences) {
     if (differences.isEmpty()) {
+      System.out.println("NONE");
       return;
     }
 

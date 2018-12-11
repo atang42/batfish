@@ -120,7 +120,6 @@ import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.IpsecVpn;
-import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.RipNeighbor;
 import org.batfish.datamodel.RipProcess;
 import org.batfish.datamodel.SubRange;
@@ -160,6 +159,7 @@ import org.batfish.datamodel.pojo.Environment;
 import org.batfish.datamodel.questions.InvalidReachabilityParametersException;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.datamodel.questions.Question;
+import org.batfish.datamodel.questions.smt.DifferenceQuestion;
 import org.batfish.datamodel.questions.smt.HeaderLocationQuestion;
 import org.batfish.datamodel.questions.smt.HeaderQuestion;
 import org.batfish.datamodel.questions.smt.RoleQuestion;
@@ -4430,16 +4430,19 @@ public class Batfish extends PluginConsumer implements IBatfish {
     return p.checkForwarding(q);
   }
 
-  @Override public AnswerElement smtSrcDifference(HeaderQuestion q, Pattern nodeRegex,
-      Prefix srcPrefix, Prefix dstPrefix, int maxLength, String ignoreInterfaces) {
+  @Override public AnswerElement smtSrcDifference(DifferenceQuestion q, Pattern nodeRegex) {
     DifferenceChecker p = new DifferenceChecker(this, _settings);
-    return p.checkSrcDiff(q, nodeRegex, srcPrefix, dstPrefix, maxLength, ignoreInterfaces);
+    return p.checkSrcDiff(q, nodeRegex);
   }
 
-  @Override public AnswerElement smtDstDifference(HeaderQuestion q, Pattern nodeRegex,
-      Prefix srcPrefix, Prefix dstPrefix, int maxLength, String ignoreInterfaces) {
+  @Override public AnswerElement smtDstDifference(DifferenceQuestion q, Pattern nodeRegex) {
     DifferenceChecker p = new DifferenceChecker(this, _settings);
-    return p.checkDstDiff(q, nodeRegex, srcPrefix, dstPrefix, maxLength, ignoreInterfaces);
+    return p.checkDstDiff(q, nodeRegex);
+  }
+
+  @Override public AnswerElement smtDstPortDifference(DifferenceQuestion q, Pattern nodeRegex) {
+    DifferenceChecker p = new DifferenceChecker(this, _settings);
+    return p.checkDstPortDiff(q, nodeRegex);
   }
 
   @Override
