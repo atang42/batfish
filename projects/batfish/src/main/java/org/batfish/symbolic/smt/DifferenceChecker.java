@@ -135,7 +135,6 @@ public class DifferenceChecker {
         type = IntfType.OTHER;
       }
 
-      System.out.println(strPart + " " + type);
     }
 
 
@@ -933,6 +932,10 @@ public class DifferenceChecker {
       System.out.println(
           "Only comparing first 2 routers: " + routers.get(0) + " " + routers.get(1));
       routers = Arrays.asList(routers.get(0), routers.get(1));
+    } else if (routers.size() < 2) {
+      int s = routers.size();
+      System.out.println("Only " + s + " routers match regex: " + routerRegex.pattern());
+      return null;
     }
     System.out.println("Comparing routers: " + routers.get(0) + " and " + routers.get(1));
 
@@ -1054,6 +1057,10 @@ public class DifferenceChecker {
       System.out.println(
           "Only comparing first 2 routers: " + routers.get(0) + " " + routers.get(1));
       routers = Arrays.asList(routers.get(0), routers.get(1));
+    } else if (routers.size() < 2) {
+      int s = routers.size();
+      System.out.println("Only " + s + " routers match regex: " + routerRegex.pattern());
+      return null;
     }
     System.out.println("Comparing routers: " + routers.get(0) + " and " + routers.get(1));
 
@@ -1174,6 +1181,10 @@ public class DifferenceChecker {
       System.out.println(
           "Only comparing first 2 routers: " + routers.get(0) + " " + routers.get(1));
       routers = Arrays.asList(routers.get(0), routers.get(1));
+    } else if (routers.size() < 2) {
+      int s = routers.size();
+      System.out.println("Only " + s + " routers match regex: " + routerRegex.pattern());
+      return null;
     }
     System.out.println("Comparing routers: " + routers.get(0) + " and " + routers.get(1));
 
@@ -1442,8 +1453,6 @@ public class DifferenceChecker {
       matchDifferences.add(pfx1);
       matchDifferences.add(pfx2);
     }
-
-    Set<Prefix> result = new TreeSet<>();
 
     Set<Prefix> done = new TreeSet<>(r);
     for (Prefix ignored : matchDifferences) {
