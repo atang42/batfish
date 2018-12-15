@@ -42,6 +42,7 @@ import org.batfish.symbolic.Graph;
 import org.batfish.symbolic.GraphEdge;
 import org.batfish.symbolic.Protocol;
 import org.batfish.symbolic.answers.SmtManyAnswerElement;
+import org.batfish.symbolic.answers.SmtOneAnswerElement;
 import org.batfish.symbolic.utils.PatternUtils;
 import org.batfish.symbolic.utils.Tuple;
 
@@ -185,8 +186,12 @@ public class DifferenceChecker {
         for (int i = 0; i < nums1.length; i++) {
           // Exponent acts as tiebreak between equal distances
           // This way, consistent differences are preferred over inconsistent differences
+          try {
           sum +=
               Math.pow(Math.abs(Integer.parseInt(nums1[i]) - Integer.parseInt(nums2[i])), 1.00001);
+          } catch (NumberFormatException e) {
+            //System.err.println("Interface: " + decl1.strPart + decl1.numPart + " " + decl2.strPart + decl2.numPart);
+          }
         }
         return sum;
       }
@@ -935,7 +940,8 @@ public class DifferenceChecker {
     } else if (routers.size() < 2) {
       int s = routers.size();
       System.out.println("Only " + s + " routers match regex: " + routerRegex.pattern());
-      return null;
+      return new SmtOneAnswerElement(new VerificationResult(true, null, null, null, null, null, null)) {
+      };
     }
     System.out.println("Comparing routers: " + routers.get(0) + " and " + routers.get(1));
 
@@ -1060,7 +1066,7 @@ public class DifferenceChecker {
     } else if (routers.size() < 2) {
       int s = routers.size();
       System.out.println("Only " + s + " routers match regex: " + routerRegex.pattern());
-      return null;
+      return new SmtOneAnswerElement(new VerificationResult(true, null, null, null, null, null, null));
     }
     System.out.println("Comparing routers: " + routers.get(0) + " and " + routers.get(1));
 
