@@ -519,7 +519,8 @@ public class DifferenceChecker {
       }
     }
 
-    printDstDifferences(differences, similarities, matchingInterfaces);
+    //printDstDifferences(differences, similarities, matchingInterfaces);
+    printDstDifferences(differences, similarities, null);
     return results;
   }
 
@@ -610,11 +611,6 @@ public class DifferenceChecker {
         results.put(sdp.toString(), result);
       }
     }
-
-    System.out.println("*******************");
-    System.out.println(makeSolverTime);
-    System.out.println(solverCheckTime);
-    System.out.println("*******************");
 
     printSrcDifferences(differences, similarities);
 
@@ -975,7 +971,7 @@ public class DifferenceChecker {
     // Match interfaces
     Map<GraphEdge, GraphEdge> matchingInterfaces =
         getInterfaceMatchGroupedByName(encoder2, edges1, edges2);
-    matchingInterfaces.entrySet().forEach(System.out::println);
+    //matchingInterfaces.entrySet().forEach(System.out::println);
 
 
     // Equate packet fields in both symbolic packets
@@ -1100,7 +1096,7 @@ public class DifferenceChecker {
     // Match interfaces
     Map<GraphEdge, GraphEdge> matchingInterfaces =
         getInterfaceMatchGroupedByName(encoder2, edges1, edges2);
-    matchingInterfaces.entrySet().forEach(System.out::println);
+    //matchingInterfaces.entrySet().forEach(System.out::println);
 
     // Equate packet fields in both symbolic packets
     SymbolicPacket pkt1 = encoder1.getMainSlice().getSymbolicPacket();
@@ -1224,7 +1220,7 @@ public class DifferenceChecker {
     // Match interfaces
     Map<GraphEdge, GraphEdge> matchingInterfaces =
         getInterfaceMatchGroupedByName(encoder2, edges1, edges2);
-    matchingInterfaces.entrySet().forEach(System.out::println);
+    //matchingInterfaces.entrySet().forEach(System.out::println);
 
     // Equate packet fields in both symbolic packets
     SymbolicPacket pkt1 = encoder1.getMainSlice().getSymbolicPacket();
@@ -1752,18 +1748,8 @@ public class DifferenceChecker {
       if (parentPfx.getPrefixLength() > 0) {
         prefixesToCheck.add(parentPfx);
       }
-      /*
-            System.out.println("****************");
-            System.out.println(currPfx + " " + currDistance);
-            System.out.println(neighborPfx + " " + neighborDistance);
-            System.out.println(parentPfx + " " + parentDistance);
-            System.out.println("*****");
-            System.out.println(added);
-            System.out.println(subtracted);
-            resultPrefixes.stream().sorted(pfxLongToShort).forEach(System.out::println);
-            System.out.println("****************");
-      */
     }
+
     /*    System.out.println("======== R1 =======");
     for (Prefix pfx : resultPrefixes) {
       System.out.println(pfx);

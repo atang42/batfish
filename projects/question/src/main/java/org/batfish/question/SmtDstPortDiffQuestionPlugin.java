@@ -47,6 +47,9 @@ public class SmtDstPortDiffQuestionPlugin extends QuestionPlugin {
     public String getName() {
       return "smt-dst-port-diff";
     }
+    public DstPortDifferenceQuestion() {
+      setIgnoreInterfaces("subnet");
+    }
   }
 
   @Override

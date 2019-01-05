@@ -47,6 +47,10 @@ public class SmtSrcDiffQuestionPlugin extends QuestionPlugin {
     public String getName() {
       return "smt-src-diff";
     }
+
+    public SrcDifferenceQuestion() {
+      this.setIgnoreInterfaces("subnet");
+    }
   }
 
   @Override
