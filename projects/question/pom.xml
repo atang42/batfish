@@ -142,5 +142,10 @@
       <artifactId>slf4j-jdk14</artifactId>
       <scope>runtime</scope>
     </dependency>
+    <dependency>
+      <groupId>org.batfish</groupId>
+      <artifactId>batfish</artifactId>
+    </dependency>
+
   </dependencies>
 </project>
