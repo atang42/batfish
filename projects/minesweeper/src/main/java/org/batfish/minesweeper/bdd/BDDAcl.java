@@ -9,6 +9,7 @@ import javax.annotation.ParametersAreNonnullByDefault;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import org.batfish.common.bdd.BDDPacket;
+import org.batfish.common.bdd.BDDPacketWithLines;
 import org.batfish.common.bdd.BDDSourceManager;
 import org.batfish.common.bdd.IpAccessListToBddImpl;
 import org.batfish.datamodel.IpAccessList;
@@ -66,6 +67,37 @@ public final class BDDAcl {
       Map<String, IpSpace> ipSpaceEnv,
       BDDSourceManager bddSrcManager) {
     BDD bdd = new IpAccessListToBddImpl(pkt, bddSrcManager, aclEnv, ipSpaceEnv).toBdd(acl);
+    return new BDDAcl(bdd, pkt);
+  }
+
+  public static BDDAcl createWithLines(BDDPacketWithLines pkt, String router, IpAccessList acl) {
+    return createWithLines(
+        pkt,
+        router,
+        acl,
+        ImmutableMap.of(),
+        ImmutableMap.of(),
+        BDDSourceManager.forInterfaces(pkt, ImmutableSet.of()));
+  }
+
+  public static BDDAcl createWithLines(
+      BDDPacketWithLines pkt,
+      String router,
+      IpAccessList acl,
+      Map<String, IpAccessList> aclEnv,
+      Map<String, IpSpace> ipSpaceEnv) {
+    return createWithLines(
+        pkt, router, acl, aclEnv, ipSpaceEnv, BDDSourceManager.forInterfaces(pkt, ImmutableSet.of()));
+  }
+
+  public static BDDAcl createWithLines(
+      BDDPacketWithLines pkt,
+      String router,
+      IpAccessList acl,
+      Map<String, IpAccessList> aclEnv,
+      Map<String, IpSpace> ipSpaceEnv,
+      BDDSourceManager bddSrcManager) {
+    BDD bdd = new IpAccessListToBddImpl(pkt, bddSrcManager, aclEnv, ipSpaceEnv).toBddWithLines(router, acl);
     return new BDDAcl(bdd, pkt);
   }
 

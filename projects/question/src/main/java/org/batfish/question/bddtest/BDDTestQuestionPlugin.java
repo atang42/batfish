@@ -58,7 +58,7 @@ public class BDDTestQuestionPlugin extends QuestionPlugin {
     @Override public AnswerElement answer() {
       BDDTestQuestion question = (BDDTestQuestion) _question;
       NodesSpecifier regex = question.getNodeRegex();
-      new BDDTest().doTest(_batfish, regex);
+      new BDDTest().doTestWithLines(_batfish, regex);
       //new BDDTest().forallTest();
       //new BDDTest().checkRoutingPolicy(_batfish, question.getNodeRegex());
       return new BDDAnswerElement();
