@@ -117,6 +117,34 @@ public abstract class IpAccessListToBdd {
   }
 
   /**
+   * Converts an ACL to a symbolic boolean expression with additional structures to keep track of
+   * lines from the configuration
+   */
+  public final BDD toBddWithLines(String router, IpAccessList acl) {
+    if (!(_pkt instanceof BDDPacketWithLines)) {
+      // Default to normal BDD representation
+      return toBdd(acl);
+    }
+    BDDPacketWithLines pkt = (BDDPacketWithLines) _pkt;
+    BDDFactory bddFactory = pkt.getFactory();
+    BDD accept = pkt.getAccept();
+    BDD result = accept.not();
+    pkt.addAcl(router, acl);
+    for (IpAccessListLine line : Lists.reverse(acl.getLines())) {
+      BDD lineMatchBDD = toBdd(line.getMatchCondition());
+      BDD aclLineBDD = pkt.getAclLine(router, acl, line);
+      BDD actionBDD;
+      if (line.getAction() == LineAction.PERMIT) {
+        actionBDD = aclLineBDD.and(accept);
+      } else {
+        actionBDD = aclLineBDD.and(accept.not());
+      }
+      result = lineMatchBDD.ite(actionBDD, aclLineBDD.not().and(result));
+    }
+    return result;
+  }
+
+  /**
    * Return the set matched by each line (and no earlier line). The last element is the set
    * unmatched by any line.
    */

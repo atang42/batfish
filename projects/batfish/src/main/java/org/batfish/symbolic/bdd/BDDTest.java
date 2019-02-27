@@ -19,13 +19,16 @@ import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.JFactory;
 import org.batfish.common.bdd.BDDInteger;
 import org.batfish.common.bdd.BDDPacket;
+import org.batfish.common.bdd.BDDPacketWithLines;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpAccessList;
+import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.specifier.NodeSpecifier;
 import org.batfish.symbolic.CommunityVar;
 import org.batfish.symbolic.Graph;
 
@@ -57,6 +60,121 @@ public class BDDTest {
     }
     result.printDot();
     result.forAll(factory.ithVar(1).and(factory.ithVar(7))).printDot();
+  }
+
+  public void doTestWithLines(IBatfish  batfish, NodesSpecifier  nodesSpecifier) {
+    BDDPacketWithLines  packet = new BDDPacketWithLines();
+    Set<String> routers = nodesSpecifier.getMatchingNodes(batfish);
+    SortedMap<String, Configuration> configs = batfish.loadConfigurations();
+    Map<String, List<IpAccessList>> aclNameToAcls = new TreeMap<>();
+
+    for (String rr : routers) {
+      Configuration cc = configs.get(rr);
+      System.out.println("***********************");
+      System.out.println(cc.getHostname());
+      for (Entry<String, IpAccessList> entry : cc.getIpAccessLists().entrySet()) {
+        IpAccessList acl = entry.getValue();
+        List<IpAccessList> lists = aclNameToAcls.getOrDefault(entry.getKey(), new ArrayList<>());
+        lists.add(acl);
+        aclNameToAcls.put(entry.getKey(), lists);
+      }
+    }
+
+    for (Entry<String, List<IpAccessList>> entry : aclNameToAcls.entrySet()) {
+      List<IpAccessList> accessLists = entry.getValue();
+      if (accessLists.size() == 2) {
+        System.out.println(entry.getKey());
+        BDDAcl acl1 = BDDAcl.createWithLines(packet, "router1", accessLists.get(0));
+        BDDAcl acl2 = BDDAcl.createWithLines(packet, "router2", accessLists.get(1));
+        BDD first = acl1.getBdd();
+        BDD second = acl2.getBdd();
+
+        for(IpAccessListLine line: accessLists.get(0).getLines()) {
+          System.out.println(line);
+          System.out.println(packet.getAclLine("router1", accessLists.get(0), line).var());
+        }
+        for(IpAccessListLine line: accessLists.get(1).getLines()) {
+          System.out.println(line);
+          System.out.println(packet.getAclLine("router2", accessLists.get(1), line).var());
+        }
+        System.out.println("ACCEPT");
+        System.out.println(packet.getAccept().var());
+        BDD acceptVar= packet.getAccept();
+
+        BDD acceptFirst = first.restrict(acceptVar);
+        BDD acceptSecond = second.restrict(acceptVar);
+        BDD rejectFirst = first.restrict(acceptVar.not());
+        BDD rejectSecond = second.restrict(acceptVar.not());
+        BDD isEquivalent = acceptFirst.biimp(acceptSecond).and(rejectFirst.biimp(rejectSecond));
+
+        isEquivalent.printDot();
+        if (isEquivalent.isOne()) {
+          System.out.println(entry.getKey() + " is consistent");
+        } else {
+          BDD counterexample = isEquivalent.not().fullSatOne();
+          long dstIp = packet.getDstIp().getValueSatisfying(counterexample).get();
+          long srcIp = packet.getSrcIp().getValueSatisfying(counterexample).get();
+          long dstPort = packet.getDstPort().getValueSatisfying(counterexample).get();
+          long srcPort = packet.getSrcPort().getValueSatisfying(counterexample).get();
+          System.out.println("EXAMPLE:");
+          System.out.println("\tDST-IP:    " + Ip.create(dstIp));
+          System.out.println("\tSRC-IP:    " + Ip.create(srcIp));
+          System.out.println("\tDST-PORT:  " + dstPort);
+          System.out.println("\tSRC-PORT:  " + srcPort);
+          int i = 1;
+          for(IpAccessList acl : accessLists) {
+            for (IpAccessListLine line : acl.getLines()) {
+              if (!counterexample.and(packet.getAclLine("router"+i, acl, line)).isZero()) {
+                System.out.println("router"+i);
+                System.out.println(acl.getName() + ":");
+                System.out.println(line.getName());
+                break;
+              }
+            }
+            i++;
+          }
+          System.out.println();
+
+
+          /*
+          Queue<Prefix> prefixQueue = new ArrayDeque<>();
+          prefixQueue.add(Prefix.ZERO);
+          while (!prefixQueue.isEmpty()) {
+            Prefix pfx = prefixQueue.remove();
+
+            isEquivalent = first.and(second).or(first.not().and(second.not()));
+            BDD pfxIsEquivalent = matchPrefix(packet, pfx).imp(isEquivalent);
+
+            BDD bddDstIp = Arrays.stream(packet.getDstIp().getBitvec())
+                .reduce(packet.getFactory().one(), BDD::and);
+            BDD pfxNotEquivalent = matchPrefix(packet, pfx).imp(isEquivalent.not());
+            BDD forallNotEquivalent = pfxNotEquivalent.forAll(bddDstIp);
+            if (pfxIsEquivalent.isOne()) {
+              //System.out.println(entry.getKey() + " is consistent on " + pfx);
+            } else if (!forallNotEquivalent.isZero()) {
+              isEquivalent.printDot();
+              forallNotEquivalent.printDot();
+              pfxNotEquivalent.andWith(matchPrefix(packet, pfx));
+              long dstIp = packet.getDstIp().getValueSatisfying(pfxNotEquivalent).get();
+              long srcIp = packet.getSrcIp().getValueSatisfying(pfxNotEquivalent).get();
+              long dstPort = packet.getDstPort().getValueSatisfying(pfxNotEquivalent).get();
+              long srcPort = packet.getSrcPort().getValueSatisfying(pfxNotEquivalent).get();
+              System.out.println(entry.getKey() + " disagrees on: " + pfx);
+              System.out.println("EXAMPLE:");
+              System.out.println("\tDST-IP:    " + Ip.create(dstIp));
+              System.out.println("\tSRC-IP:    " + Ip.create(srcIp));
+              System.out.println("\tDST-PORT:  " + dstPort);
+              System.out.println("\tSRC-PORT:  " + srcPort);
+              System.out.println();
+            } else {
+
+              prefixQueue.addAll(genLongerPrefix(pfx));
+            }
+          }
+          */
+        }
+      }
+    }
   }
 
   public void doTest(IBatfish batfish, NodesSpecifier nodeRegex) {
