@@ -1,8 +1,12 @@
 package org.batfish.common.bdd;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Set;
 import net.sf.javabdd.BDD;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
@@ -10,16 +14,13 @@ import org.batfish.datamodel.IpAccessListLine;
 public class BDDPacketWithLines extends BDDPacket{
 
   private BDD _accept;
-  private Map<AclLineRepr, BDD> _aclLineVars;
-  private Map<IpAccessListLine, IpAccessList> _linesToLists;
+  private Map<String, Map<AclLineRepr, BDD>> _aclLineVars;
 
   private class AclLineRepr {
-    String router;
     IpAccessList acl;
     IpAccessListLine line;
 
-    public AclLineRepr(String router, IpAccessList acl, IpAccessListLine line) {
-      this.router = router;
+    AclLineRepr(IpAccessList acl, IpAccessListLine line) {
       this.acl = acl;
       this.line = line;
     }
@@ -32,11 +33,11 @@ public class BDDPacketWithLines extends BDDPacket{
         return false;
       }
       AclLineRepr that = (AclLineRepr) o;
-      return router.equals(that.router) && acl.equals(that.acl) && line.equals(that.line);
+      return acl.equals(that.acl) && line.equals(that.line);
     }
 
     @Override public int hashCode() {
-      return Objects.hash(router, acl, line);
+      return Objects.hash(acl, line);
     }
   }
 
@@ -45,7 +46,6 @@ public class BDDPacketWithLines extends BDDPacket{
 
     _accept = allocateBDDBit("accept");
     _aclLineVars = new HashMap<>();
-    _linesToLists = new HashMap<>();
   }
 
 
@@ -58,29 +58,36 @@ public class BDDPacketWithLines extends BDDPacket{
   }
 
   public void addAcl(String router, IpAccessList acl) {
+    _aclLineVars.put(router, new HashMap<>());
     for (IpAccessListLine line : acl.getLines()) {
       BDD var = allocateBDDBit(line.getName());
-      AclLineRepr repr = new AclLineRepr(router, acl, line);
-      _aclLineVars.put(repr, var);
-      _linesToLists.put(line, acl);
+      AclLineRepr repr = new AclLineRepr(acl, line);
+      _aclLineVars.get(router).put(repr, var);
     }
   }
 
   public BDD getAclLine(String router, IpAccessList acl, IpAccessListLine line) {
-    AclLineRepr repr = new AclLineRepr(router, acl, line);
-    if (!_aclLineVars.containsKey(repr)) {
+    AclLineRepr repr = new AclLineRepr(acl, line);
+    if (!_aclLineVars.containsKey(router) || !_aclLineVars.get(router).containsKey(repr)) {
       System.err.println("Cannot get variable for:");
-      System.err.println(repr.router);
+      System.err.println(router);
       System.err.println(acl.getName());
       System.err.println(line.getName());
       System.err.println();
-      _aclLineVars.entrySet().stream().forEach(System.err::println);
+      return null;
     }
-    return _aclLineVars.get(repr);
+    BDD result = _aclLineVars.get(router).get(repr);
+    return result;
   }
 
-  public IpAccessList getAclFromLine(IpAccessListLine line) {
-    return _linesToLists.get(line);
+  public List<BDD> getAclLines(String router, IpAccessList acl) {
+    List<BDD> bddList = new ArrayList<>();
+    for(Entry<AclLineRepr, BDD> bdds : _aclLineVars.get(router).entrySet()) {
+      if (bdds.getKey().acl.equals(acl)) {
+        bddList.add(bdds.getValue());
+      }
+    }
+    return bddList;
   }
 
 }

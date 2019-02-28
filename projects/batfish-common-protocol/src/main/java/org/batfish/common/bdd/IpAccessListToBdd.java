@@ -5,6 +5,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -175,20 +177,27 @@ public abstract class IpAccessListToBdd {
       return toBdd(acl);
     }
     BDDPacketWithLines pkt = (BDDPacketWithLines) _pkt;
-    BDDFactory bddFactory = pkt.getFactory();
     BDD accept = pkt.getAccept();
+    //System.out.println(accept.var() + " ACCEPT");
     BDD result = accept.not();
     pkt.addAcl(router, acl);
+    List<BDD> bddList = new ArrayList<>();
     for (IpAccessListLine line : Lists.reverse(acl.getLines())) {
       BDD lineMatchBDD = toBdd(line.getMatchCondition());
       BDD aclLineBDD = pkt.getAclLine(router, acl, line);
+      //System.out.println(aclLineBDD.var() + " " + line.getName());
+      BDD notOtherBDD = bddList.stream()
+          .map(BDD::not)
+          .reduce(pkt.getFactory().one(), BDD::and);
       BDD actionBDD;
       if (line.getAction() == LineAction.PERMIT) {
-        actionBDD = aclLineBDD.and(accept);
+        actionBDD = aclLineBDD.and(notOtherBDD.and(accept));
       } else {
-        actionBDD = aclLineBDD.and(accept.not());
+        actionBDD = aclLineBDD.and(notOtherBDD.and(accept.not()));
       }
+      //actionBDD.printDot();
       result = lineMatchBDD.ite(actionBDD, aclLineBDD.not().and(result));
+      bddList.add(aclLineBDD);
     }
     return result;
   }
