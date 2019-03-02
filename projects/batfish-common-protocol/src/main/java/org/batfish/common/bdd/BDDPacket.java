@@ -558,4 +558,8 @@ public class BDDPacket {
     }
     return r;
   }
+
+  public Map<Integer, String> getBitNames() {
+    return _bitNames;
+  }
 }
