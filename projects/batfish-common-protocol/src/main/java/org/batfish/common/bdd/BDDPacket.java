@@ -468,4 +468,8 @@ public class BDDPacket {
   public BDD swapSourceAndDestinationFields(BDD bdd) {
     return bdd.replace(_swapSourceAndDestinationPairing);
   }
+
+  public Map<Integer, String> getBitNames() {
+    return _bitNames;
+  }
 }

@@ -112,27 +112,26 @@ public class BDDTest {
     BDDPacketWithLines  packet = new BDDPacketWithLines();
     Set<String> routerNames = nodesSpecifier.getMatchingNodes(batfish);
     SortedMap<String, Configuration> configs = batfish.loadConfigurations();
-    Map<String, List<IpAccessList>> aclNameToAcls = new TreeMap<>();
+    Map<String, Map<String, IpAccessList>> aclNameToAcls = new TreeMap<>();
     Map<IpAccessList, String> aclToRouterName = new HashMap<>();
 
     for (String rr : routerNames) {
       Configuration cc = configs.get(rr);
       for (Entry<String, IpAccessList> entry : cc.getIpAccessLists().entrySet()) {
         IpAccessList acl = entry.getValue();
-        List<IpAccessList> lists = aclNameToAcls.getOrDefault(entry.getKey(), new ArrayList<>());
-        lists.add(acl);
-        aclNameToAcls.put(entry.getKey(), lists);
+        Map<String, IpAccessList> routerToAcl = aclNameToAcls.getOrDefault(entry.getKey(), new HashMap<>());
+        routerToAcl.put(rr, entry.getValue());
+        aclNameToAcls.put(entry.getKey(), routerToAcl);
         aclToRouterName.put(acl, rr);
       }
     }
 
-    for (Entry<String, List<IpAccessList>> entry : aclNameToAcls.entrySet()) {
-      List<IpAccessList> accessLists = entry.getValue();
+    for (Entry<String, Map<String, IpAccessList>> entry : aclNameToAcls.entrySet()) {
+      Map<String, IpAccessList> accessLists = entry.getValue();
       if (accessLists.size() == 2) {
-        String[] routers = { aclToRouterName.get(accessLists.get(0)),
-                             aclToRouterName.get(accessLists.get(1)) };
-        BDDAcl acl1 = BDDAcl.createWithLines(packet, routers[0], accessLists.get(0));
-        BDDAcl acl2 = BDDAcl.createWithLines(packet, routers[1], accessLists.get(1));
+        List<String> routers = new ArrayList<>(accessLists.keySet());
+        BDDAcl acl1 = BDDAcl.createWithLines(packet, routers.get(0), accessLists.get(routers.get(0)));
+        BDDAcl acl2 = BDDAcl.createWithLines(packet, routers.get(1), accessLists.get(routers.get(1)));
         BDD first = acl1.getBdd();
         BDD second = acl2.getBdd();
         /*
@@ -179,18 +178,18 @@ public class BDDTest {
             System.out.println("\tDST-PORT:  " + dstPort);
             System.out.println("\tSRC-PORT:  " + srcPort);
             int i = 0;
-            for (IpAccessList acl : accessLists) {
+            for (IpAccessList acl : accessLists.values()) {
               boolean found = false;
               for (IpAccessListLine line : acl.getLines()) {
-                if (!counterexample.and(packet.getAclLine(routers[i], acl, line)).isZero()) {
-                  System.out.print(routers[i] + " ");
+                if (!counterexample.and(packet.getAclLine(routers.get(i), acl, line)).isZero()) {
+                  System.out.print(routers.get(i) + " ");
                   System.out.println(acl.getName() + ":");
                   System.out.println(line.getName());
                   found = true;
                 }
               }
               if (!found) {
-                System.out.print(routers[i] + " " );
+                System.out.print(routers.get(i) + " " );
                 System.out.println(acl.getName());
                 System.out.println("No matching lines");
               }

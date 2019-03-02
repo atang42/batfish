@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.Set;
+import java.util.Optional;
 import net.sf.javabdd.BDD;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
@@ -15,6 +15,8 @@ public class BDDPacketWithLines extends BDDPacket{
 
   private BDD _accept;
   private Map<String, Map<AclLineRepr, BDD>> _aclLineVars;
+  private Map<String, Map<Long, AclLineRepr>> _numToAclLine;
+  private Map<String, Map<IpAccessList, BDDInteger>> _aclVars;
 
   private class AclLineRepr {
     IpAccessList acl;
@@ -46,6 +48,8 @@ public class BDDPacketWithLines extends BDDPacket{
 
     _accept = allocateBDDBit("accept");
     _aclLineVars = new HashMap<>();
+    _aclVars = new HashMap<>();
+    _numToAclLine = new HashMap<>();;
   }
 
 
@@ -58,11 +62,17 @@ public class BDDPacketWithLines extends BDDPacket{
   }
 
   public void addAcl(String router, IpAccessList acl) {
+    _aclVars.put(router, new HashMap<>());
+    _aclVars.get(router).put(acl, allocateBDDInteger(router+acl.getName(), 1+(int)Math.ceil(Math.log(acl.getLines().size()+1)), false));
     _aclLineVars.put(router, new HashMap<>());
-    for (IpAccessListLine line : acl.getLines()) {
-      BDD var = allocateBDDBit(line.getName());
+    _numToAclLine.put(router, new HashMap<>());
+
+    for (int i = 0; i < acl.getLines().size(); i++) {
+      IpAccessListLine line = acl.getLines().get(i);
+      BDD var = _aclVars.get(router).get(acl).value(i);
       AclLineRepr repr = new AclLineRepr(acl, line);
       _aclLineVars.get(router).put(repr, var);
+      _numToAclLine.get(router).put((long)i, repr);
     }
   }
 
@@ -78,6 +88,18 @@ public class BDDPacketWithLines extends BDDPacket{
     }
     BDD result = _aclLineVars.get(router).get(repr);
     return result;
+  }
+
+  public BDD getAclNoLine(String router, IpAccessList acl) {
+    return _aclVars.get(router).get(acl).value(acl.getLines().size());
+  }
+
+  public IpAccessListLine getLineFromSolution(String router, IpAccessList acl, BDD solution) {
+    Optional<Long> optional = _aclVars.get(router).get(acl).getValueSatisfying(solution);
+    if (optional.isPresent()) {
+      return _numToAclLine.get(router).get(optional.get()).line;
+    }
+    return null;
   }
 
   public List<BDD> getAclLines(String router, IpAccessList acl) {
