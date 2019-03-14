@@ -63,7 +63,8 @@ public class BDDPacketWithLines extends BDDPacket{
 
   public void addAcl(String router, IpAccessList acl) {
     _aclVars.put(router, new HashMap<>());
-    _aclVars.get(router).put(acl, allocateBDDInteger(router+acl.getName(), 1+(int)Math.ceil(Math.log(acl.getLines().size()+1)), false));
+    int bits = 1+(int)Math.ceil(Math.log(acl.getLines().size()+1) / Math.log(2));
+    _aclVars.get(router).put(acl, allocateBDDInteger(router+acl.getName(), bits, false));
     _aclLineVars.put(router, new HashMap<>());
     _numToAclLine.put(router, new HashMap<>());
 
