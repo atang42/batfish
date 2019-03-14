@@ -1,5 +1,6 @@
 package org.batfish.symbolic.bdd;
 
+import java.security.acl.Acl;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -8,7 +9,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
@@ -16,46 +16,21 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import net.sf.javabdd.BDD;
+import net.sf.javabdd.BDDFactory;
+import net.sf.javabdd.BDDPairing;
 import org.batfish.common.bdd.BDDInteger;
 import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.bdd.BDDPacketWithLines;
 import org.batfish.common.plugin.IBatfish;
-import org.batfish.datamodel.AclIpSpace;
-import org.batfish.datamodel.AclIpSpaceLine;
 import org.batfish.datamodel.Configuration;
-import org.batfish.datamodel.EmptyIpSpace;
-import org.batfish.datamodel.HeaderSpace;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
-import org.batfish.datamodel.IpIpSpace;
-import org.batfish.datamodel.IpSpace;
-import org.batfish.datamodel.IpSpaceReference;
-import org.batfish.datamodel.IpWildcard;
-import org.batfish.datamodel.IpWildcardIpSpace;
-import org.batfish.datamodel.IpWildcardSetIpSpace;
-import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.Prefix;
-import org.batfish.datamodel.PrefixIpSpace;
-import org.batfish.datamodel.SubRange;
-import org.batfish.datamodel.UniverseIpSpace;
-import org.batfish.datamodel.acl.AclLineMatchExpr;
-import org.batfish.datamodel.acl.AndMatchExpr;
-import org.batfish.datamodel.acl.FalseExpr;
-import org.batfish.datamodel.acl.GenericAclLineMatchExprVisitor;
-import org.batfish.datamodel.acl.MatchHeaderSpace;
-import org.batfish.datamodel.acl.MatchSrcInterface;
-import org.batfish.datamodel.acl.NotMatchExpr;
-import org.batfish.datamodel.acl.OrMatchExpr;
-import org.batfish.datamodel.acl.OriginatingFromDevice;
-import org.batfish.datamodel.acl.PermittedByAcl;
-import org.batfish.datamodel.acl.TrueExpr;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
-import org.batfish.datamodel.visitors.GenericIpSpaceVisitor;
 import org.batfish.symbolic.CommunityVar;
 import org.batfish.symbolic.Graph;
-import scala.Int;
 
 public class BDDTest {
 
@@ -147,6 +122,10 @@ public class BDDTest {
         BDD rejectFirst = first.restrict(acceptVar.not());
         BDD rejectSecond = second.restrict(acceptVar.not());
         BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
+        BDD acceptBoth = acceptFirst.and(acceptSecond);
+        BDD rejectBoth = rejectFirst.and(rejectSecond);
+        BDD denyOnlyFirst = rejectFirst.and(acceptSecond);
+        BDD denyOnlySecond = rejectSecond.and(acceptFirst);
 
         if (notEquivalent.isZero()) {
           System.out.println(entry.getKey() + " is consistent");
@@ -189,7 +168,20 @@ public class BDDTest {
               }
               i++;
             }
-            getDifferenceInPrefixes(aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
+            AclLineDiffToPrefix diffToPrefix = new AclLineDiffToPrefix(
+                aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
+            diffToPrefix.getDifferenceInPrefixes();
+            Map<PacketPrefixRegion, List<PacketPrefixRegion>> prefixDiff = diffToPrefix.getDifferences();
+
+            boolean denyFirst = !lineSat.and(denyOnlyFirst).isZero();
+            for (PacketPrefixRegion boundingRegion : prefixDiff.keySet()) {
+              List<PacketPrefixRegion> removedRegions = prefixDiff.get(boundingRegion);
+              for (PacketPrefixRegion removed : removedRegions) {
+
+              }
+
+            }
+
             System.out.println();
             linesNotEquivalent.andWith(lineSat.not());
           }
@@ -204,367 +196,6 @@ public class BDDTest {
     }
   }
 
-  private static class PrefixSpace {
-    Prefix dstIp;
-    Prefix srcIp;
-    SubRange dstPort;
-    SubRange srcPort;
-
-    private static final SubRange DEFAULT_PORT_RANGE;
-
-    static {
-      DEFAULT_PORT_RANGE = new SubRange(0, 65535);
-    }
-
-    private static class IpSpaceVisitor implements GenericIpSpaceVisitor<List<Prefix>> {
-
-      @SuppressWarnings("unchecked")
-      @Override public List<Prefix> castToGenericIpSpaceVisitorReturnType(Object o) {
-        return (List<Prefix>) o;
-      }
-
-      @Override public List<Prefix> visitAclIpSpace(AclIpSpace aclIpSpace) {
-        ArrayList<Prefix> ret = new ArrayList<>();
-        for (AclIpSpaceLine line : aclIpSpace.getLines()) {
-          if (line.getAction().equals(LineAction.DENY)) {
-            System.err.println("AclIpSpace uses DENY action");
-            return getAllPrefix();
-          }
-          ret.addAll(line.getIpSpace().accept(this));
-        }
-        return ret;
-      }
-
-      @Override public List<Prefix> visitEmptyIpSpace(EmptyIpSpace emptyIpSpace) {
-        return new ArrayList<>();
-      }
-
-      @Override public List<Prefix> visitIpIpSpace(IpIpSpace ipIpSpace) {
-        List<Prefix> ret = new ArrayList<>();
-        ret.add(Prefix.create(ipIpSpace.getIp(), Prefix.MAX_PREFIX_LENGTH));
-        return ret;
-
-      }
-
-      @Override public List<Prefix> visitIpSpaceReference(IpSpaceReference ipSpaceReference) {
-        System.err.println("Uses IpSpaceReference");
-        return getAllPrefix();
-      }
-
-      @Override public List<Prefix> visitIpWildcardIpSpace(
-          IpWildcardIpSpace ipWildcardIpSpace) {
-        if (ipWildcardIpSpace.getIpWildcard().isPrefix()) {
-          List<Prefix> ret = new ArrayList<>();
-          ret.add(ipWildcardIpSpace.getIpWildcard().toPrefix());
-          return ret;
-        }
-        System.err.println("IpWildCard is not prefix: " + ipWildcardIpSpace.getIpWildcard());
-        return getAllPrefix();
-      }
-
-      @Override public List<Prefix> visitIpWildcardSetIpSpace(
-          IpWildcardSetIpSpace ipWildcardSetIpSpace) {
-        if (ipWildcardSetIpSpace.getBlacklist().size() > 0) {
-          System.err.println("IpWildcardSetIpSpace has blacklist");
-          return getAllPrefix();
-        }
-        ArrayList<Prefix> ret = new ArrayList<>();
-        for (IpWildcard wildcard : ipWildcardSetIpSpace.getWhitelist()) {
-          if (wildcard.isPrefix()) {
-            ret.add(wildcard.toPrefix());
-          } else {
-            System.err.println("IpWildCard is not prefix: " + wildcard);
-            return getAllPrefix();
-          }
-        }
-        return ret;
-      }
-
-      @Override public List<Prefix> visitPrefixIpSpace(PrefixIpSpace prefixIpSpace) {
-        List<Prefix> ret = new ArrayList<>();
-        ret.add(prefixIpSpace.getPrefix());
-        return ret;
-      }
-
-      @Override public List<Prefix> visitUniverseIpSpace(UniverseIpSpace universeIpSpace) {
-        return getAllPrefix();
-      }
-
-    }
-
-    private static class AclLineVisitor implements GenericAclLineMatchExprVisitor<List<PrefixSpace>> {
-
-      @Override public List<PrefixSpace> visitAndMatchExpr(AndMatchExpr andMatchExpr) {
-        List<PrefixSpace> ret = new ArrayList<>();
-        List<PrefixSpace> temp = new ArrayList<>();
-        ret.add(getUniverseSpace());
-        for(AclLineMatchExpr line : andMatchExpr.getConjuncts()) {
-          for (PrefixSpace ps1 : ret) {
-            for (PrefixSpace ps2 : visit(line)) {
-              Optional<PrefixSpace> optional = ps1.intersection(ps2);
-              if(optional.isPresent()) {
-                temp.add(optional.get());
-              }
-            }
-          }
-          ret = temp;
-        }
-        return ret;
-      }
-
-      @Override public List<PrefixSpace> visitFalseExpr(FalseExpr falseExpr) {
-        List<PrefixSpace> ret = new ArrayList<>();
-        return ret;
-      }
-
-      @Override public List<PrefixSpace> visitMatchHeaderSpace(MatchHeaderSpace matchHeaderSpace) {
-        HeaderSpace space = matchHeaderSpace.getHeaderspace();
-        List<Prefix> dstPrefixes;
-        List<Prefix> srcPrefixes;
-        List<SubRange> dstPorts;
-        List<SubRange> srcPorts;
-
-        if (space.getDstIps() != null) {
-          dstPrefixes = space.getDstIps().accept(new IpSpaceVisitor());
-        } else {
-          dstPrefixes = getAllPrefix();
-        }
-        if (space.getSrcIps() != null) {
-          srcPrefixes = space.getSrcIps().accept(new IpSpaceVisitor());
-        } else {
-          srcPrefixes = getAllPrefix();
-        }
-        if (space.getDstPorts() == null || space.getDstPorts().size() == 0) {
-          dstPorts = new ArrayList<>();
-          dstPorts.add(DEFAULT_PORT_RANGE);
-        } else {
-          dstPorts = new ArrayList<>(space.getDstPorts());
-        }
-        if (space.getSrcPorts() == null || space.getSrcPorts().size() == 0) {
-          srcPorts = new ArrayList<>();
-          srcPorts.add(DEFAULT_PORT_RANGE);
-        } else {
-          srcPorts = new ArrayList<>(space.getSrcPorts());
-        }
-
-        List<PrefixSpace> ret = new ArrayList<>();
-
-
-        for (Prefix dst : dstPrefixes) {
-          for (Prefix src : srcPrefixes) {
-            for (SubRange dstPort : dstPorts) {
-              for (SubRange srcPort : srcPorts) {
-                ret.add(new PrefixSpace(dst, src, dstPort, srcPort));
-              }
-            }
-          }
-        }
-
-        return ret;
-      }
-
-      @Override public List<PrefixSpace> visitMatchSrcInterface(MatchSrcInterface matchSrcInterface) {
-        System.err.println("Uses MatchSrcExpr in ACL");
-        return getAllPackets();
-      }
-
-      @Override public List<PrefixSpace> visitNotMatchExpr(NotMatchExpr notMatchExpr) {
-        System.err.println("Uses NotMatchExpr in ACL");
-        return getAllPackets();
-      }
-
-      @Override public List<PrefixSpace> visitOriginatingFromDevice(
-          OriginatingFromDevice originatingFromDevice) {
-        System.err.println("Uses OriginatingFromDevice in ACL");
-        return getAllPackets();
-      }
-
-      @Override public List<PrefixSpace> visitOrMatchExpr(OrMatchExpr orMatchExpr) {
-        List<PrefixSpace> ret = new ArrayList<>();
-        for (AclLineMatchExpr expr : orMatchExpr.getDisjuncts()) {
-          ret.addAll(visit(expr));
-        }
-        return ret;
-      }
-
-      @Override public List<PrefixSpace> visitPermittedByAcl(PermittedByAcl permittedByAcl) {
-        System.err.println("Uses PermittedByAcl in ACL");
-        return getAllPackets();
-      }
-
-      @Override public List<PrefixSpace> visitTrueExpr(TrueExpr trueExpr) {
-        return getAllPackets();
-      }
-
-    }
-
-    private static List<PrefixSpace> getAllPackets() {
-      List<PrefixSpace> ret = new ArrayList<>();
-      ret.add(new PrefixSpace(Prefix.ZERO, Prefix.ZERO, DEFAULT_PORT_RANGE, DEFAULT_PORT_RANGE));
-      return ret;
-    }
-
-    private static List<Prefix> getAllPrefix() {
-      List<Prefix> ret = new ArrayList<>();
-      ret.add(Prefix.ZERO);
-      return ret;
-    }
-
-    public PrefixSpace(Prefix dstIp, Prefix srcIp, SubRange dstPort, SubRange srcPort) {
-      this.dstIp = dstIp;
-      this.srcIp = srcIp;
-      this.dstPort = dstPort;
-      this.srcPort = srcPort;
-    }
-
-    public PrefixSpace(PrefixSpace other) {
-      this(other.dstIp,other.srcIp, other.dstPort, other.srcPort);
-    }
-
-    public static List<PrefixSpace> createPrefixSpace(IpAccessListLine line) {
-      return line.getMatchCondition().accept(new AclLineVisitor());
-    }
-
-    public static PrefixSpace getUniverseSpace() {
-      return new PrefixSpace(Prefix.ZERO, Prefix.ZERO, DEFAULT_PORT_RANGE, DEFAULT_PORT_RANGE);
-    }
-
-    public boolean contains(PrefixSpace other) {
-      if (this.srcIp.containsPrefix(other.srcIp)
-          && this.dstIp.containsPrefix(other.dstIp)
-          && this.dstPort.contains(other.dstPort)
-          && this.srcPort.contains(other.srcPort)) {
-        return true;
-      }
-      return false;
-    }
-
-    public Optional<PrefixSpace> intersection(PrefixSpace other) {
-      Prefix smallerDst;
-      Prefix smallerSrc;
-      if (this.dstIp.containsPrefix(other.dstIp)) {
-        smallerDst = other.dstIp;
-      } else if (other.dstIp.containsPrefix(this.dstIp)) {
-        smallerDst = this.dstIp;
-      } else {
-        return Optional.empty();
-      }
-
-      if (this.srcIp.containsPrefix(other.srcIp)) {
-        smallerSrc = other.srcIp;
-      } else if (other.srcIp.containsPrefix(this.srcIp)) {
-        smallerSrc = this.srcIp;
-      } else {
-        return Optional.empty();
-      }
-
-      Optional<SubRange> dstPortRange = this.dstPort.intersection(other.dstPort);
-      Optional<SubRange> srcPortRange = this.srcPort.intersection(other.srcPort);
-      if (!dstPortRange.isPresent() || !srcPortRange.isPresent()) {
-        return Optional.empty();
-      }
-
-      return Optional.of(
-          new PrefixSpace(smallerDst, smallerSrc, dstPortRange.get(), srcPortRange.get()));
-
-    }
-
-    @Override public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      PrefixSpace that = (PrefixSpace) o;
-      return dstIp.equals(that.dstIp) && srcIp.equals(that.srcIp)
-          && dstPort.equals(that.dstPort) && srcPort.equals(that.srcPort);
-    }
-
-    @Override public int hashCode() {
-      int ret = 0;
-      ret ^= Integer.rotateLeft(dstIp.hashCode(), 0);
-      ret ^= Integer.rotateLeft(srcIp.hashCode(), 8);
-      ret ^= Integer.rotateLeft(dstPort.hashCode(), 16);
-      ret ^= Integer.rotateLeft(srcPort.hashCode(), 24);
-      return ret;
-    }
-
-    @Override public String toString() {
-      if (dstPort.equals(DEFAULT_PORT_RANGE) && srcPort.equals(DEFAULT_PORT_RANGE)) {
-        return "<" + "dstIp=" + dstIp + ", srcIp=" + srcIp + '>';
-      } else {
-        return "<" + "dstIp=" + dstIp
-            + ", srcIp=" + srcIp
-            + ", dstPort=" + dstPort
-            + ", srcPort=" + srcPort + '>';
-      }
-
-    }
-  }
-
-  /**
-   * Given two ACL lines in corresponding ACLs, prints out the intersection of the lines minus the
-   * prefixes in the previous lines
-   */
-  private void getDifferenceInPrefixes(IpAccessList acl1, IpAccessList acl2,
-      IpAccessListLine line1, IpAccessListLine line2) {
-    List<PrefixSpace> spaces1 = PrefixSpace.createPrefixSpace(line1);
-    List<PrefixSpace> spaces2 = PrefixSpace.createPrefixSpace(line2);
-
-    System.out.println("DIFFERENCES");
-    List<PrefixSpace> resultSpaces = new ArrayList<>();
-
-    for (PrefixSpace ps1 : spaces1) {
-      for (PrefixSpace ps2 : spaces2) {
-        Optional<PrefixSpace> optional = ps1.intersection(ps2);
-        if (optional.isPresent()) {
-          resultSpaces.add(optional.get());
-        }
-      }
-    }
-    for (PrefixSpace resultSpace : resultSpaces) {
-      boolean doPrint = true;
-      List<PrefixSpace> diffs = new ArrayList<>();
-      List<IpAccessListLine> aclLines = new ArrayList<>(acl1.getLines());
-      aclLines.addAll(acl2.getLines());
-      for (IpAccessListLine line : aclLines) {
-        if (line.equals(line1)) {
-          break;
-        }
-        List<PrefixSpace> lineSpaces = PrefixSpace.createPrefixSpace(line);
-        for (PrefixSpace lineSpace : lineSpaces) {
-          if (lineSpace.contains(resultSpace)) {
-            doPrint = false;
-            break;
-          }
-          Optional<PrefixSpace> optional = lineSpace.intersection(resultSpace);
-          if (optional.isPresent()) {
-            PrefixSpace intersection = optional.get();
-            boolean skip = false;
-            for (int i = 0; i < diffs.size(); i++) {
-              if (intersection.contains(diffs.get(i))) {
-                diffs.set(i, intersection);
-                break;
-              } else if (diffs.get(i).contains(intersection)) {
-                skip = true;
-                break;
-              }
-            }
-            if (!skip) {
-              diffs.add(intersection);
-            }
-          }
-        }
-      }
-      if (doPrint) {
-        System.out.println(resultSpace);
-        for (PrefixSpace sp : diffs) {
-          System.out.println("\t- " + sp);
-        }
-      }
-    }
-  }
 
   public void doTest(IBatfish batfish, NodesSpecifier nodeRegex) {
     BDDPacket packet = new BDDPacket();
@@ -586,11 +217,11 @@ public class BDDTest {
         BDDAcl bddAcl = BDDAcl.create(packet, acl);
         /*
         if (!bddAcl.getBdd().isZero()) {
-          long dstIp = packet.getDstIp().getValueSatisfying(bddAcl.getBdd()).get();
-          long srcIp = packet.getSrcIp().getValueSatisfying(bddAcl.getBdd()).get();
+          long _dstIp = packet.getDstIp().getValueSatisfying(bddAcl.getBdd()).get();
+          long _srcIp = packet.getSrcIp().getValueSatisfying(bddAcl.getBdd()).get();
           System.out.println(acl);
-          System.out.println("DST: " + Ip.create(dstIp));
-          System.out.println("SRC: " + Ip.create(srcIp));
+          System.out.println("DST: " + Ip.create(_dstIp));
+          System.out.println("SRC: " + Ip.create(_srcIp));
           System.out.println();
         } else {
           System.out.println(acl);
@@ -794,13 +425,47 @@ public class BDDTest {
     return result;
   }
 
-  private void printBDD(BDD bdd) {
-    if (bdd.isOne()) {
-      System.out.println("Always True");
-    } else if (bdd.isZero()) {
-      System.out.println("Always False");
-    } else {
-      bdd.printDot();
+  private BDD restrictBDD(BDD bdd, BDDPacket pkt, PacketPrefixRegion region) {
+    int dstLen = region.getDstIp().getPrefixLength();
+    long dstBits = region.getDstIp().getStartIp().asLong();
+    int[] dstVars = new int[dstLen];
+    BDD[] dstVals = new BDD[dstLen];
+
+    int srcLen = region.getSrcIp().getPrefixLength();
+    long srcBits = region.getSrcIp().getStartIp().asLong();
+    int[] srcVars = new int[srcLen];
+    BDD[] srcVals = new BDD[srcLen];
+
+    BDDFactory factory = pkt.getFactory();
+    BDDPairing pairing = factory.makePair();
+
+    for (int i = 0; i < dstLen; i++) {
+      int var = pkt.getDstIp().getBitvec()[i].var(); // dstIpIndex + i;
+      BDD subst = Ip.getBitAtPosition(dstBits, i) ? factory.one() : factory.zero();
+      dstVars[i] = var;
+      dstVals[i] = subst;
     }
+    pairing.set(dstVars, dstVals);
+
+    for (int i = 0; i < srcLen; i++) {
+      int var = pkt.getSrcIp().getBitvec()[i].var(); // srcIpIndex + i;
+      BDD subst = Ip.getBitAtPosition(srcBits, i) ? factory.one() : factory.zero();
+      srcVars[i] = var;
+      srcVals[i] = subst;
+    }
+    pairing.set(srcVars, srcVals);
+
+    bdd = bdd.veccompose(pairing);
+
+    BDD dstPortBDD = pkt.getDstPort().leq(region.getDstPort().getEnd())
+        .and(pkt.getDstPort().geq(region.getDstPort().getStart()));
+
+    BDD srcPortBDD = pkt.getSrcPort().leq(region.getSrcPort().getEnd())
+        .and(pkt.getSrcPort().geq(region.getSrcPort().getStart()));
+
+    BDD protoBDD = pkt.getIpProtocol().value(region.getProtocol().number());
+
+    return bdd.and(dstPortBDD).and(srcPortBDD).and(protoBDD);
   }
+
 }
