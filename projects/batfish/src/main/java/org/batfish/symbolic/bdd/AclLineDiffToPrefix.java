@@ -1,6 +1,7 @@
 package org.batfish.symbolic.bdd;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,6 +23,7 @@ public class AclLineDiffToPrefix {
     _acl2 = acl2;
     _line1 = line1;
     _line2 = line2;
+    _differences = new HashMap<>();
   }
 
   /**

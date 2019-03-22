@@ -183,7 +183,7 @@ public class BDDTest {
             }
 
             System.out.println();
-            linesNotEquivalent.andWith(lineSat.not());
+            linesNotEquivalent.andWith(counterexample.exist(getPacketHeaderFields(packet)).not());
           }
           System.out.println("**************************");
         }
