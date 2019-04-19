@@ -22,14 +22,25 @@ public class AclDiffReport {
     List<IpAccessListLine> _lastDiffs;
     Set<IpAccessListLine> _allDiffs;
     boolean _permits;
+    boolean _implicitDeny;
 
-    SingleRouterReport(String r, IpAccessList acl, List<IpAccessListLine> lastLines,
+    SingleRouterReport(
+        String r,
+        IpAccessList acl,
+        List<IpAccessListLine> lastLines,
         Set<IpAccessListLine> allLines) {
       _router = r;
       _acl = acl;
       _lastDiffs = new ArrayList<>(lastLines);
       _allDiffs = new HashSet<>(allLines);
-      _permits = _lastDiffs.get(0).getAction().equals(LineAction.PERMIT);
+      if (_lastDiffs.isEmpty() || _lastDiffs.get(0) == null) {
+        _implicitDeny = true;
+        _permits = false;
+        _lastDiffs.clear();
+      } else {
+        _implicitDeny = false;
+        _permits = _lastDiffs.get(0).getAction().equals(LineAction.PERMIT);
+      }
     }
 
     SingleRouterReport(SingleRouterReport other) {
@@ -37,26 +48,39 @@ public class AclDiffReport {
     }
 
     void combineWith(SingleRouterReport other) {
-      if (!_router.equals(other._router) || !_acl.equals(other._acl) || _permits != other._permits) {
+      if (!_router.equals(other._router)
+          || !_acl.equals(other._acl)
+          || _permits != other._permits) {
         throw new IllegalArgumentException();
       }
       _lastDiffs.addAll(other._lastDiffs);
       _allDiffs.addAll(other._allDiffs);
+      _implicitDeny = _implicitDeny || other._implicitDeny;
     }
 
     boolean permits() {
       return _permits;
     }
+
+    boolean hasImplicitDeny() {
+      return _implicitDeny;
+    }
   }
 
-  public AclDiffReport(Set<PacketPrefixRegion> regions,
-      String r1, IpAccessList acl1, List<IpAccessListLine> last1, Set<IpAccessListLine> all1,
-      String r2, IpAccessList acl2, List<IpAccessListLine> last2, Set<IpAccessListLine> all2) {
+  public AclDiffReport(
+      Set<PacketPrefixRegion> regions,
+      String r1,
+      IpAccessList acl1,
+      List<IpAccessListLine> last1,
+      Set<IpAccessListLine> all1,
+      String r2,
+      IpAccessList acl2,
+      List<IpAccessListLine> last2,
+      Set<IpAccessListLine> all2) {
     _regions = new HashSet<>(regions);
     _report1 = new SingleRouterReport(r1, acl1, last1, all1);
     _report2 = new SingleRouterReport(r2, acl2, last2, all2);
   }
-
 
   private BitSet getAclBitVector(SingleRouterReport report) {
     BitSet bitVector = new BitSet(report._acl.getLines().size());
@@ -91,7 +115,7 @@ public class AclDiffReport {
     return _report1._allDiffs.size() + _report2._allDiffs.size();
   }
 
-  public static int combinedLineCount (AclDiffReport first, AclDiffReport second) {
+  public static int combinedLineCount(AclDiffReport first, AclDiffReport second) {
     BitSet vec1 = (BitSet) first.getAcl1BitVector().clone();
     vec1.or(second.getAcl1BitVector());
     BitSet vec2 = (BitSet) first.getAcl2BitVector().clone();
@@ -100,7 +124,7 @@ public class AclDiffReport {
     return vec1.cardinality() + vec2.cardinality();
   }
 
-  public static boolean combinedSameAction (AclDiffReport first, AclDiffReport second) {
+  public static boolean combinedSameAction(AclDiffReport first, AclDiffReport second) {
     return first._report1.permits() == second._report1.permits()
         && first._report2.permits() == second._report2.permits();
   }
@@ -112,11 +136,12 @@ public class AclDiffReport {
     System.out.println("Configuration lines for : ");
     _regions.forEach((r) -> System.out.println("  " + r));
     System.out.println(_report1._router);
-    aclToConfig.printRelevantLines(_report1._router, _report1._acl, _regions, _report1._lastDiffs);
+    aclToConfig.printRelevantLines(
+        _report1._router, _report1._acl, _regions, _report1._lastDiffs, _report1._implicitDeny);
     System.out.println();
     System.out.println(_report2._router);
-    aclToConfig.printRelevantLines(_report2._router, _report2._acl, _regions, _report2._lastDiffs);
+    aclToConfig.printRelevantLines(
+        _report2._router, _report2._acl, _regions, _report2._lastDiffs, _report2._implicitDeny);
     System.out.println();
   }
-
 }

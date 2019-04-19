@@ -1,6 +1,5 @@
 package org.batfish.symbolic.bdd;
 
-import java.security.acl.Acl;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -13,11 +12,8 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
@@ -26,20 +22,17 @@ import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.bdd.BDDPacketWithLines;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
-import org.batfish.datamodel.DefinedStructureInfo;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.Prefix;
-import org.batfish.datamodel.answers.ConvertConfigurationAnswerElement;
-import org.batfish.datamodel.answers.ParseVendorConfigurationAnswerElement;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.main.Batfish;
 import org.batfish.symbolic.CommunityVar;
 import org.batfish.symbolic.Graph;
 
-public class BDDTest {
+public class BddDiff {
 
   private BDDRoute computeBDD(
       Graph g, Configuration conf, RoutingPolicy pol, boolean ignoreNetworks) {
@@ -53,34 +46,38 @@ public class BDDTest {
 
   private BDD getPacketHeaderFields(BDDPacket packet) {
     BDD headerVars = packet.getFactory().one();
-    BDD bddDstIp = Arrays.stream(packet.getDstIp().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddSrcIp = Arrays.stream(packet.getSrcIp().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddDstPort = Arrays.stream(packet.getDstPort().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddSrcPort = Arrays.stream(packet.getSrcPort().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddProtocol = Arrays.stream(packet.getIpProtocol().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddIcmpType = Arrays.stream(packet.getIcmpType().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddIcmpCode = Arrays.stream(packet.getIcmpCode().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddDscp = Arrays.stream(packet.getDscp().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddEcn = Arrays.stream(packet.getEcn().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddFragOffset = Arrays.stream(packet.getFragmentOffset().getBitvec())
-        .reduce(packet.getFactory().one(), BDD::and);
-    BDD bddTcpBits = packet.getTcpAck()
-        .and(packet.getTcpEce())
-        .and(packet.getTcpFin())
-        .and(packet.getTcpCwr())
-        .and(packet.getTcpRst())
-        .and(packet.getTcpPsh())
-        .and(packet.getTcpUrg())
-        .and(packet.getTcpSyn());
+    BDD bddDstIp =
+        Arrays.stream(packet.getDstIp().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+    BDD bddSrcIp =
+        Arrays.stream(packet.getSrcIp().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+    BDD bddDstPort =
+        Arrays.stream(packet.getDstPort().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+    BDD bddSrcPort =
+        Arrays.stream(packet.getSrcPort().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+    BDD bddProtocol =
+        Arrays.stream(packet.getIpProtocol().getBitvec())
+            .reduce(packet.getFactory().one(), BDD::and);
+    BDD bddIcmpType =
+        Arrays.stream(packet.getIcmpType().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+    BDD bddIcmpCode =
+        Arrays.stream(packet.getIcmpCode().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+    BDD bddDscp =
+        Arrays.stream(packet.getDscp().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+    BDD bddEcn =
+        Arrays.stream(packet.getEcn().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+    BDD bddFragOffset =
+        Arrays.stream(packet.getFragmentOffset().getBitvec())
+            .reduce(packet.getFactory().one(), BDD::and);
+    BDD bddTcpBits =
+        packet
+            .getTcpAck()
+            .and(packet.getTcpEce())
+            .and(packet.getTcpFin())
+            .and(packet.getTcpCwr())
+            .and(packet.getTcpRst())
+            .and(packet.getTcpPsh())
+            .and(packet.getTcpUrg())
+            .and(packet.getTcpSyn());
     headerVars.andWith(bddDstIp);
     headerVars.andWith(bddSrcIp);
     headerVars.andWith(bddDstPort);
@@ -98,7 +95,7 @@ public class BDDTest {
   /*
   Check differences between ACLs with same name on two routers
    */
-  public void doTestWithLines(IBatfish  batfish, NodesSpecifier  nodesSpecifier) {
+  public void findDiffWithLines(IBatfish batfish, NodesSpecifier nodesSpecifier) {
     Set<String> routerNames = nodesSpecifier.getMatchingNodes(batfish);
     SortedMap<String, Configuration> configs = batfish.loadConfigurations();
     Map<String, Map<String, IpAccessList>> aclNameToAcls = new TreeMap<>();
@@ -108,7 +105,8 @@ public class BDDTest {
       Configuration cc = configs.get(rr);
       for (Entry<String, IpAccessList> entry : cc.getIpAccessLists().entrySet()) {
         IpAccessList acl = entry.getValue();
-        Map<String, IpAccessList> routerToAcl = aclNameToAcls.getOrDefault(entry.getKey(), new HashMap<>());
+        Map<String, IpAccessList> routerToAcl =
+            aclNameToAcls.getOrDefault(entry.getKey(), new HashMap<>());
         routerToAcl.put(rr, entry.getValue());
         aclNameToAcls.put(entry.getKey(), routerToAcl);
         aclToRouterName.put(acl, rr);
@@ -117,15 +115,17 @@ public class BDDTest {
 
     for (Entry<String, Map<String, IpAccessList>> entry : aclNameToAcls.entrySet()) {
       Map<String, IpAccessList> accessLists = entry.getValue();
-      BDDPacketWithLines  packet = new BDDPacketWithLines();
+      BDDPacketWithLines packet = new BDDPacketWithLines();
       if (accessLists.size() == 2) {
         List<String> routers = new ArrayList<>(accessLists.keySet());
-        BDDAcl acl1 = BDDAcl.createWithLines(packet, routers.get(0), accessLists.get(routers.get(0)));
-        BDDAcl acl2 = BDDAcl.createWithLines(packet, routers.get(1), accessLists.get(routers.get(1)));
+        BDDAcl acl1 =
+            BDDAcl.createWithLines(packet, routers.get(0), accessLists.get(routers.get(0)));
+        BDDAcl acl2 =
+            BDDAcl.createWithLines(packet, routers.get(1), accessLists.get(routers.get(1)));
         BDD first = acl1.getBdd();
         BDD second = acl2.getBdd();
 
-        BDD acceptVar= packet.getAccept();
+        BDD acceptVar = packet.getAccept();
 
         BDD acceptFirst = first.restrict(acceptVar);
         BDD acceptSecond = second.restrict(acceptVar);
@@ -134,7 +134,7 @@ public class BDDTest {
         BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
 
         if (notEquivalent.isZero()) {
-          //System.out.println(entry.getKey() + " is consistent");
+          // System.out.println(entry.getKey() + " is consistent");
         } else {
           System.out.println("**************************");
           System.out.println(entry.getKey());
@@ -171,15 +171,16 @@ public class BDDTest {
                 }
               }
               if (!found) {
-                System.out.print(routers.get(i) + " " );
+                System.out.print(routers.get(i) + " ");
                 System.out.println(acl.getName());
-                System.out.println("No matching lines");
+                System.out.println("  Implicit deny");
               }
               i++;
             }
-            AclLineDiffToPrefix diffToPrefix = new AclLineDiffToPrefix(
-                aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
+            AclLineDiffToPrefix diffToPrefix =
+                new AclLineDiffToPrefix(aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
 
+            diffToPrefix.printDifferenceInPrefix();
             AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
             report.print((Batfish) batfish);
             /*boolean merged = false;
@@ -196,25 +197,23 @@ public class BDDTest {
               reportList.add(report);
             }
             */
-            System.out.println();
             linesNotEquivalent.andWith(counterexample.exist(getPacketHeaderFields(packet)).not());
           }
-          //for (AclDiffReport r : reportList) {
+          // for (AclDiffReport r : reportList) {
           //  r.print((Batfish) batfish);
-          //}
+          // }
           System.out.println("**************************");
         }
       } else {
+        /*
         System.out.print(entry.getKey() + " is present in ");
         accessLists.keySet()
             .forEach(x -> System.out.print(x + " " ));
         System.out.println();
+        */
       }
     }
   }
-
-
-
 
   public void doTest(IBatfish batfish, NodesSpecifier nodeRegex) {
     BDDPacket packet = new BDDPacket();
@@ -260,7 +259,7 @@ public class BDDTest {
         BDD second = acl2.getBdd();
         BDD isEquivalent = first.and(second).or(first.not().and(second.not()));
         if (isEquivalent.isOne()) {
-          //System.out.println(entry.getKey() + " is consistent");
+          // System.out.println(entry.getKey() + " is consistent");
         } else {
           Queue<Prefix> prefixQueue = new ArrayDeque<>();
           prefixQueue.add(Prefix.ZERO);
@@ -270,12 +269,14 @@ public class BDDTest {
             isEquivalent = first.and(second).or(first.not().and(second.not()));
             BDD pfxIsEquivalent = matchPrefix(packet, pfx).imp(isEquivalent);
 
-            BDD bddDstIp = Arrays.stream(packet.getDstIp().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+            BDD bddDstIp =
+                Arrays.stream(packet.getDstIp().getBitvec())
+                    .reduce(packet.getFactory().one(), BDD::and);
             BDD pfxNotEquivalent = matchPrefix(packet, pfx).imp(isEquivalent.not());
             BDD forallNotEquivalent = pfxNotEquivalent.forAll(bddDstIp);
             if (pfxIsEquivalent.isOne()) {
-              //System.out.println(entry.getKey() + " is consistent on " + pfx);
-            } else if (!forallNotEquivalent.isZero()){
+              // System.out.println(entry.getKey() + " is consistent on " + pfx);
+            } else if (!forallNotEquivalent.isZero()) {
               isEquivalent.printDot();
               forallNotEquivalent.printDot();
               pfxNotEquivalent.andWith(matchPrefix(packet, pfx));
@@ -298,7 +299,6 @@ public class BDDTest {
         }
       }
     }
-
   }
 
   private static class RouteMapWrapper {
@@ -360,9 +360,13 @@ public class BDDTest {
     result.andWith(checkBDDIntegerEquivalence(first.getPrefixLength(), second.getPrefixLength()));
     result.andWith(checkBDDIntegerEquivalence(first.getMed(), second.getMed()));
     result.andWith(checkBDDIntegerEquivalence(first.getAdminDist(), second.getAdminDist()));
-    result.andWith(checkBDDIntegerEquivalence(first.getProtocolHistory().getInteger(), second.getProtocolHistory().getInteger()));
-    result.andWith(checkBDDIntegerEquivalence(first.getOspfMetric().getInteger(), second.getOspfMetric().getInteger()));
-    for(CommunityVar cvar : first.getCommunities().keySet()) {
+    result.andWith(
+        checkBDDIntegerEquivalence(
+            first.getProtocolHistory().getInteger(), second.getProtocolHistory().getInteger()));
+    result.andWith(
+        checkBDDIntegerEquivalence(
+            first.getOspfMetric().getInteger(), second.getOspfMetric().getInteger()));
+    for (CommunityVar cvar : first.getCommunities().keySet()) {
       BDD bdd1 = first.getCommunities().get(cvar);
       BDD bdd2 = second.getCommunities().get(cvar);
       BDD isEquivalent = bdd1.and(bdd2).or(bdd1.not().and(bdd2.not()));
@@ -438,7 +442,7 @@ public class BDDTest {
     BDD result = packet.getFactory().one();
     for (int i = 0; i < length; i++) {
       BDD dstIpBDD = packet.getDstIp().getBitvec()[i].id();
-      BDD bitBDD = Ip.getBitAtPosition(bits, i) ?  dstIpBDD : dstIpBDD.not();
+      BDD bitBDD = Ip.getBitAtPosition(bits, i) ? dstIpBDD : dstIpBDD.not();
       result.andWith(bitBDD);
     }
     return result;
@@ -476,15 +480,18 @@ public class BDDTest {
 
     bdd = bdd.veccompose(pairing);
 
-    BDD dstPortBDD = pkt.getDstPort().leq(region.getDstPort().getEnd())
-        .and(pkt.getDstPort().geq(region.getDstPort().getStart()));
+    BDD dstPortBDD =
+        pkt.getDstPort()
+            .leq(region.getDstPort().getEnd())
+            .and(pkt.getDstPort().geq(region.getDstPort().getStart()));
 
-    BDD srcPortBDD = pkt.getSrcPort().leq(region.getSrcPort().getEnd())
-        .and(pkt.getSrcPort().geq(region.getSrcPort().getStart()));
+    BDD srcPortBDD =
+        pkt.getSrcPort()
+            .leq(region.getSrcPort().getEnd())
+            .and(pkt.getSrcPort().geq(region.getSrcPort().getStart()));
 
     BDD protoBDD = pkt.getIpProtocol().value(region.getProtocol().number());
 
     return bdd.and(dstPortBDD).and(srcPortBDD).and(protoBDD);
   }
-
 }

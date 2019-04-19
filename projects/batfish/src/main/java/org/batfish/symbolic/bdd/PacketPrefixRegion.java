@@ -49,11 +49,13 @@ public class PacketPrefixRegion {
   private static class IpSpaceVisitor implements GenericIpSpaceVisitor<List<Prefix>> {
 
     @SuppressWarnings("unchecked")
-    @Override public List<Prefix> castToGenericIpSpaceVisitorReturnType(Object o) {
+    @Override
+    public List<Prefix> castToGenericIpSpaceVisitorReturnType(Object o) {
       return (List<Prefix>) o;
     }
 
-    @Override public List<Prefix> visitAclIpSpace(AclIpSpace aclIpSpace) {
+    @Override
+    public List<Prefix> visitAclIpSpace(AclIpSpace aclIpSpace) {
       ArrayList<Prefix> ret = new ArrayList<>();
       for (AclIpSpaceLine line : aclIpSpace.getLines()) {
         if (line.getAction().equals(LineAction.DENY)) {
@@ -65,24 +67,26 @@ public class PacketPrefixRegion {
       return ret;
     }
 
-    @Override public List<Prefix> visitEmptyIpSpace(EmptyIpSpace emptyIpSpace) {
+    @Override
+    public List<Prefix> visitEmptyIpSpace(EmptyIpSpace emptyIpSpace) {
       return new ArrayList<>();
     }
 
-    @Override public List<Prefix> visitIpIpSpace(IpIpSpace ipIpSpace) {
+    @Override
+    public List<Prefix> visitIpIpSpace(IpIpSpace ipIpSpace) {
       List<Prefix> ret = new ArrayList<>();
       ret.add(Prefix.create(ipIpSpace.getIp(), Prefix.MAX_PREFIX_LENGTH));
       return ret;
-
     }
 
-    @Override public List<Prefix> visitIpSpaceReference(IpSpaceReference ipSpaceReference) {
+    @Override
+    public List<Prefix> visitIpSpaceReference(IpSpaceReference ipSpaceReference) {
       System.err.println("Uses IpSpaceReference");
       return getAllPrefix();
     }
 
-    @Override public List<Prefix> visitIpWildcardIpSpace(
-        IpWildcardIpSpace ipWildcardIpSpace) {
+    @Override
+    public List<Prefix> visitIpWildcardIpSpace(IpWildcardIpSpace ipWildcardIpSpace) {
       if (ipWildcardIpSpace.getIpWildcard().isPrefix()) {
         List<Prefix> ret = new ArrayList<>();
         ret.add(ipWildcardIpSpace.getIpWildcard().toPrefix());
@@ -92,8 +96,8 @@ public class PacketPrefixRegion {
       return getAllPrefix();
     }
 
-    @Override public List<Prefix> visitIpWildcardSetIpSpace(
-        IpWildcardSetIpSpace ipWildcardSetIpSpace) {
+    @Override
+    public List<Prefix> visitIpWildcardSetIpSpace(IpWildcardSetIpSpace ipWildcardSetIpSpace) {
       if (ipWildcardSetIpSpace.getBlacklist().size() > 0) {
         System.err.println("IpWildcardSetIpSpace has blacklist");
         return getAllPrefix();
@@ -110,30 +114,32 @@ public class PacketPrefixRegion {
       return ret;
     }
 
-    @Override public List<Prefix> visitPrefixIpSpace(PrefixIpSpace prefixIpSpace) {
+    @Override
+    public List<Prefix> visitPrefixIpSpace(PrefixIpSpace prefixIpSpace) {
       List<Prefix> ret = new ArrayList<>();
       ret.add(prefixIpSpace.getPrefix());
       return ret;
     }
 
-    @Override public List<Prefix> visitUniverseIpSpace(UniverseIpSpace universeIpSpace) {
+    @Override
+    public List<Prefix> visitUniverseIpSpace(UniverseIpSpace universeIpSpace) {
       return getAllPrefix();
     }
-
   }
 
-  private static class AclLineVisitor implements
-      GenericAclLineMatchExprVisitor<List<PacketPrefixRegion>> {
+  private static class AclLineVisitor
+      implements GenericAclLineMatchExprVisitor<List<PacketPrefixRegion>> {
 
-    @Override public List<PacketPrefixRegion> visitAndMatchExpr(AndMatchExpr andMatchExpr) {
+    @Override
+    public List<PacketPrefixRegion> visitAndMatchExpr(AndMatchExpr andMatchExpr) {
       List<PacketPrefixRegion> ret = new ArrayList<>();
       List<PacketPrefixRegion> temp = new ArrayList<>();
       ret.add(getUniverseSpace());
-      for(AclLineMatchExpr line : andMatchExpr.getConjuncts()) {
+      for (AclLineMatchExpr line : andMatchExpr.getConjuncts()) {
         for (PacketPrefixRegion ps1 : ret) {
           for (PacketPrefixRegion ps2 : visit(line)) {
             Optional<PacketPrefixRegion> optional = ps1.intersection(ps2);
-            if(optional.isPresent()) {
+            if (optional.isPresent()) {
               temp.add(optional.get());
             }
           }
@@ -143,12 +149,14 @@ public class PacketPrefixRegion {
       return ret;
     }
 
-    @Override public List<PacketPrefixRegion> visitFalseExpr(FalseExpr falseExpr) {
+    @Override
+    public List<PacketPrefixRegion> visitFalseExpr(FalseExpr falseExpr) {
       List<PacketPrefixRegion> ret = new ArrayList<>();
       return ret;
     }
 
-    @Override public List<PacketPrefixRegion> visitMatchHeaderSpace(MatchHeaderSpace matchHeaderSpace) {
+    @Override
+    public List<PacketPrefixRegion> visitMatchHeaderSpace(MatchHeaderSpace matchHeaderSpace) {
       HeaderSpace space = matchHeaderSpace.getHeaderspace();
       List<Prefix> dstPrefixes;
       List<Prefix> srcPrefixes;
@@ -187,13 +195,12 @@ public class PacketPrefixRegion {
 
       List<PacketPrefixRegion> ret = new ArrayList<>();
 
-
       for (Prefix dst : dstPrefixes) {
         for (Prefix src : srcPrefixes) {
           for (SubRange dstPort : dstPorts) {
             for (SubRange srcPort : srcPorts) {
               for (IpProtocol proto : protocols)
-              ret.add(new PacketPrefixRegion(dst, src, dstPort, srcPort, proto));
+                ret.add(new PacketPrefixRegion(dst, src, dstPort, srcPort, proto));
             }
           }
         }
@@ -202,23 +209,27 @@ public class PacketPrefixRegion {
       return ret;
     }
 
-    @Override public List<PacketPrefixRegion> visitMatchSrcInterface(MatchSrcInterface matchSrcInterface) {
+    @Override
+    public List<PacketPrefixRegion> visitMatchSrcInterface(MatchSrcInterface matchSrcInterface) {
       System.err.println("Uses MatchSrcExpr in ACL");
       return getAllPackets();
     }
 
-    @Override public List<PacketPrefixRegion> visitNotMatchExpr(NotMatchExpr notMatchExpr) {
+    @Override
+    public List<PacketPrefixRegion> visitNotMatchExpr(NotMatchExpr notMatchExpr) {
       System.err.println("Uses NotMatchExpr in ACL");
       return getAllPackets();
     }
 
-    @Override public List<PacketPrefixRegion> visitOriginatingFromDevice(
+    @Override
+    public List<PacketPrefixRegion> visitOriginatingFromDevice(
         OriginatingFromDevice originatingFromDevice) {
       System.err.println("Uses OriginatingFromDevice in ACL");
       return getAllPackets();
     }
 
-    @Override public List<PacketPrefixRegion> visitOrMatchExpr(OrMatchExpr orMatchExpr) {
+    @Override
+    public List<PacketPrefixRegion> visitOrMatchExpr(OrMatchExpr orMatchExpr) {
       List<PacketPrefixRegion> ret = new ArrayList<>();
       for (AclLineMatchExpr expr : orMatchExpr.getDisjuncts()) {
         ret.addAll(visit(expr));
@@ -226,15 +237,16 @@ public class PacketPrefixRegion {
       return ret;
     }
 
-    @Override public List<PacketPrefixRegion> visitPermittedByAcl(PermittedByAcl permittedByAcl) {
+    @Override
+    public List<PacketPrefixRegion> visitPermittedByAcl(PermittedByAcl permittedByAcl) {
       System.err.println("Uses PermittedByAcl in ACL");
       return getAllPackets();
     }
 
-    @Override public List<PacketPrefixRegion> visitTrueExpr(TrueExpr trueExpr) {
+    @Override
+    public List<PacketPrefixRegion> visitTrueExpr(TrueExpr trueExpr) {
       return getAllPackets();
     }
-
   }
 
   private static List<PacketPrefixRegion> getAllPackets() {
@@ -249,7 +261,8 @@ public class PacketPrefixRegion {
     return ret;
   }
 
-  public PacketPrefixRegion(Prefix dstIp, Prefix srcIp, SubRange dstPort, SubRange srcPort, IpProtocol proto) {
+  public PacketPrefixRegion(
+      Prefix dstIp, Prefix srcIp, SubRange dstPort, SubRange srcPort, IpProtocol proto) {
     this._dstIp = dstIp;
     this._srcIp = srcIp;
     this._dstPort = dstPort;
@@ -258,15 +271,21 @@ public class PacketPrefixRegion {
   }
 
   public PacketPrefixRegion(PacketPrefixRegion other) {
-    this(other._dstIp,other._srcIp, other._dstPort, other._srcPort, other._protocol);
+    this(other._dstIp, other._srcIp, other._dstPort, other._srcPort, other._protocol);
   }
 
   public static List<PacketPrefixRegion> createPrefixSpace(IpAccessListLine line) {
+    if (line == null) {
+      List<PacketPrefixRegion> ret = new ArrayList<>();
+      ret.add(getUniverseSpace());
+      return ret;
+    }
     return line.getMatchCondition().accept(new AclLineVisitor());
   }
 
   public static PacketPrefixRegion getUniverseSpace() {
-    return new PacketPrefixRegion(Prefix.ZERO, Prefix.ZERO, DEFAULT_PORT_RANGE, DEFAULT_PORT_RANGE, IpProtocol.IP);
+    return new PacketPrefixRegion(
+        Prefix.ZERO, Prefix.ZERO, DEFAULT_PORT_RANGE, DEFAULT_PORT_RANGE, IpProtocol.IP);
   }
 
   public boolean contains(PacketPrefixRegion other) {
@@ -315,11 +334,12 @@ public class PacketPrefixRegion {
     }
 
     return Optional.of(
-        new PacketPrefixRegion(smallerDst, smallerSrc, dstPortRange.get(), srcPortRange.get(), proto));
-
+        new PacketPrefixRegion(
+            smallerDst, smallerSrc, dstPortRange.get(), srcPortRange.get(), proto));
   }
 
-  @Override public boolean equals(Object o) {
+  @Override
+  public boolean equals(Object o) {
     if (this == o) {
       return true;
     }
@@ -327,12 +347,15 @@ public class PacketPrefixRegion {
       return false;
     }
     PacketPrefixRegion that = (PacketPrefixRegion) o;
-    return _dstIp.equals(that._dstIp) && _srcIp.equals(that._srcIp)
-        && _dstPort.equals(that._dstPort) && _srcPort.equals(that._srcPort)
+    return _dstIp.equals(that._dstIp)
+        && _srcIp.equals(that._srcIp)
+        && _dstPort.equals(that._dstPort)
+        && _srcPort.equals(that._srcPort)
         && _protocol.equals(that._protocol);
   }
 
-  @Override public int hashCode() {
+  @Override
+  public int hashCode() {
     int ret = 0;
     ret ^= Integer.rotateLeft(_dstIp.hashCode(), 0);
     ret ^= Integer.rotateLeft(_srcIp.hashCode(), 8);
@@ -341,7 +364,8 @@ public class PacketPrefixRegion {
     return ret;
   }
 
-  @Override public String toString() {
+  @Override
+  public String toString() {
     return "<" + ipAddrToStr() + portNumToStr() + protoToStr() + ">";
   }
 
@@ -382,5 +406,4 @@ public class PacketPrefixRegion {
   public IpProtocol getProtocol() {
     return _protocol;
   }
-
 }
