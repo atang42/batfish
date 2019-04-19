@@ -9,8 +9,7 @@ import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.datamodel.questions.Question;
 import org.batfish.question.QuestionPlugin;
-import org.batfish.specifier.NodeSpecifier;
-import org.batfish.symbolic.bdd.BDDTest;
+import org.batfish.symbolic.bdd.BddDiff;
 
 @AutoService(Plugin.class)
 public class BDDTestQuestionPlugin extends QuestionPlugin {
@@ -58,9 +57,9 @@ public class BDDTestQuestionPlugin extends QuestionPlugin {
     @Override public AnswerElement answer() {
       BDDTestQuestion question = (BDDTestQuestion) _question;
       NodesSpecifier regex = question.getNodeRegex();
-      new BDDTest().doTestWithLines(_batfish, regex);
-      //new BDDTest().forallTest();
-      //new BDDTest().checkRoutingPolicy(_batfish, question.getNodeRegex());
+      new BddDiff().findDiffWithLines(_batfish, regex);
+      //new BddDiff().forallTest();
+      //new BddDiff().checkRoutingPolicy(_batfish, question.getNodeRegex());
       return new BDDAnswerElement();
     }
   }

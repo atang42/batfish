@@ -2,16 +2,12 @@ package org.batfish.symbolic.bdd;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 
@@ -26,9 +22,10 @@ public class AclLineDiffToPrefix {
 
   boolean _differencesCalculated;
   Map<PacketPrefixRegion, List<PacketPrefixRegion>> _differences;
+  StringBuilder _output;
 
-  public AclLineDiffToPrefix(IpAccessList acl1, IpAccessList acl2,
-      IpAccessListLine line1, IpAccessListLine line2) {
+  public AclLineDiffToPrefix(
+      IpAccessList acl1, IpAccessList acl2, IpAccessListLine line1, IpAccessListLine line2) {
     _acl1 = acl1;
     _acl2 = acl2;
     _line1 = line1;
@@ -37,17 +34,18 @@ public class AclLineDiffToPrefix {
     _diffLines2 = new HashSet<>();
     _differences = new HashMap<>();
     _differencesCalculated = false;
+    _output = new StringBuilder();
   }
 
   /**
    * Given two ACL lines in corresponding ACLs, prints out the intersection of the lines minus the
    * prefixes in the previous lines
    */
-  public void getDifferenceInPrefixes() {
+  private void calculateDifference() {
     List<PacketPrefixRegion> spaces1 = PacketPrefixRegion.createPrefixSpace(_line1);
     List<PacketPrefixRegion> spaces2 = PacketPrefixRegion.createPrefixSpace(_line2);
 
-    System.out.println("DIFFERENCES");
+    _output.append("DIFFERENCES").append("\n");
     List<PacketPrefixRegion> resultSpaces = new ArrayList<>();
 
     for (PacketPrefixRegion ps1 : spaces1) {
@@ -94,7 +92,6 @@ public class AclLineDiffToPrefix {
               diffs.add(intersection);
             }
           }
-
         }
       }
       for (IpAccessListLine line : _acl2.getLines()) {
@@ -129,7 +126,6 @@ public class AclLineDiffToPrefix {
             if (!skip) {
               diffs.add(intersection);
             }
-
           }
         }
       }
@@ -140,41 +136,58 @@ public class AclLineDiffToPrefix {
           _differences.get(resultSpace).add(sp);
         }
 
-        System.out.println(resultSpace);
+        _output.append(resultSpace).append("\n");
+        for (PacketPrefixRegion sp : diffs) {
+          _output.append("\t- ").append(sp).append("\n");
+        }
         _differencesCalculated = true;
       }
     }
   }
 
+  public void printDifferenceInPrefix() {
+    if (!_differencesCalculated) {
+      calculateDifference();
+    }
+    System.out.print(_output);
+  }
+
   public Map<PacketPrefixRegion, List<PacketPrefixRegion>> getDifferences() {
     if (!_differencesCalculated) {
-      getDifferenceInPrefixes();
+      calculateDifference();
     }
     return _differences;
   }
 
   public Set<IpAccessListLine> getAcl1LineDifferences() {
     if (!_differencesCalculated) {
-      getDifferenceInPrefixes();
+      calculateDifference();
     }
     return _diffLines1;
   }
 
   public Set<IpAccessListLine> getAcl2LineDifferences() {
     if (!_differencesCalculated) {
-      getDifferenceInPrefixes();
+      calculateDifference();
     }
     return _diffLines2;
   }
 
   public AclDiffReport getAclDiffReport(String r1, String r2) {
     if (!_differencesCalculated) {
-      getDifferenceInPrefixes();
+      calculateDifference();
     }
-    AclDiffReport report = new AclDiffReport(_differences.keySet(),
-        r1, _acl1, Arrays.asList(_line1), _diffLines1,
-        r2, _acl2, Arrays.asList(_line2), _diffLines2);
+    AclDiffReport report =
+        new AclDiffReport(
+            _differences.keySet(),
+            r1,
+            _acl1,
+            Arrays.asList(_line1),
+            _diffLines1,
+            r2,
+            _acl2,
+            Arrays.asList(_line2),
+            _diffLines2);
     return report;
   }
-
 }
