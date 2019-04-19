@@ -553,7 +553,7 @@ class TransferBDD {
         BDDInteger med = ite(updateMed, curP.getData().getMed(), newValue);
         BDDInteger met = ite(updateMet, curP.getData().getMetric(), newValue);
         curP.getData().setMetric(met);
-        curP.getData().setMetric(med);
+        curP.getData().setMed(med);
 
       } else if (stmt instanceof SetOspfMetricType) {
         curP.debug("SetOspfMetricType");
@@ -566,7 +566,7 @@ class TransferBDD {
           newValue.setValue(OspfType.E1);
         } else {
           curP.indent().debug("Value: E2");
-          newValue.setValue(OspfType.E1);
+          newValue.setValue(OspfType.E2);
         }
         newValue = ite(result.getReturnAssignedValue(), curP.getData().getOspfMetric(), newValue);
         curP.getData().setOspfMetric(newValue);

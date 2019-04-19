@@ -346,14 +346,14 @@ public class PacketPrefixRegion {
   }
 
   private String ipAddrToStr() {
-    return "dstIp=" + _dstIp + ", srcIp=" + _srcIp;
+    return "srcIp=" + _srcIp + ", dstIp=" + _dstIp;
   }
 
   private String portNumToStr() {
     if (_dstPort.equals(DEFAULT_PORT_RANGE) && _srcPort.equals(DEFAULT_PORT_RANGE)) {
       return "";
     }
-    return ", dstPort=" + _dstPort + ", srcPort=" + _srcPort;
+    return ", srcPort=" + _srcPort + ", dstPort=" + _dstPort;
   }
 
   private String protoToStr() {
