@@ -129,7 +129,7 @@ public class AclDiffReport {
         && first._report2.permits() == second._report2.permits();
   }
 
-  public void print(Batfish batfish) {
+  public void print(Batfish batfish, boolean printMore) {
 
     System.out.println();
     AclToConfigLines aclToConfig = new AclToConfigLines(batfish);
@@ -137,11 +137,11 @@ public class AclDiffReport {
     _regions.forEach((r) -> System.out.println("  " + r));
     System.out.println(_report1._router);
     aclToConfig.printRelevantLines(
-        _report1._router, _report1._acl, _regions, _report1._lastDiffs, _report1._implicitDeny);
+        _report1._router, _report1._acl, _regions, _report1._lastDiffs, _report1._implicitDeny, printMore);
     System.out.println();
     System.out.println(_report2._router);
     aclToConfig.printRelevantLines(
-        _report2._router, _report2._acl, _regions, _report2._lastDiffs, _report2._implicitDeny);
+        _report2._router, _report2._acl, _regions, _report2._lastDiffs, _report2._implicitDeny, printMore);
     System.out.println();
   }
 }
