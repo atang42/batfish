@@ -126,7 +126,8 @@ public class AclToConfigLines {
       IpAccessList acl,
       Collection<PacketPrefixRegion> regions,
       @Nullable List<IpAccessListLine> lastLines,
-      boolean hasImplicitDeny) {
+      boolean hasImplicitDeny,
+      boolean printMore) {
     SortedMap<Integer, String> lines = getAclLineText(router, acl);
     ConfigurationFormat format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
     if (format.getVendorString().equals("cisco")) {
@@ -142,7 +143,7 @@ public class AclToConfigLines {
             CiscoConfiguration vendorConfiguration =
                 (CiscoConfiguration) extractor.getVendorConfiguration();
       */
-      printRelevantLinesCisco(lines, acl, regions, lastLines, hasImplicitDeny);
+      printRelevantLinesCisco(lines, acl, regions, lastLines, hasImplicitDeny, printMore);
     } else if (format.getVendorString().equals("juniper")) {
       /*    JUNIPER PARSE TEST
             Settings settings = new Settings();
@@ -168,7 +169,7 @@ public class AclToConfigLines {
             VendorConfiguration vendorConfiguration = extractor.getVendorConfiguration();
       */
       printRelevantLinesJuniper(
-          lines.firstKey(), lines.lastKey(), router, acl, regions, lastLines, hasImplicitDeny);
+          lines.firstKey(), lines.lastKey(), router, acl, regions, lastLines, hasImplicitDeny, printMore);
     } else {
       System.err.println("Does not support the format: " + format);
     }
@@ -179,7 +180,8 @@ public class AclToConfigLines {
       IpAccessList acl,
       Collection<PacketPrefixRegion> regions,
       @Nullable List<IpAccessListLine> lastLines,
-      boolean hasImplicitDeny) {
+      boolean hasImplicitDeny,
+      boolean printMore) {
 
     List<IpAccessListLine> relevantAclLines = new ArrayList<>();
     int prevPrint = 0;
@@ -208,6 +210,7 @@ public class AclToConfigLines {
             .map(IpAccessListLine::getName)
             .map(String::trim)
             .collect(Collectors.toSet());
+    int lastLinesReached = 0;
     for (Entry<Integer, String> ent : lines.entrySet()) {
       int lineNum = ent.getKey();
       String text = ent.getValue();
@@ -225,6 +228,7 @@ public class AclToConfigLines {
             prevPrint = lineNum;
             System.out.format("*%-5d %s\n", lineNum, text);
             done = true;
+            lastLinesReached++;
           }
         }
       }
@@ -239,6 +243,9 @@ public class AclToConfigLines {
           }
         }
       }
+      if (!printMore && lastLinesReached == lastLines.size()) {
+        break;
+      }
     }
     if (hasImplicitDeny) {
       System.out.println("*Implicit deny");
@@ -252,7 +259,8 @@ public class AclToConfigLines {
       IpAccessList acl,
       Collection<PacketPrefixRegion> regions,
       @Nullable List<IpAccessListLine> lastAclLines,
-      boolean hasImplicitDeny) {
+      boolean hasImplicitDeny,
+      boolean printMore) {
     int prevPrint = 0;
     List<IpAccessListLine> relevantAclLines = new ArrayList<>();
     for (IpAccessListLine aclLine : acl.getLines()) {
@@ -287,6 +295,7 @@ public class AclToConfigLines {
     int currLineNum = 1;
     boolean doPrint = false;
     int currDepth = 0;
+    int lastLinesReached = 0;
     try {
       currLine = reader.readLine();
       while (currLine != null && currLineNum <= lastLine) {
@@ -310,6 +319,7 @@ public class AclToConfigLines {
               if (currLine.contains(lastAclLine)) {
                 found = true;
                 System.out.format("*%-5d %s\n", currLineNum, currLine);
+                lastLinesReached++;
                 break;
               }
             }
@@ -324,6 +334,9 @@ public class AclToConfigLines {
             }
             if (currDepth <= 0) {
               doPrint = false;
+              if (!printMore && lastLinesReached == lastAclLines.size()) {
+                break;
+              }
             }
           }
         }

@@ -95,7 +95,7 @@ public class BddDiff {
   /*
   Check differences between ACLs with same name on two routers
    */
-  public void findDiffWithLines(IBatfish batfish, NodesSpecifier nodesSpecifier) {
+  public void findDiffWithLines(IBatfish batfish, NodesSpecifier nodesSpecifier, String aclRegex, boolean printMore) {
     Set<String> routerNames = nodesSpecifier.getMatchingNodes(batfish);
     SortedMap<String, Configuration> configs = batfish.loadConfigurations();
     Map<String, Map<String, IpAccessList>> aclNameToAcls = new TreeMap<>();
@@ -104,6 +104,9 @@ public class BddDiff {
     for (String rr : routerNames) {
       Configuration cc = configs.get(rr);
       for (Entry<String, IpAccessList> entry : cc.getIpAccessLists().entrySet()) {
+        if (!entry.getKey().matches(aclRegex)) {
+          continue;
+        }
         IpAccessList acl = entry.getValue();
         Map<String, IpAccessList> routerToAcl =
             aclNameToAcls.getOrDefault(entry.getKey(), new HashMap<>());
@@ -116,101 +119,105 @@ public class BddDiff {
     for (Entry<String, Map<String, IpAccessList>> entry : aclNameToAcls.entrySet()) {
       Map<String, IpAccessList> accessLists = entry.getValue();
       BDDPacketWithLines packet = new BDDPacketWithLines();
-      if (accessLists.size() == 2) {
-        List<String> routers = new ArrayList<>(accessLists.keySet());
-        BDDAcl acl1 =
-            BDDAcl.createWithLines(packet, routers.get(0), accessLists.get(routers.get(0)));
-        BDDAcl acl2 =
-            BDDAcl.createWithLines(packet, routers.get(1), accessLists.get(routers.get(1)));
-        BDD first = acl1.getBdd();
-        BDD second = acl2.getBdd();
+      try {
+        if (accessLists.size() == 2) {
+          List<String> routers = new ArrayList<>(accessLists.keySet());
+          BDDAcl acl1 =
+              BDDAcl.createWithLines(packet, routers.get(0), accessLists.get(routers.get(0)));
+          BDDAcl acl2 =
+              BDDAcl.createWithLines(packet, routers.get(1), accessLists.get(routers.get(1)));
+          BDD first = acl1.getBdd();
+          BDD second = acl2.getBdd();
 
-        BDD acceptVar = packet.getAccept();
+          BDD acceptVar = packet.getAccept();
 
-        BDD acceptFirst = first.restrict(acceptVar);
-        BDD acceptSecond = second.restrict(acceptVar);
-        BDD rejectFirst = first.restrict(acceptVar.not());
-        BDD rejectSecond = second.restrict(acceptVar.not());
-        BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
+          BDD acceptFirst = first.restrict(acceptVar);
+          BDD acceptSecond = second.restrict(acceptVar);
+          BDD rejectFirst = first.restrict(acceptVar.not());
+          BDD rejectSecond = second.restrict(acceptVar.not());
+          BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
 
-        if (notEquivalent.isZero()) {
-          // System.out.println(entry.getKey() + " is consistent");
-        } else {
-          System.out.println("**************************");
-          System.out.println(entry.getKey());
-          BDD linesNotEquivalent = notEquivalent.exist(getPacketHeaderFields(packet));
+          if (notEquivalent.isZero()) {
+            // System.out.println(entry.getKey() + " is consistent");
+          } else {
+            System.out.println("**************************");
+            System.out.println(entry.getKey());
+            BDD linesNotEquivalent = notEquivalent.exist(getPacketHeaderFields(packet));
 
-          List<AclDiffReport> reportList = new ArrayList<>();
+            List<AclDiffReport> reportList = new ArrayList<>();
 
-          while (!linesNotEquivalent.isZero()) {
-            BDD lineSat = linesNotEquivalent.satOne();
-            BDD counterexample = notEquivalent.and(lineSat).satOne();
-            /*
-            long dstIp = packet.getDstIp().getValueSatisfying(counterexample).get();
-            long srcIp = packet.getSrcIp().getValueSatisfying(counterexample).get();
-            long dstPort = packet.getDstPort().getValueSatisfying(counterexample).get();
-            long srcPort = packet.getSrcPort().getValueSatisfying(counterexample).get();
-            System.out.println("EXAMPLE:");
-            System.out.println("\tDST-IP:    " + Ip.create(dstIp));
-            System.out.println("\tSRC-IP:    " + Ip.create(srcIp));
-            System.out.println("\tDST-PORT:  " + dstPort);
-            System.out.println("\tSRC-PORT:  " + srcPort);
-            */
-            int i = 0;
-            IpAccessListLine[] lineDiff = new IpAccessListLine[2];
-            List<IpAccessList> aclList = new ArrayList<>(accessLists.values());
-            for (IpAccessList acl : accessLists.values()) {
-              boolean found = false;
-              for (IpAccessListLine line : acl.getLines()) {
-                if (!counterexample.and(packet.getAclLine(routers.get(i), acl, line)).isZero()) {
+            while (!linesNotEquivalent.isZero()) {
+              BDD lineSat = linesNotEquivalent.satOne();
+              BDD counterexample = notEquivalent.and(lineSat).satOne();
+              /*
+              long dstIp = packet.getDstIp().getValueSatisfying(counterexample).get();
+              long srcIp = packet.getSrcIp().getValueSatisfying(counterexample).get();
+              long dstPort = packet.getDstPort().getValueSatisfying(counterexample).get();
+              long srcPort = packet.getSrcPort().getValueSatisfying(counterexample).get();
+              System.out.println("EXAMPLE:");
+              System.out.println("\tDST-IP:    " + Ip.create(dstIp));
+              System.out.println("\tSRC-IP:    " + Ip.create(srcIp));
+              System.out.println("\tDST-PORT:  " + dstPort);
+              System.out.println("\tSRC-PORT:  " + srcPort);
+              */
+              int i = 0;
+              IpAccessListLine[] lineDiff = new IpAccessListLine[2];
+              List<IpAccessList> aclList = new ArrayList<>(accessLists.values());
+              for (IpAccessList acl : accessLists.values()) {
+                boolean found = false;
+                for (IpAccessListLine line : acl.getLines()) {
+                  if (!counterexample.and(packet.getAclLine(routers.get(i), acl, line)).isZero()) {
+                    System.out.print(routers.get(i) + " ");
+                    System.out.println(acl.getName() + ":");
+                    System.out.println("  " + line.getName());
+                    lineDiff[i] = line;
+                    found = true;
+                  }
+                }
+                if (!found) {
                   System.out.print(routers.get(i) + " ");
-                  System.out.println(acl.getName() + ":");
-                  System.out.println("  " + line.getName());
-                  lineDiff[i] = line;
-                  found = true;
+                  System.out.println(acl.getName());
+                  System.out.println("  Implicit deny");
+                }
+                i++;
+              }
+              AclLineDiffToPrefix diffToPrefix =
+                  new AclLineDiffToPrefix(aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
+
+              diffToPrefix.printDifferenceInPrefix();
+              AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
+              report.print((Batfish) batfish, printMore);
+              /*boolean merged = false;
+              for (AclDiffReport r : reportList) {
+                System.out.println(AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()));
+                if (AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()) <= 1
+                    && AclDiffReport.combinedSameAction(r, report)) {
+                  merged = true;
+                  r.combineWith(report);
+                  break;
                 }
               }
-              if (!found) {
-                System.out.print(routers.get(i) + " ");
-                System.out.println(acl.getName());
-                System.out.println("  Implicit deny");
+              if (!merged) {
+                reportList.add(report);
               }
-              i++;
+              */
+              linesNotEquivalent.andWith(counterexample.exist(getPacketHeaderFields(packet)).not());
             }
-            AclLineDiffToPrefix diffToPrefix =
-                new AclLineDiffToPrefix(aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
-
-            diffToPrefix.printDifferenceInPrefix();
-            AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
-            report.print((Batfish) batfish);
-            /*boolean merged = false;
-            for (AclDiffReport r : reportList) {
-              System.out.println(AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()));
-              if (AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()) <= 1
-                  && AclDiffReport.combinedSameAction(r, report)) {
-                merged = true;
-                r.combineWith(report);
-                break;
-              }
-            }
-            if (!merged) {
-              reportList.add(report);
-            }
-            */
-            linesNotEquivalent.andWith(counterexample.exist(getPacketHeaderFields(packet)).not());
+            // for (AclDiffReport r : reportList) {
+            //  r.print((Batfish) batfish);
+            // }
+            System.out.println("**************************");
           }
-          // for (AclDiffReport r : reportList) {
-          //  r.print((Batfish) batfish);
-          // }
-          System.out.println("**************************");
+        } else {
+          /*
+          System.out.print(entry.getKey() + " is present in ");
+          accessLists.keySet()
+              .forEach(x -> System.out.print(x + " " ));
+          System.out.println();
+          */
         }
-      } else {
-        /*
-        System.out.print(entry.getKey() + " is present in ");
-        accessLists.keySet()
-            .forEach(x -> System.out.print(x + " " ));
-        System.out.println();
-        */
+      } catch (Exception e) {
+        e.printStackTrace();
       }
     }
   }
