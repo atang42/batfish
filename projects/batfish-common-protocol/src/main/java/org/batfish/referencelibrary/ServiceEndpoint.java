@@ -3,11 +3,16 @@ package org.batfish.referencelibrary;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.io.Serializable;
 import java.util.List;
+import java.util.Objects;
 import javax.annotation.Nonnull;
+import org.batfish.datamodel.Names;
+import org.batfish.datamodel.Names.Type;
 
-public class ServiceEndpoint implements Comparable<ServiceEndpoint> {
+public class ServiceEndpoint implements Comparable<ServiceEndpoint>, Serializable {
 
+  private static final long serialVersionUID = 1L;
   private static final String PROP_ADDRESS = "address";
   private static final String PROP_NAME = "name";
   private static final String PROP_SERVICE = "service";
@@ -23,7 +28,7 @@ public class ServiceEndpoint implements Comparable<ServiceEndpoint> {
     checkArgument(address != null, "Service endpoint address cannot be null");
     checkArgument(name != null, "Service endpoint name cannot be null");
     checkArgument(service != null, "Service endpoint service cannot be null");
-    ReferenceLibrary.checkValidName(name, "service endpoint");
+    Names.checkName(name, "service endpoint", Type.REFERENCE_OBJECT);
 
     _address = address;
     _name = name;
@@ -48,6 +53,16 @@ public class ServiceEndpoint implements Comparable<ServiceEndpoint> {
     return _name.compareTo(o._name);
   }
 
+  @Override
+  public boolean equals(Object o) {
+    if (!(o instanceof ServiceEndpoint)) {
+      return false;
+    }
+    return Objects.equals(_name, ((ServiceEndpoint) o)._name)
+        && Objects.equals(_address, ((ServiceEndpoint) o)._address)
+        && Objects.equals(_service, ((ServiceEndpoint) o)._service);
+  }
+
   @JsonProperty(PROP_ADDRESS)
   public String getAddress() {
     return _address;
@@ -61,5 +76,10 @@ public class ServiceEndpoint implements Comparable<ServiceEndpoint> {
   @JsonProperty(PROP_SERVICE)
   public String getService() {
     return _service;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(_name, _address, _service);
   }
 }

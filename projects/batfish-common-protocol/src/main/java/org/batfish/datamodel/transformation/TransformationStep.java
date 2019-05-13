@@ -20,8 +20,6 @@ import org.batfish.datamodel.flow.TransformationStep.TransformationType;
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, property = "class")
 @ParametersAreNonnullByDefault
 public interface TransformationStep {
-  /** Which {@link TransformationType} this step is (partially) encoding. */
-  TransformationType getType();
 
   <T> T accept(TransformationStepVisitor<T> visitor);
 
@@ -39,5 +37,13 @@ public interface TransformationStep {
 
   static ShiftIpAddressIntoSubnet shiftSourceIp(Prefix subnet) {
     return new ShiftIpAddressIntoSubnet(SOURCE_NAT, SOURCE, subnet);
+  }
+
+  static AssignPortFromPool assignSourcePort(int poolStart, int poolEnd) {
+    return new AssignPortFromPool(SOURCE_NAT, PortField.SOURCE, poolStart, poolEnd);
+  }
+
+  static AssignPortFromPool assignDestinationPort(int poolStart, int poolEnd) {
+    return new AssignPortFromPool(DEST_NAT, PortField.DESTINATION, poolStart, poolEnd);
   }
 }

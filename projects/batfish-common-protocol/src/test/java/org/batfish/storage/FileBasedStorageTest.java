@@ -3,12 +3,14 @@ package org.batfish.storage;
 import static org.batfish.common.Version.INCOMPATIBLE_VERSION;
 import static org.batfish.storage.FileBasedStorage.mkdirs;
 import static org.batfish.storage.FileBasedStorage.objectKeyToRelativePath;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.io.FileMatchers.anExistingDirectory;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 
@@ -28,6 +30,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.io.FileUtils;
@@ -36,7 +39,9 @@ import org.batfish.common.BatfishException;
 import org.batfish.common.BatfishLogger;
 import org.batfish.common.BfConsts;
 import org.batfish.common.CompletionMetadata;
+import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.Version;
+import org.batfish.common.topology.Layer2Topology;
 import org.batfish.common.util.BatfishObjectMapper;
 import org.batfish.common.util.CommonUtil;
 import org.batfish.common.util.UnzipUtility;
@@ -426,6 +431,39 @@ public final class FileBasedStorageTest {
   }
 
   @Test
+  public void testGetSnapshotExtendedObjectsMetadataNonExistentInput() throws IOException {
+    NetworkId network = new NetworkId("network");
+    SnapshotId snapshot = new SnapshotId("snapshot");
+    _thrown.expect(FileNotFoundException.class);
+    _storage.getSnapshotExtendedObjectsMetadata(network, snapshot);
+  }
+
+  @Test
+  public void testGetSnapshotExtendedObjectsMetadata() throws IOException {
+    NetworkId network = new NetworkId("network");
+    SnapshotId snapshot = new SnapshotId("snapshot");
+
+    String key1 = "foo/bar";
+    String key2 = "bat/fish";
+    String content1 = "some content";
+    String content2 = "some other content";
+
+    InputStream inputStream1 = new ByteArrayInputStream(content1.getBytes());
+    InputStream inputStream2 = new ByteArrayInputStream(content2.getBytes());
+
+    _storage.storeSnapshotObject(inputStream1, network, snapshot, key1);
+    _storage.storeSnapshotObject(inputStream2, network, snapshot, key2);
+
+    List<StoredObjectMetadata> keys =
+        _storage.getSnapshotExtendedObjectsMetadata(network, snapshot);
+    assertThat(
+        keys,
+        containsInAnyOrder(
+            new StoredObjectMetadata(key1, content1.getBytes().length),
+            new StoredObjectMetadata(key2, content2.getBytes().length)));
+  }
+
+  @Test
   public void testCompletionMetadataRoundtrip() throws IOException {
     NetworkId networkId = new NetworkId("network");
     SnapshotId snapshotId = new SnapshotId("snapshot");
@@ -437,6 +475,7 @@ public final class FileBasedStorageTest {
             ImmutableSet.of("1.1.1.1"),
             ImmutableSet.of("node"),
             ImmutableSet.of("1.1.1.1/30"),
+            ImmutableSet.of("routing1"),
             ImmutableSet.of("structure1"),
             ImmutableSet.of("vrf1"),
             ImmutableSet.of("zone1"));
@@ -455,5 +494,23 @@ public final class FileBasedStorageTest {
     // fields empty
     assertThat(
         _storage.loadCompletionMetadata(networkId, snapshotId), equalTo(CompletionMetadata.EMPTY));
+  }
+
+  @Test
+  public void testStoreLayer2TopologyMissing() throws IOException {
+    NetworkSnapshot networkSnapshot =
+        new NetworkSnapshot(new NetworkId("network"), new SnapshotId("snapshot"));
+    _storage.storeLayer2Topology(Optional.empty(), networkSnapshot);
+
+    assertEquals(_storage.loadLayer2Topology(networkSnapshot), Optional.empty());
+  }
+
+  @Test
+  public void testStoreLayer2TopologyPresent() throws IOException {
+    NetworkSnapshot networkSnapshot =
+        new NetworkSnapshot(new NetworkId("network"), new SnapshotId("snapshot"));
+    _storage.storeLayer2Topology(Optional.of(Layer2Topology.EMPTY), networkSnapshot);
+
+    assertEquals(_storage.loadLayer2Topology(networkSnapshot), Optional.of(Layer2Topology.EMPTY));
   }
 }

@@ -5,7 +5,9 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Comparators;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Ordering;
 import com.google.common.collect.Streams;
 import java.util.Arrays;
 import java.util.List;
@@ -16,7 +18,6 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import org.batfish.common.util.CommonUtil;
 import org.batfish.datamodel.visitors.GenericIpSpaceVisitor;
 
 /**
@@ -38,12 +39,27 @@ public class AclIpSpace extends IpSpace {
       _lines = ImmutableList.builder();
     }
 
-    public AclIpSpace build() {
-      return new AclIpSpace(_lines.build());
+    public IpSpace build() {
+      List<AclIpSpaceLine> lines = _lines.build();
+      while (!lines.isEmpty() && lines.get(lines.size() - 1).getAction() == LineAction.DENY) {
+        lines = lines.subList(0, lines.size() - 1);
+      }
+      if (lines.isEmpty()) {
+        return EmptyIpSpace.INSTANCE;
+      } else if (lines.size() == 1) {
+        AclIpSpaceLine line = lines.get(0);
+        if (line.getAction() == LineAction.PERMIT) {
+          return line.getIpSpace();
+        }
+        return EmptyIpSpace.INSTANCE;
+      }
+      return new AclIpSpace(lines);
     }
 
     public Builder then(AclIpSpaceLine line) {
       if (_full) {
+        return this;
+      } else if (line.getIpSpace() instanceof EmptyIpSpace) {
         return this;
       }
       _full = line.getIpSpace() instanceof UniverseIpSpace;
@@ -88,26 +104,21 @@ public class AclIpSpace extends IpSpace {
     }
   }
 
-  public static final AclIpSpace DENY_ALL = AclIpSpace.builder().build();
-
-  public static final AclIpSpace PERMIT_ALL = AclIpSpace.of(AclIpSpaceLine.PERMIT_ALL);
-
   private static final String PROP_LINES = "lines";
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   public static Builder builder() {
     return new Builder();
   }
 
-  public static AclIpSpace of(Iterable<AclIpSpaceLine> lines) {
+  public static IpSpace of(Iterable<AclIpSpaceLine> lines) {
     Builder builder = builder();
     lines.forEach(builder::then);
     return builder.build();
   }
 
-  public static AclIpSpace of(AclIpSpaceLine... lines) {
+  public static IpSpace of(AclIpSpaceLine... lines) {
     return of(Arrays.asList(lines));
   }
 
@@ -206,6 +217,26 @@ public class AclIpSpace extends IpSpace {
   }
 
   /**
+   * When an {@link AclIpSpace} is a pure union (list of only permit lines), flattens it into the
+   * permitted spaces.
+   *
+   * <p>This function makes {@code union(union(a, b), c)} equivalent to {@code union(a, b, c)}.
+   */
+  private static Stream<IpSpace> flattenAclIpSpacesForUnion(IpSpace space) {
+    if (!(space instanceof AclIpSpace)) {
+      return Stream.of(space);
+    }
+    AclIpSpace aclSpace = (AclIpSpace) space;
+    List<AclIpSpaceLine> lines = aclSpace.getLines();
+    if (lines.stream().allMatch(l -> l.getAction() == LineAction.PERMIT)) {
+      // This is just a big union, flatten it into the list of spaces it unions.
+      return lines.stream().map(AclIpSpaceLine::getIpSpace);
+    }
+    // Not a pure union, so don't flatten.
+    return Stream.of(aclSpace);
+  }
+
+  /**
    * Set-theoretic union of multiple {@link IpSpace IP spaces}.<br>
    * {@code null} ipSpaces are ignored. If all arguments are {@code null}, returns {@code null}.
    */
@@ -213,6 +244,7 @@ public class AclIpSpace extends IpSpace {
     IpSpace[] nonNullSpaces =
         StreamSupport.stream(ipSpaces.spliterator(), false)
             .filter(Objects::nonNull)
+            .flatMap(AclIpSpace::flattenAclIpSpacesForUnion)
             .toArray(IpSpace[]::new);
     if (nonNullSpaces.length == 0) {
       // no constraint
@@ -257,7 +289,8 @@ public class AclIpSpace extends IpSpace {
 
   @Override
   protected int compareSameClass(IpSpace o) {
-    return CommonUtil.compareIterable(_lines, ((AclIpSpace) o)._lines);
+    return Comparators.lexicographical(Ordering.<AclIpSpaceLine>natural())
+        .compare(_lines, ((AclIpSpace) o)._lines);
   }
 
   @Override
@@ -277,11 +310,18 @@ public class AclIpSpace extends IpSpace {
 
   @Override
   public int hashCode() {
-    return _lines.hashCode();
+    int hash = _hashCode;
+    if (hash == 0) {
+      hash = _lines.hashCode();
+      _hashCode = hash;
+    }
+    return hash;
   }
 
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(getClass()).add(PROP_LINES, _lines).toString();
   }
+
+  private int _hashCode;
 }

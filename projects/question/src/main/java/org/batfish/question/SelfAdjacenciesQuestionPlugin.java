@@ -30,15 +30,11 @@ import org.batfish.datamodel.questions.Question;
 public class SelfAdjacenciesQuestionPlugin extends QuestionPlugin {
 
   public static class SelfAdjacenciesAnswerElement extends AnswerElement {
-
     private static final String PROP_SELF_ADJACENCIES = "selfAdjacencies";
 
     public static class InterfaceIpPair extends Pair<String, Ip> {
-
       private static final String PROP_INTERFACE_NAME = "interfaceName";
-
       private static final String PROP_IP = "ip";
-      /** */
       private static final long serialVersionUID = 1L;
 
       @JsonCreator
@@ -132,20 +128,12 @@ public class SelfAdjacenciesQuestionPlugin extends QuestionPlugin {
     }
   }
 
-  // <question_page_comment>
-  /*
+  /**
    * Outputs cases where two interfaces on the same node are in the same subnet.
    *
    * <p>This occurrence likely indicates an error in IP address assignment.
-   *
-   * @type SelfAdjacencies onefile
-   * @param nodeRegex Regular expression for names of nodes to include. Default value is '.*' (all
-   *     nodes).
-   * @example bf_answer("SelfAdjacencies", nodeRegex="as1.*") Analyze nodes whose names begin with
-   *     "as1".
    */
   public static class SelfAdjacenciesQuestion extends Question {
-
     private static final String PROP_NODE_REGEX = "nodeRegex";
 
     private NodesSpecifier _nodeRegex;

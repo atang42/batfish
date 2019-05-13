@@ -2,36 +2,42 @@ package org.batfish.representation.juniper;
 
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDst;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrcInterface;
-import static org.batfish.datamodel.flow.TransformationStep.TransformationType.DEST_NAT;
 import static org.batfish.datamodel.flow.TransformationStep.TransformationType.SOURCE_NAT;
-import static org.batfish.datamodel.transformation.IpField.DESTINATION;
 import static org.batfish.datamodel.transformation.IpField.SOURCE;
-import static org.batfish.datamodel.transformation.Noop.NOOP_DEST_NAT;
+import static org.batfish.datamodel.transformation.Noop.NOOP_SOURCE_NAT;
 import static org.batfish.datamodel.transformation.Transformation.when;
-import static org.batfish.datamodel.transformation.TransformationStep.assignDestinationIp;
+import static org.batfish.datamodel.transformation.TransformationStep.assignSourceIp;
+import static org.batfish.datamodel.transformation.TransformationStep.assignSourcePort;
 import static org.batfish.representation.juniper.NatPacketLocation.interfaceLocation;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import javax.annotation.Nullable;
+import org.batfish.common.Warnings;
 import org.batfish.datamodel.Flow;
 import org.batfish.datamodel.FlowDiff;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.acl.AclLineMatchExpr;
 import org.batfish.datamodel.acl.MatchSrcInterface;
 import org.batfish.datamodel.flow.StepAction;
 import org.batfish.datamodel.flow.TransformationStep;
 import org.batfish.datamodel.flow.TransformationStep.TransformationStepDetail;
-import org.batfish.datamodel.transformation.IpField;
 import org.batfish.datamodel.transformation.Noop;
+import org.batfish.datamodel.transformation.PortField;
 import org.batfish.datamodel.transformation.Transformation;
 import org.batfish.datamodel.transformation.TransformationEvaluator;
 import org.batfish.datamodel.transformation.TransformationEvaluator.TransformationResult;
+import org.batfish.representation.juniper.Nat.Type;
 import org.junit.Test;
 
 /** Tests for {@link NatRuleSet}. */
@@ -51,6 +57,38 @@ public class NatRuleSetTest {
       default:
         return;
     }
+  }
+
+  private static Optional<Transformation> toOutgoingTransformation(
+      NatRuleSet ruleSet,
+      Nat nat,
+      Ip interfaceIp,
+      Map<NatPacketLocation, AclLineMatchExpr> matchFromLocationExprs,
+      @Nullable Transformation andThen,
+      @Nullable Transformation orElse) {
+    Warnings warnings = new Warnings(true, true, true);
+    Optional<Transformation> transformation =
+        ruleSet.toOutgoingTransformation(
+            nat, ImmutableMap.of(), interfaceIp, matchFromLocationExprs, andThen, orElse, warnings);
+    assertTrue(warnings.getPedanticWarnings().isEmpty());
+    assertTrue(warnings.getRedFlagWarnings().isEmpty());
+    assertTrue(warnings.getUnimplementedWarnings().isEmpty());
+    return transformation;
+  }
+
+  private static Optional<Transformation> toIncomingTransformation(
+      NatRuleSet ruleSet,
+      Nat nat,
+      Ip interfaceIp,
+      @Nullable Transformation andThen,
+      @Nullable Transformation orElse) {
+    Warnings warnings = new Warnings(true, true, true);
+    Optional<Transformation> transformation =
+        ruleSet.toIncomingTransformation(nat, null, interfaceIp, andThen, orElse, warnings);
+    assertTrue(warnings.getPedanticWarnings().isEmpty());
+    assertTrue(warnings.getRedFlagWarnings().isEmpty());
+    assertTrue(warnings.getUnimplementedWarnings().isEmpty());
+    return transformation;
   }
 
   @Test
@@ -110,24 +148,27 @@ public class NatRuleSetTest {
     Transformation rulesTransformation =
         // first apply natRule1
         when(matchDst(prefix1))
-            .apply(NOOP_DEST_NAT)
+            .apply(NOOP_SOURCE_NAT)
             .setAndThen(andThen)
             .setOrElse(
                 // only apply natRule2 if natRule1 doesn't match
                 when(matchDst(prefix2))
-                    .apply(assignDestinationIp(poolStart, poolEnd))
+                    .apply(
+                        assignSourceIp(poolStart, poolEnd),
+                        assignSourcePort(Nat.DEFAULT_FROM_PORT, Nat.DEFAULT_TO_PORT))
                     .setAndThen(andThen)
                     .setOrElse(orElse)
                     .build())
             .build();
 
+    Nat snat = new Nat(Type.SOURCE);
+    snat.getPools().put("POOL", pool);
+
     Ip interfaceIp = Ip.ZERO;
     assertThat(
-        ruleSet
-            .toOutgoingTransformation(
-                DEST_NAT,
-                DESTINATION,
-                ImmutableMap.of("POOL", pool),
+        toOutgoingTransformation(
+                ruleSet,
+                snat,
                 interfaceIp,
                 ImmutableMap.of(interfaceLocation(fromIface), matchFromIface),
                 andThen,
@@ -138,10 +179,7 @@ public class NatRuleSetTest {
             when(matchFromIface).setAndThen(rulesTransformation).setOrElse(orElse).build()));
 
     assertThat(
-        ruleSet
-            .toIncomingTransformation(
-                DEST_NAT, DESTINATION, ImmutableMap.of("POOL", pool), interfaceIp, andThen, orElse)
-            .get(),
+        toIncomingTransformation(ruleSet, snat, interfaceIp, andThen, orElse).get(),
         equalTo(rulesTransformation));
   }
 
@@ -171,20 +209,27 @@ public class NatRuleSetTest {
     pool.setFromAddress(poolStart);
     pool.setToAddress(poolEnd);
 
+    Nat snat = new Nat(Type.SOURCE);
+    snat.getPools().put("POOL", pool);
+
     Ip interfaceIp = Ip.parse("9.9.9.9");
     Transformation transformation =
-        ruleSet
-            .toOutgoingTransformation(
-                SOURCE_NAT,
-                IpField.SOURCE,
-                ImmutableMap.of("POOL", pool),
+        toOutgoingTransformation(
+                ruleSet,
+                snat,
                 interfaceIp,
                 ImmutableMap.of(fromLocation, matchSrcInterface(fromIface)),
                 null,
                 null)
             .get();
 
-    Flow.Builder fb = Flow.builder().setIngressNode("ingressNode").setSrcIp(Ip.ZERO).setTag("tag");
+    Flow.Builder fb =
+        Flow.builder()
+            .setIngressNode("ingressNode")
+            .setSrcIp(Ip.ZERO)
+            .setSrcPort(0)
+            .setDstPort(0)
+            .setTag("tag");
 
     // doesn't match rule set
     TransformationResult result =
@@ -235,7 +280,9 @@ public class NatRuleSetTest {
             new TransformationStep(
                 new TransformationStepDetail(
                     SOURCE_NAT,
-                    ImmutableSortedSet.of(FlowDiff.flowDiff(SOURCE, Ip.ZERO, poolStart))),
+                    ImmutableSortedSet.of(
+                        FlowDiff.flowDiff(SOURCE, Ip.ZERO, poolStart),
+                        FlowDiff.flowDiff(PortField.SOURCE, 0, 1024))),
                 StepAction.TRANSFORMED)));
   }
 }

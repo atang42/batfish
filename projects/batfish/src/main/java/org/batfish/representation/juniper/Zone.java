@@ -16,7 +16,6 @@ public final class Zone implements Serializable {
     GLOBAL
   }
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   private AddressBook _addressBook;
@@ -31,7 +30,7 @@ public final class Zone implements Serializable {
 
   private final Map<String, FirewallFilter> _inboundInterfaceFilters;
 
-  private final List<Interface> _interfaces;
+  private final List<String> _interfaces;
 
   private final String _name;
 
@@ -92,7 +91,7 @@ public final class Zone implements Serializable {
     return _inboundInterfaceFilters;
   }
 
-  public List<Interface> getInterfaces() {
+  public List<String> getInterfaces() {
     return _interfaces;
   }
 

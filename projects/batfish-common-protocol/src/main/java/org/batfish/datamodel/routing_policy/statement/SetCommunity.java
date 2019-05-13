@@ -8,6 +8,7 @@ import java.util.SortedSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.batfish.datamodel.BgpRoute;
+import org.batfish.datamodel.bgp.community.Community;
 import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.Result;
 import org.batfish.datamodel.routing_policy.expr.CommunitySetExpr;
@@ -16,7 +17,6 @@ import org.batfish.datamodel.routing_policy.expr.EmptyCommunitySetExpr;
 public final class SetCommunity extends Statement {
 
   private static final long serialVersionUID = 1L;
-
   private static final String PROP_EXPR = "expr";
 
   public static final SetCommunity NONE = new SetCommunity(EmptyCommunitySetExpr.INSTANCE);
@@ -48,8 +48,8 @@ public final class SetCommunity extends Statement {
   @Override
   public Result execute(Environment environment) {
     Result result = new Result();
-    BgpRoute.Builder bgpRoute = (BgpRoute.Builder) environment.getOutputRoute();
-    SortedSet<Long> communities = _expr.asLiteralCommunities(environment);
+    BgpRoute.Builder<?, ?> bgpRoute = (BgpRoute.Builder<?, ?>) environment.getOutputRoute();
+    SortedSet<Community> communities = _expr.asLiteralCommunities(environment);
     bgpRoute.setCommunities(communities);
     if (environment.getWriteToIntermediateBgpAttributes()) {
       environment.getIntermediateBgpAttributes().setCommunities(communities);

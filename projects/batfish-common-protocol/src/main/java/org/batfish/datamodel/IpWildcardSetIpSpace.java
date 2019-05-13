@@ -3,7 +3,9 @@ package org.batfish.datamodel;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Comparators;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Ordering;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Map;
@@ -11,7 +13,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.SortedSet;
 import javax.annotation.Nonnull;
-import org.batfish.common.util.CommonUtil;
 import org.batfish.datamodel.visitors.GenericIpSpaceVisitor;
 
 /**
@@ -59,12 +60,9 @@ public final class IpWildcardSetIpSpace extends IpSpace {
 
   public static final IpWildcardSetIpSpace ANY =
       IpWildcardSetIpSpace.builder().including(IpWildcard.ANY).build();
-
   private static final String PROP_BLACKLIST = "blacklist";
-
   private static final String PROP_WHITELIST = "whitelist";
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   public static Builder builder() {
@@ -97,8 +95,10 @@ public final class IpWildcardSetIpSpace extends IpSpace {
 
   @Override
   protected int compareSameClass(IpSpace o) {
-    return Comparator.comparing(IpWildcardSetIpSpace::getBlacklist, CommonUtil::compareIterable)
-        .thenComparing(IpWildcardSetIpSpace::getWhitelist, CommonUtil::compareIterable)
+    return Comparator.comparing(
+            IpWildcardSetIpSpace::getBlacklist, Comparators.lexicographical(Ordering.natural()))
+        .thenComparing(
+            IpWildcardSetIpSpace::getWhitelist, Comparators.lexicographical(Ordering.natural()))
         .compare(this, (IpWildcardSetIpSpace) o);
   }
 
@@ -126,7 +126,12 @@ public final class IpWildcardSetIpSpace extends IpSpace {
 
   @Override
   public int hashCode() {
-    return Objects.hash(_blacklist, _whitelist);
+    int h = _hashCode;
+    if (h == 0) {
+      h = 31 * _blacklist.hashCode() + _whitelist.hashCode();
+      _hashCode = h;
+    }
+    return h;
   }
 
   @Override
@@ -136,4 +141,6 @@ public final class IpWildcardSetIpSpace extends IpSpace {
         .add(PROP_WHITELIST, _whitelist)
         .toString();
   }
+
+  private transient int _hashCode;
 }

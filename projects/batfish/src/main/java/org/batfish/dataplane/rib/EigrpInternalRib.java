@@ -1,15 +1,17 @@
 package org.batfish.dataplane.rib;
 
 import java.util.Comparator;
+import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.EigrpInternalRoute;
 
 /** Rib that stores internal EIGRP routes */
+@ParametersAreNonnullByDefault
 public class EigrpInternalRib extends AbstractRib<EigrpInternalRoute> {
 
   private static final long serialVersionUID = 1L;
 
   public EigrpInternalRib() {
-    super(null);
+    super();
   }
 
   @Override

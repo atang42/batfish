@@ -1,5 +1,6 @@
 package org.batfish.dataplane.protocols;
 
+import static org.batfish.dataplane.ibdp.TestUtils.annotateRoute;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -14,6 +15,7 @@ import org.batfish.datamodel.GeneratedRoute.Builder;
 import org.batfish.datamodel.NetworkFactory;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.StaticRoute;
+import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.junit.Before;
@@ -79,6 +81,7 @@ public class GeneratedRouteHelperTest {
             .setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
             .setHostname("n1")
             .build();
+    Vrf vrf = nf.vrfBuilder().setOwner(c).build();
 
     RoutingPolicy policy =
         nf.routingPolicyBuilder()
@@ -92,15 +95,16 @@ public class GeneratedRouteHelperTest {
             gr,
             policy,
             ImmutableSet.of(
-                StaticRoute.builder()
-                    .setNetwork(Prefix.parse("2.2.2.2/32"))
-                    .setNextHopIp(null)
-                    .setNextHopInterface("eth0")
-                    .setAdministrativeCost(1)
-                    .setMetric(0L)
-                    .setTag(1)
-                    .build()),
-            "vrf");
+                annotateRoute(
+                    StaticRoute.builder()
+                        .setNetwork(Prefix.parse("2.2.2.2/32"))
+                        .setNextHopIp(null)
+                        .setNextHopInterface("eth0")
+                        .setAdministrativeCost(1)
+                        .setMetric(0L)
+                        .setTag(1)
+                        .build())),
+            vrf.getName());
 
     assertThat(newRoute, notNullValue());
   }

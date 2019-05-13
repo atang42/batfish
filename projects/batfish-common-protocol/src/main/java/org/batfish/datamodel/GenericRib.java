@@ -1,11 +1,9 @@
 package org.batfish.datamodel;
 
 import java.io.Serializable;
-import java.util.Map;
 import java.util.Set;
-import java.util.SortedSet;
 
-public interface GenericRib<R extends AbstractRoute> extends Serializable {
+public interface GenericRib<R extends AbstractRouteDecorator> extends Serializable {
 
   /**
    * Compare the preferability of one route with anther
@@ -17,27 +15,11 @@ public interface GenericRib<R extends AbstractRoute> extends Serializable {
    */
   int comparePreference(R lhs, R rhs);
 
-  /**
-   * Returns a mapping from prefixes of forwarding routes in the RIB to the IPs for which that
-   * prefix is the longest match in the RIB (among prefixes of forwarding routes).
-   *
-   * <p><strong>NOTE</strong>: this method only considers forwarding routes in the Rib, i.e. those
-   * for which {@link AbstractRoute#getNonForwarding()} returns false.
-   */
-  Map<Prefix, IpSpace> getMatchingIps();
+  /** Return set of {@link AbstractRoute abstract routes} this RIB contains. */
+  Set<AbstractRoute> getRoutes();
 
-  SortedSet<Prefix> getPrefixes();
-
-  /**
-   * Get all the IPs that match a forwarding route in the RIB.
-   *
-   * <p><strong>NOTE</strong>: this method only considers forwarding routes in the Rib, i.e. those
-   * for which {@link AbstractRoute#getNonForwarding()} returns false.
-   */
-  IpSpace getRoutableIps();
-
-  /** Return a set of routes this RIB contains. */
-  Set<R> getRoutes();
+  /** Return set of {@link R typed routes} this RIB contains. */
+  Set<R> getTypedRoutes();
 
   /**
    * Execute the longest prefix match for a given IP address.

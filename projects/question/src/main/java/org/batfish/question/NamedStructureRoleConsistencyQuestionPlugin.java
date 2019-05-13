@@ -26,7 +26,6 @@ import org.batfish.role.OutliersHypothesis;
 public class NamedStructureRoleConsistencyQuestionPlugin extends QuestionPlugin {
 
   public static class NamedStructureRoleConsistencyAnswerElement extends AnswerElement {
-
     private static final String PROP_ANSWERS = "answers";
 
     private List<NamedStructureOutlierSet<?>> _answers;
@@ -93,24 +92,14 @@ public class NamedStructureRoleConsistencyQuestionPlugin extends QuestionPlugin 
     }
   }
 
-  // <question_page_comment>
-  /*
+  /**
    * Checks a role-based consistency policy requiring that all nodes of the same role have the same
    * value for some particular configuration property (e.g., DnsServers).
-   *
-   * @type NamedStructureRoleConsistency multifile
-   * @param roleDimension The name of the role dimension to us. If not specified then the default
-   *     auto inferred dimension.
-   * @param structType A string representing the type of named structure to check.
-   * @param hypothesis The hypothesis to check. Allowed values are "sameName" and "sameDefinition".
    */
   public static final class NamedStructureRoleConsistencyQuestion
       extends AbstractRoleConsistencyQuestion {
-
     private static final String PROP_ROLE_DIMENSION = "roleDimension";
-
     private static final String PROP_STRUCT_TYPE = "structType";
-
     private static final String PROP_HYPOTHESIS = "hypothesis";
 
     @Nullable private String _roleDimension;

@@ -4,9 +4,7 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.google.common.collect.ImmutableList;
-import com.kjetland.jackson.jsonSchema.annotations.JsonSchemaDescription;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
@@ -20,12 +18,9 @@ import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-@JsonSchemaDescription(
-    "An AsPathAccessList is used to filter e/iBGP routes according to their AS-path attribute.")
+/** An AsPathAccessList is used to filter e/iBGP routes according to their AS-path attribute. */
 public final class AsPathAccessList implements Serializable {
-
   private static final String PROP_LINES = "lines";
-
   private static final String PROP_NAME = "name";
 
   private static final long serialVersionUID = 1L;
@@ -62,9 +57,8 @@ public final class AsPathAccessList implements Serializable {
     return Objects.hash(_name, _lines);
   }
 
+  /** The list of lines against which a route's AS-path will be checked in order. */
   @JsonProperty(PROP_LINES)
-  @JsonPropertyDescription(
-      "The list of lines against which a route's AS-path will be checked in order.")
   @Nonnull
   public List<AsPathAccessListLine> getLines() {
     return _lines;

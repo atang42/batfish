@@ -1,12 +1,23 @@
 package org.batfish.specifier.parboiled;
 
-import static org.batfish.specifier.parboiled.ParboiledAutoComplete.RANK_STRING_LITERAL;
+import static org.batfish.specifier.parboiled.Anchor.Type.ADDRESS_GROUP_NAME;
+import static org.batfish.specifier.parboiled.Anchor.Type.IP_ADDRESS;
+import static org.batfish.specifier.parboiled.Anchor.Type.IP_PREFIX;
+import static org.batfish.specifier.parboiled.Anchor.Type.IP_RANGE;
+import static org.batfish.specifier.parboiled.Anchor.Type.IP_SPACE_SET_OP;
+import static org.batfish.specifier.parboiled.Anchor.Type.IP_WILDCARD;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import java.util.Set;
 import org.batfish.common.CompletionMetadata;
-import org.batfish.datamodel.answers.AutocompleteSuggestion;
+import org.batfish.referencelibrary.AddressGroup;
+import org.batfish.referencelibrary.ReferenceBook;
+import org.batfish.referencelibrary.ReferenceLibrary;
+import org.batfish.role.NodeRolesData;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -22,7 +33,23 @@ public class ParserIpSpaceTest {
   @Rule public ExpectedException _thrown = ExpectedException.none();
 
   private static AbstractParseRunner<AstNode> getRunner() {
-    return new ReportingParseRunner<>(Parser.INSTANCE.input(Parser.INSTANCE.IpSpaceExpression()));
+    return new ReportingParseRunner<>(Parser.instance().getInputRule(Grammar.IP_SPACE_SPECIFIER));
+  }
+
+  private static Set<ParboiledAutoCompleteSuggestion> autoCompleteHelper(
+      String query, ReferenceLibrary referenceLibrary) {
+    return new ParboiledAutoComplete(
+            Parser.instance(),
+            Grammar.IP_SPACE_SPECIFIER,
+            Parser.ANCHORS,
+            "network",
+            "snapshot",
+            query,
+            Integer.MAX_VALUE,
+            null,
+            NodeRolesData.builder().build(),
+            referenceLibrary)
+        .run();
   }
 
   /** This tests if we have proper completion annotations on the rules */
@@ -47,35 +74,36 @@ public class ParserIpSpaceTest {
             .setPrefixes(ImmutableSet.of("1.1.1.1/22"))
             .build();
 
-    ParboiledAutoComplete pac =
+    Set<ParboiledAutoCompleteSuggestion> suggestions =
         new ParboiledAutoComplete(
-            Parser.INSTANCE,
-            Parser.INSTANCE.input(Parser.INSTANCE.IpSpaceExpression()),
-            Parser.ANCHORS,
-            "network",
-            "snapshot",
-            query,
-            Integer.MAX_VALUE,
-            completionMetadata,
-            null,
-            null);
+                Parser.instance(),
+                Grammar.IP_SPACE_SPECIFIER,
+                Parser.ANCHORS,
+                "network",
+                "snapshot",
+                query,
+                Integer.MAX_VALUE,
+                completionMetadata,
+                null,
+                null)
+            .run();
 
     assertThat(
-        ImmutableSet.copyOf(pac.run()),
-        equalTo(
-            ImmutableSet.of(
-                new AutocompleteSuggestion("", true, null, AutocompleteSuggestion.DEFAULT_RANK, 7),
-                new AutocompleteSuggestion("0", true, null, AutocompleteSuggestion.DEFAULT_RANK, 7),
-                new AutocompleteSuggestion("-", true, null, RANK_STRING_LITERAL, 7),
-                new AutocompleteSuggestion(":", true, null, RANK_STRING_LITERAL, 7),
-                new AutocompleteSuggestion("/", true, null, RANK_STRING_LITERAL, 7),
-                new AutocompleteSuggestion("/22", true, null, RANK_STRING_LITERAL, 7),
-                new AutocompleteSuggestion(",", true, null, RANK_STRING_LITERAL, 7))));
+        suggestions,
+        containsInAnyOrder(
+            new ParboiledAutoCompleteSuggestion("1.1.1.1", 0, IP_ADDRESS),
+            new ParboiledAutoCompleteSuggestion("1.1.1.10", 0, IP_ADDRESS),
+            new ParboiledAutoCompleteSuggestion("-", query.length(), IP_RANGE),
+            new ParboiledAutoCompleteSuggestion(":", query.length(), IP_WILDCARD),
+            new ParboiledAutoCompleteSuggestion("1.1.1.1/22", 0, IP_PREFIX),
+            new ParboiledAutoCompleteSuggestion("\\", query.length(), IP_SPACE_SET_OP),
+            new ParboiledAutoCompleteSuggestion("&", query.length(), IP_SPACE_SET_OP),
+            new ParboiledAutoCompleteSuggestion(",", query.length(), IP_SPACE_SET_OP)));
   }
 
   @Test
   public void testIpSpaceAddressGroup() {
-    IpSpaceAstNode expectedAst = new AddressGroupAstNode("a", "b");
+    IpSpaceAstNode expectedAst = new AddressGroupIpSpaceAstNode("a", "b");
 
     assertThat(ParserUtils.getAst(getRunner().run("@addressgroup(a, b)")), equalTo(expectedAst));
     assertThat(
@@ -86,7 +114,7 @@ public class ParserIpSpaceTest {
 
   @Test
   public void testIpSpaceAddressGroupRef() {
-    IpSpaceAstNode expectedAst = new AddressGroupAstNode("a", "b");
+    IpSpaceAstNode expectedAst = new AddressGroupIpSpaceAstNode("a", "b");
 
     assertThat(ParserUtils.getAst(getRunner().run("ref.addressgroup(a, b)")), equalTo(expectedAst));
     assertThat(
@@ -125,34 +153,23 @@ public class ParserIpSpaceTest {
   }
 
   @Test
-  public void testIpSpaceList2() {
+  public void testIpSpaceLocationNode() {
     IpSpaceAstNode expectedNode =
-        new CommaIpSpaceAstNode(new IpAstNode("1.1.1.1"), new IpAstNode("2.2.2.2"));
+        new LocationIpSpaceAstNode(InterfaceLocationAstNode.createFromNode("node"));
 
-    assertThat(ParserUtils.getAst(getRunner().run("1.1.1.1,2.2.2.2")), equalTo(expectedNode));
-    assertThat(ParserUtils.getAst(getRunner().run("1.1.1.1 , 2.2.2.2 ")), equalTo(expectedNode));
+    assertThat(ParserUtils.getAst(getRunner().run("node")), equalTo(expectedNode));
+
+    assertThat(ParserUtils.getAst(getRunner().run("ofLocation(node)")), equalTo(expectedNode));
+    assertThat(ParserUtils.getAst(getRunner().run(" OFlocation ( node ) ")), equalTo(expectedNode));
   }
 
   @Test
-  public void testIpSpaceList3() {
+  public void testIpSpaceLocationNodeDeprecated() {
     IpSpaceAstNode expectedNode =
-        new CommaIpSpaceAstNode(
-            new CommaIpSpaceAstNode(new IpAstNode("1.1.1.1"), new IpAstNode("2.2.2.2")),
-            new IpAstNode("3.3.3.3"));
+        new LocationIpSpaceAstNode(
+            InterfaceLocationAstNode.createFromNode(new NameRegexNodeAstNode("node.*")));
 
-    assertThat(
-        ParserUtils.getAst(getRunner().run("1.1.1.1,2.2.2.2,3.3.3.3")), equalTo(expectedNode));
-
-    // a more complex list
-    IpSpaceAstNode expectedNode2 =
-        new CommaIpSpaceAstNode(
-            new CommaIpSpaceAstNode(
-                new IpAstNode("1.1.1.1"), new IpRangeAstNode("2.2.2.2", "2.2.2.3")),
-            new IpAstNode("3.3.3.3"));
-
-    assertThat(
-        ParserUtils.getAst(getRunner().run("1.1.1.1,2.2.2.2-2.2.2.3,3.3.3.3")),
-        equalTo(expectedNode2));
+    assertThat(ParserUtils.getAst(getRunner().run("node.*")), equalTo(expectedNode));
   }
 
   @Test
@@ -166,5 +183,82 @@ public class ParserIpSpaceTest {
     _thrown.expectMessage("Invalid prefix length");
     _thrown.expect(ParserRuntimeException.class);
     getRunner().run("1.1.1.1/33");
+  }
+
+  @Test
+  public void testIpSpaceSeDifference() {
+    IpSpaceAstNode expectedNode =
+        new DifferenceIpSpaceAstNode(new IpAstNode("1.1.1.1"), new IpAstNode("2.2.2.2"));
+
+    assertThat(ParserUtils.getAst(getRunner().run("1.1.1.1\\2.2.2.2")), equalTo(expectedNode));
+    assertThat(ParserUtils.getAst(getRunner().run(" 1.1.1.1 \\ 2.2.2.2 ")), equalTo(expectedNode));
+  }
+
+  @Test
+  public void testIpSpaceSetIntersection() {
+    IpSpaceAstNode expectedNode =
+        new IntersectionIpSpaceAstNode(new IpAstNode("1.1.1.1"), new IpAstNode("2.2.2.2"));
+
+    assertThat(ParserUtils.getAst(getRunner().run("1.1.1.1&2.2.2.2")), equalTo(expectedNode));
+    assertThat(ParserUtils.getAst(getRunner().run(" 1.1.1.1 & 2.2.2.2 ")), equalTo(expectedNode));
+  }
+
+  @Test
+  public void testIpSpaceSetUnion() {
+    IpSpaceAstNode expectedNode =
+        new UnionIpSpaceAstNode(new IpAstNode("1.1.1.1"), new IpAstNode("2.2.2.2"));
+
+    assertThat(ParserUtils.getAst(getRunner().run("1.1.1.1,2.2.2.2")), equalTo(expectedNode));
+    assertThat(ParserUtils.getAst(getRunner().run(" 1.1.1.1 , 2.2.2.2 ")), equalTo(expectedNode));
+  }
+
+  @Test
+  public void testIpSpaceSetPrecedence() {
+    IpSpaceAstNode expectedNode =
+        new UnionIpSpaceAstNode(
+            new IpAstNode("1.1.1.1"),
+            new IntersectionIpSpaceAstNode(new IpAstNode("2.2.2.2"), new IpAstNode("3.3.3.3")));
+
+    assertThat(
+        ParserUtils.getAst(getRunner().run("1.1.1.1,2.2.2.2&3.3.3.3")), equalTo(expectedNode));
+  }
+
+  /** Test complex terms in set operations */
+  @Test
+  public void testIpSpaceSetComplexTerms() {
+    IpSpaceAstNode expectedNode2 =
+        new UnionIpSpaceAstNode(
+            new UnionIpSpaceAstNode(
+                new IpAstNode("1.1.1.1"), new IpRangeAstNode("2.2.2.2", "2.2.2.3")),
+            new IpAstNode("3.3.3.3"));
+
+    assertThat(
+        ParserUtils.getAst(getRunner().run("1.1.1.1,2.2.2.2-2.2.2.3,3.3.3.3")),
+        equalTo(expectedNode2));
+  }
+
+  /**
+   * Test that address group rule is written in a way that allows for context sensitive
+   * autocompletion
+   */
+  @Test
+  public void testContextSensitiveAddressGroup() {
+    ReferenceLibrary library =
+        new ReferenceLibrary(
+            ImmutableList.of(
+                ReferenceBook.builder("b1")
+                    .setAddressGroups(ImmutableList.of(new AddressGroup(null, "g1")))
+                    .build(),
+                ReferenceBook.builder("b2")
+                    .setAddressGroups(ImmutableList.of(new AddressGroup(null, "g2")))
+                    .build()));
+
+    String query = "@addressGroup(b1,";
+
+    // only g1 should be suggested
+    assertThat(
+        autoCompleteHelper(query, library),
+        containsInAnyOrder(
+            new ParboiledAutoCompleteSuggestion("g1", query.length(), ADDRESS_GROUP_NAME)));
   }
 }

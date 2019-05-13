@@ -11,12 +11,11 @@ import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.IntegerSpace;
 import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.questions.Question;
-import org.batfish.specifier.FlexibleInterfaceSpecifierFactory;
-import org.batfish.specifier.FlexibleNodeSpecifierFactory;
+import org.batfish.specifier.AllInterfacesInterfaceSpecifier;
+import org.batfish.specifier.AllNodesNodeSpecifier;
 import org.batfish.specifier.InterfaceSpecifier;
-import org.batfish.specifier.InterfaceSpecifierFactory;
 import org.batfish.specifier.NodeSpecifier;
-import org.batfish.specifier.NodeSpecifierFactory;
+import org.batfish.specifier.SpecifierFactories;
 
 @ParametersAreNonnullByDefault
 public final class SwitchedVlanPropertiesQuestion extends Question {
@@ -24,7 +23,6 @@ public final class SwitchedVlanPropertiesQuestion extends Question {
   private static final IntegerSpace ALL_VLANS = IntegerSpace.of(new SubRange(1, 4094));
 
   private static final boolean DEFAULT_EXCLUDE_SHUT_INTERFACES = false;
-
   private static final String PROP_EXCLUDE_SHUT_INTERFACES = "excludeShutInterfaces";
   private static final String PROP_INTERFACES = "interfaces";
   private static final String PROP_NODES = "nodes";
@@ -80,8 +78,8 @@ public final class SwitchedVlanPropertiesQuestion extends Question {
 
   @JsonIgnore
   public @Nonnull InterfaceSpecifier getInterfacesSpecifier() {
-    return InterfaceSpecifierFactory.load(FlexibleInterfaceSpecifierFactory.NAME)
-        .buildInterfaceSpecifier(_interfaces);
+    return SpecifierFactories.getInterfaceSpecifierOrDefault(
+        _interfaces, AllInterfacesInterfaceSpecifier.INSTANCE);
   }
 
   @Override
@@ -96,7 +94,7 @@ public final class SwitchedVlanPropertiesQuestion extends Question {
 
   @JsonIgnore
   public @Nonnull NodeSpecifier getNodesSpecifier() {
-    return NodeSpecifierFactory.load(FlexibleNodeSpecifierFactory.NAME).buildNodeSpecifier(_nodes);
+    return SpecifierFactories.getNodeSpecifierOrDefault(_nodes, AllNodesNodeSpecifier.INSTANCE);
   }
 
   @JsonProperty(PROP_VLANS)

@@ -1,6 +1,6 @@
 package org.batfish.dataplane;
 
-import static org.batfish.datamodel.matchers.AbstractRouteMatchers.hasPrefix;
+import static org.batfish.datamodel.matchers.AbstractRouteDecoratorMatchers.hasPrefix;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
@@ -11,6 +11,7 @@ import com.google.common.graph.ValueGraph;
 import java.io.IOException;
 import java.util.List;
 import org.batfish.datamodel.AbstractRoute;
+import org.batfish.datamodel.AnnotatedRoute;
 import org.batfish.datamodel.BgpPeerConfigId;
 import org.batfish.datamodel.BgpSessionProperties;
 import org.batfish.datamodel.Configuration;
@@ -55,16 +56,15 @@ public class DynamicBgpTest {
 
     batfish.computeDataPlane(); // compute and cache the dataPlane
     DataPlane dp = batfish.loadDataPlane();
-    ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology = dp.getBgpTopology();
+    ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology =
+        batfish.getTopologyProvider().getBgpTopology(batfish.getNetworkSnapshot()).getGraph();
 
-    /*
-     * Check peering edges. r1 <---> r2 has two edges, one in each direction. r2<--r3 and r2<--r4
-     * are unidirectional connections, since dynamic neighbor cannot initiate connections.
-     */
-    assertThat(bgpTopology.edges(), hasSize(4));
+    // Three sessions are established, so should see 6 directed edges.
+    assertThat(bgpTopology.edges(), hasSize(6));
 
     // Ensure routing info has been exchanged, and routes from r3/r4 exist on r1
-    GenericRib<AbstractRoute> r1Rib = dp.getRibs().get("r1").get(Configuration.DEFAULT_VRF_NAME);
+    GenericRib<AnnotatedRoute<AbstractRoute>> r1Rib =
+        dp.getRibs().get("r1").get(Configuration.DEFAULT_VRF_NAME);
     assertThat(r1Rib.getRoutes(), hasItem(hasPrefix(Prefix.parse("9.9.9.33/32"))));
     assertThat(r1Rib.getRoutes(), hasItem(hasPrefix(Prefix.parse("9.9.9.44/32"))));
   }
@@ -87,16 +87,15 @@ public class DynamicBgpTest {
     batfish.computeDataPlane(); // compute and cache the dataPlane
 
     DataPlane dp = batfish.loadDataPlane();
-    ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology = dp.getBgpTopology();
+    ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology =
+        batfish.getTopologyProvider().getBgpTopology(batfish.getNetworkSnapshot()).getGraph();
 
-    /*
-     * Check peering edges. r1 <---> r2 has two edges, one in each direction. r2<--r3 and r2<--r4
-     * are unidirectional connections, since dynamic neighbor cannot initiate connections.
-     */
-    assertThat(bgpTopology.edges(), hasSize(4));
+    // Three sessions are established, so should see 6 directed edges.
+    assertThat(bgpTopology.edges(), hasSize(6));
 
     // Ensure routing info has been exchanged, and routes from r3/r4 exist on r1
-    GenericRib<AbstractRoute> r1Rib = dp.getRibs().get("r1").get(Configuration.DEFAULT_VRF_NAME);
+    GenericRib<AnnotatedRoute<AbstractRoute>> r1Rib =
+        dp.getRibs().get("r1").get(Configuration.DEFAULT_VRF_NAME);
     assertThat(r1Rib.getRoutes(), hasItem(hasPrefix(Prefix.parse("3.3.3.3/32"))));
     assertThat(r1Rib.getRoutes(), hasItem(hasPrefix(Prefix.parse("4.4.4.4/32"))));
   }
@@ -130,16 +129,15 @@ public class DynamicBgpTest {
     batfish.computeDataPlane(); // compute and cache the dataPlane
 
     DataPlane dp = batfish.loadDataPlane();
-    ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology = dp.getBgpTopology();
+    ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology =
+        batfish.getTopologyProvider().getBgpTopology(batfish.getNetworkSnapshot()).getGraph();
 
-    /*
-     * Check peering edges. r1 <---> r2 has two edges, one in each direction. r2<--r3 valid
-     * are unidirectional connections, since dynamic neighbor cannot initiate connections.
-     */
-    assertThat(bgpTopology.edges(), hasSize(3));
+    // Only two sessions are established (not r2 <--> r4), so should see 4 directed edges.
+    assertThat(bgpTopology.edges(), hasSize(4));
 
     // Ensure routing info has been exchanged, and routes from r3/r4 exist on r1
-    GenericRib<AbstractRoute> r1Rib = dp.getRibs().get("r1").get(Configuration.DEFAULT_VRF_NAME);
+    GenericRib<AnnotatedRoute<AbstractRoute>> r1Rib =
+        dp.getRibs().get("r1").get(Configuration.DEFAULT_VRF_NAME);
     assertThat(r1Rib.getRoutes(), hasItem(hasPrefix(Prefix.parse("9.9.9.33/32"))));
     assertThat(r1Rib.getRoutes(), not(hasItem(hasPrefix(Prefix.parse("9.9.9.44/32")))));
   }

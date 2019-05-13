@@ -2,17 +2,19 @@ package org.batfish.role;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.MoreObjects;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
+import org.batfish.datamodel.Names;
+import org.batfish.datamodel.Names.Type;
 
 /** Describes a role played by a node */
 @ParametersAreNonnullByDefault
 public class NodeRole implements Comparable<NodeRole> {
-
   private static final String PROP_NAME = "name";
   private static final String PROP_REGEX = "regex";
   private static final String PROP_CASE_SENSITIVE = "caseSensitive";
@@ -26,7 +28,7 @@ public class NodeRole implements Comparable<NodeRole> {
   private final boolean _caseSensitive;
 
   @JsonCreator
-  public NodeRole(
+  private static NodeRole create(
       @JsonProperty(PROP_NAME) String name,
       @JsonProperty(PROP_REGEX) String regex,
       @JsonProperty(PROP_CASE_SENSITIVE) boolean caseSensitive) {
@@ -36,6 +38,15 @@ public class NodeRole implements Comparable<NodeRole> {
     if (regex == null) {
       throw new IllegalArgumentException("Node role regex cannot be null");
     }
+    return new NodeRole(name, regex, caseSensitive);
+  }
+
+  public NodeRole(String name, String regex) {
+    this(name, regex, false);
+  }
+
+  public NodeRole(String name, String regex, boolean caseSensitive) {
+    Names.checkName(name, "role", Type.REFERENCE_OBJECT);
     _name = name;
     _regex = regex;
     _caseSensitive = caseSensitive;
@@ -44,10 +55,6 @@ public class NodeRole implements Comparable<NodeRole> {
     } catch (PatternSyntaxException e) {
       throw new IllegalArgumentException("Bad regex: " + e.getMessage());
     }
-  }
-
-  public NodeRole(@JsonProperty(PROP_NAME) String name, @JsonProperty(PROP_REGEX) String regex) {
-    this(name, regex, false);
   }
 
   @Override
@@ -96,5 +103,14 @@ public class NodeRole implements Comparable<NodeRole> {
    */
   public boolean matches(String nodeName) {
     return _compiledPattern.matcher(nodeName).matches();
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(getClass())
+        .add("name", _name)
+        .add("regex", _regex)
+        .add("caseSensitive", _caseSensitive)
+        .toString();
   }
 }

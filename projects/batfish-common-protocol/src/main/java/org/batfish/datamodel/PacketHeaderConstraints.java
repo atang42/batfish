@@ -9,12 +9,16 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.google.common.collect.Streams;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import org.batfish.specifier.IpProtocolSpecifier;
+import org.batfish.specifier.NoApplicationsApplicationSpecifier;
+import org.batfish.specifier.NoIpProtocolsIpProtocolSpecifier;
+import org.batfish.specifier.SpecifierFactories;
 
 /**
  * A set of constraints on an IPv4 packet header, where each field (i.e., constraint) is a {@link
@@ -32,7 +36,6 @@ import org.batfish.specifier.IpProtocolSpecifier;
  * resolved. For resolution, see {@link #resolveIpProtocols}, and {@link #resolveDstPorts}
  */
 public class PacketHeaderConstraints {
-
   private static final String PROP_APPLICATIONS = "applications";
   private static final String PROP_DSCPS = "dscps";
   private static final String PROP_DST_IPS = "dstIps";
@@ -92,9 +95,9 @@ public class PacketHeaderConstraints {
   private static final IntegerSpace VALID_FRAGMENT_OFFSET =
       IntegerSpace.builder().including(Range.closed(0, 8191)).build(); // 13 bits
 
+  @Deprecated
   @JsonCreator
-  @VisibleForTesting
-  static PacketHeaderConstraints create(
+  private static PacketHeaderConstraints create(
       @Nullable @JsonProperty(PROP_DSCPS) IntegerSpace.Builder dscps,
       @Nullable @JsonProperty(PROP_ECNS) IntegerSpace.Builder ecns,
       @Nullable @JsonProperty(PROP_PACKET_LENGTHS) IntegerSpace.Builder packetLengths,
@@ -107,7 +110,7 @@ public class PacketHeaderConstraints {
       @Nullable @JsonProperty(PROP_ICMP_TYPES) IntegerSpace.Builder icmpTypes,
       @Nullable @JsonProperty(PROP_SRC_PORTS) IntegerSpace.Builder srcPorts,
       @Nullable @JsonProperty(PROP_DST_PORTS) IntegerSpace.Builder dstPorts,
-      @Nullable @JsonProperty(PROP_APPLICATIONS) Set<Protocol> applications,
+      @Nullable @JsonProperty(PROP_APPLICATIONS) JsonNode applications,
       @Nullable @JsonProperty(PROP_TCP_FLAGS) Set<TcpFlagsMatchConditions> tcpFlags)
       throws IllegalArgumentException {
     return new PacketHeaderConstraints(
@@ -116,14 +119,14 @@ public class PacketHeaderConstraints {
         processBuilder(packetLengths, VALID_PACKET_LENGTH),
         flowStates,
         processBuilder(fragmentOffsets, VALID_FRAGMENT_OFFSET),
-        new IpProtocolSpecifier(ipProtocols).getProtocols(),
+        parseIpProtocols(ipProtocols),
         srcIps,
         dstIps,
         processBuilder(icmpCodes, VALID_ICMP_CODE_TYPE),
         processBuilder(icmpTypes, VALID_ICMP_CODE_TYPE),
         processBuilder(srcPorts, IntegerSpace.PORTS),
         processBuilder(dstPorts, IntegerSpace.PORTS),
-        applications,
+        parseApplications(applications),
         tcpFlags);
   }
 
@@ -157,6 +160,62 @@ public class PacketHeaderConstraints {
     _applications = applications;
     _tcpFlags = tcpFlags;
     validate(this);
+  }
+
+  /**
+   * Applications can be specified either as 1) a string like "ssh, telnet"; or 2) a (Json) list of
+   * strings like ["ssh", "telnet"]
+   */
+  @VisibleForTesting
+  static Set<Protocol> parseApplications(JsonNode applications) {
+    String input = "";
+    if (applications == null || applications.isNull()) {
+      return null;
+    } else if (applications.isTextual()) {
+      input = applications.asText();
+    } else if (applications.isArray()) {
+      input =
+          Streams.stream(applications.elements())
+              .map(JsonNode::textValue)
+              .collect(Collectors.joining(","));
+    } else {
+      throw new IllegalArgumentException(
+          String.format(
+              "Application specifier should be a string or a list of strings. Got: %s",
+              applications));
+    }
+
+    return SpecifierFactories.getApplicationSpecifierOrDefault(
+            input, NoApplicationsApplicationSpecifier.INSTANCE)
+        .resolve();
+  }
+
+  /**
+   * IpProtocols can be specified either as 1) a string like "tcp, udp"; or 2) a (Json) list of
+   * strings like ["tcp", "udp"]. Negation (e.g., "!tcp" is allowed too.
+   */
+  @VisibleForTesting
+  static Set<IpProtocol> parseIpProtocols(JsonNode ipProtocols) {
+    String input = "";
+    if (ipProtocols == null || ipProtocols.isNull()) {
+      return null;
+    } else if (ipProtocols.isTextual()) {
+      input = ipProtocols.asText();
+    } else if (ipProtocols.isArray()) {
+      input =
+          Streams.stream(ipProtocols.elements())
+              .map(JsonNode::textValue)
+              .collect(Collectors.joining(","));
+    } else {
+      throw new IllegalArgumentException(
+          String.format(
+              "IP protocol specifier should be a string or a list of strings. Got: %s",
+              ipProtocols));
+    }
+
+    return SpecifierFactories.getIpProtocolSpecifierOrDefault(
+            input, NoIpProtocolsIpProtocolSpecifier.INSTANCE)
+        .resolve();
   }
 
   @Nullable

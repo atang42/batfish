@@ -1,7 +1,11 @@
 package org.batfish.common.bdd;
 
 import com.google.common.collect.ImmutableList;
+import io.opentracing.ActiveSpan;
+import io.opentracing.util.GlobalTracer;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 import net.sf.javabdd.BDD;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.IcmpType;
@@ -25,10 +29,14 @@ public final class BDDFlowConstraintGenerator {
   private BDD _tcpFlow;
 
   BDDFlowConstraintGenerator(BDDPacket pkt) {
-    _bddPacket = pkt;
-    _icmpFlow = computeICMPConstraint();
-    _udpFlow = computeUDPConstraint();
-    _tcpFlow = computeTCPConstraint();
+    try (ActiveSpan span =
+        GlobalTracer.get().buildSpan("construct BDDFlowConstraintGenerator").startActive()) {
+      assert span != null; // avoid unused warning
+      _bddPacket = pkt;
+      _icmpFlow = computeICMPConstraint();
+      _udpFlow = computeUDPConstraint();
+      _tcpFlow = computeTCPConstraint();
+    }
   }
 
   public BDD getUDPFlow() {
@@ -47,7 +55,7 @@ public final class BDDFlowConstraintGenerator {
   BDD computeICMPConstraint() {
     return _bddPacket
         .getIpProtocol()
-        .value(IpProtocol.ICMP.number())
+        .value(IpProtocol.ICMP)
         .and(
             _bddPacket
                 .getIcmpType()
@@ -60,17 +68,19 @@ public final class BDDFlowConstraintGenerator {
   // 2. Set src (dst, respectively) port to a ephemeral port, and dst (src, respectively) port to a
   // named port
   BDD computeTCPConstraint() {
-    BDD result = _bddPacket.getFactory().zero();
-    for (NamedPort namedPort : NamedPort.values()) {
-      result = result.or(_bddPacket.getDstPort().value(namedPort.number()));
-    }
-    result = _bddPacket.getSrcPort().geq(NamedPort.EPHEMERAL_LOWEST.number()).and(result);
-    BDD result2 = _bddPacket.getFactory().zero();
-    for (NamedPort namedPort : NamedPort.values()) {
-      result2 = result2.or(_bddPacket.getSrcPort().value(namedPort.number()));
-    }
-    result2 = _bddPacket.getDstPort().geq(NamedPort.EPHEMERAL_LOWEST.number()).and(result);
-    return _bddPacket.getIpProtocol().value(IpProtocol.TCP.number()).and(result.or(result2));
+    BDDInteger dstPort = _bddPacket.getDstPort();
+    BDDInteger srcPort = _bddPacket.getSrcPort();
+    BDD bdd1 =
+        _bddPacket
+            .getFactory()
+            .orAll(
+                Arrays.stream(NamedPort.values())
+                    .map(namedPort -> dstPort.value(namedPort.number()))
+                    .collect(Collectors.toList()));
+    bdd1 = bdd1.and(srcPort.geq(NamedPort.EPHEMERAL_LOWEST.number()));
+    BDD bdd2 = _bddPacket.swapSourceAndDestinationFields(bdd1);
+    BDD tcp = _bddPacket.getIpProtocol().value(IpProtocol.TCP);
+    return tcp.and(bdd1.or(bdd2));
   }
 
   // Get UDP packets for traceroute:
@@ -78,20 +88,11 @@ public final class BDDFlowConstraintGenerator {
   // 2. Set dst (src, respectively) port to the range 33434-33534 (common ports used by traceroute),
   // and src (dst, respectively) port to a ephemeral port
   BDD computeUDPConstraint() {
-    BDD bdd1 =
-        _bddPacket
-            .getDstPort()
-            .geq(33434)
-            .and(_bddPacket.getDstPort().leq(33534))
-            .and(_bddPacket.getSrcPort().geq(NamedPort.EPHEMERAL_LOWEST.number()));
-    BDD bdd2 =
-        _bddPacket
-            .getSrcPort()
-            .geq(33434)
-            .and(_bddPacket.getSrcPort().leq(33534))
-            .and(_bddPacket.getDstPort().geq(NamedPort.EPHEMERAL_LOWEST.number()));
-
-    return _bddPacket.getIpProtocol().value(IpProtocol.UDP.number()).and(bdd1.or(bdd2));
+    BDDInteger dstPort = _bddPacket.getDstPort();
+    BDDInteger srcPort = _bddPacket.getSrcPort();
+    BDD bdd1 = dstPort.range(33434, 33534).and(srcPort.geq(NamedPort.EPHEMERAL_LOWEST.number()));
+    BDD bdd2 = _bddPacket.swapSourceAndDestinationFields(bdd1);
+    return _bddPacket.getIpProtocol().value(IpProtocol.UDP).and(bdd1.or(bdd2));
   }
 
   public List<BDD> generateFlowPreference(FlowPreference preference) {

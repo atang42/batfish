@@ -65,6 +65,11 @@
     </dependency>
 
     <dependency>
+      <groupId>org.batfish</groupId>
+      <artifactId>bdd</artifactId>
+    </dependency>
+
+    <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-annotations</artifactId>
     </dependency>
@@ -96,16 +101,6 @@
     </dependency>
 
     <dependency>
-      <groupId>com.jayway.jsonpath</groupId>
-      <artifactId>json-path</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>net.sf.javabdd</groupId>
-      <artifactId>javabdd</artifactId>
-    </dependency>
-
-    <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
     </dependency>
@@ -130,7 +125,6 @@
       <scope>test</scope>
     </dependency>
 
-
     <dependency>
       <groupId>org.batfish</groupId>
       <artifactId>batfish-common-protocol</artifactId>
@@ -140,7 +134,7 @@
 
     <dependency>
       <groupId>org.hamcrest</groupId>
-      <artifactId>java-hamcrest</artifactId>
+      <artifactId>hamcrest</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -149,10 +143,5 @@
       <artifactId>slf4j-jdk14</artifactId>
       <scope>runtime</scope>
     </dependency>
-    <dependency>
-      <groupId>org.batfish</groupId>
-      <artifactId>batfish</artifactId>
-    </dependency>
-
   </dependencies>
 </project>

@@ -4,7 +4,7 @@ import static org.batfish.common.util.CommonUtil.toImmutableMap;
 import static org.batfish.datamodel.acl.SourcesReferencedByIpAccessLists.SOURCE_ORIGINATING_FROM_DEVICE;
 import static org.batfish.datamodel.acl.SourcesReferencedByIpAccessLists.referencedSources;
 
-import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import java.util.Comparator;
@@ -16,6 +16,8 @@ import java.util.Set;
 import javax.annotation.Nullable;
 import net.sf.javabdd.BDD;
 import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.FirewallSessionInterfaceInfo;
+import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.acl.MatchSrcInterface;
 import org.batfish.datamodel.acl.OriginatingFromDevice;
@@ -41,6 +43,8 @@ public final class BDDSourceManager {
    * not reference by {@link MatchSrcInterface} or {@link OriginatingFromDevice}. For efficiency,
    * the finite domain doesn't track each active but unreferenced source. Instead, it tracks a
    * single representative value that represents all of them.
+   *
+   * <p>{@code null} when there are no active but unreferenced sources.
    */
   private final @Nullable String _activeButUnreferencedRepresentative;
 
@@ -81,6 +85,24 @@ public final class BDDSourceManager {
     return forSourcesInternal(pkt, sources, ImmutableSet.of());
   }
 
+  /**
+   * Create a {@link BDDSourceManager} that tracks the specified interfaces as sources, plus the
+   * device itself.
+   */
+  public static BDDSourceManager forInterfaces(BDDInteger var, Set<String> interfaces) {
+    Set<String> sources =
+        ImmutableSet.<String>builder()
+            .addAll(interfaces)
+            .add(SOURCE_ORIGINATING_FROM_DEVICE)
+            .build();
+    return new BDDSourceManager(new BDDFiniteDomain<>(var, sources), ImmutableSet.of());
+  }
+
+  /** Create a {@link BDDSourceManager} for the empty set of sources. */
+  public static BDDSourceManager empty(BDDPacket pkt) {
+    return forSourcesInternal(pkt, ImmutableSet.of(), ImmutableSet.of());
+  }
+
   public static BDDSourceManager forIpAccessList(
       BDDPacket pkt, Configuration config, IpAccessList acl) {
     return forIpAccessList(
@@ -104,6 +126,19 @@ public final class BDDSourceManager {
    */
   public static Map<String, BDDSourceManager> forNetwork(
       BDDPacket pkt, Map<String, Configuration> configs) {
+    return forNetwork(pkt, configs, false);
+  }
+
+  /**
+   * Initialize a {@link BDDSourceManager} for each {@link Configuration} in a network. A single
+   * variable is shared by all of them.
+   *
+   * @param initializeSessions When true, nodes that might initialize sessions (i.e. one of their
+   *     active interfaces has a {@link FirewallSessionInterfaceInfo} object) will track all
+   *     interfaces, regardless of whether they are referenced by an ACL.
+   */
+  public static Map<String, BDDSourceManager> forNetwork(
+      BDDPacket pkt, Map<String, Configuration> configs, boolean initializeSessions) {
     Map<String, Set<String>> activeSources =
         toImmutableMap(
             configs.entrySet(),
@@ -121,6 +156,15 @@ public final class BDDSourceManager {
             entry -> {
               Configuration config = entry.getValue();
               Set<String> active = activeSources.get(config.getHostname());
+
+              if (initializeSessions
+                  && config.getAllInterfaces().values().stream()
+                      .filter(Interface::getActive)
+                      .anyMatch(iface -> iface.getFirewallSessionInterfaceInfo() != null)) {
+                // This node may initialize sessions -- have to track all active sources
+                return active;
+              }
+
               Set<String> sources = new HashSet<>();
               for (IpAccessList acl : config.getIpAccessLists().values()) {
                 referencedSources(config.getIpAccessLists(), acl).stream()
@@ -216,9 +260,19 @@ public final class BDDSourceManager {
     return getSourceBDD(iface);
   }
 
-  @VisibleForTesting
-  Map<String, BDD> getSourceBDDs() {
-    return _finiteDomain.getValueBdds();
+  public Map<String, BDD> getSourceBDDs() {
+    ImmutableMap.Builder<String, BDD> builder = ImmutableMap.builder();
+    builder.putAll(_finiteDomain.getValueBdds());
+
+    if (_activeButUnreferencedRepresentative != null) {
+      BDD representativeBdd =
+          _finiteDomain.getConstraintForValue(_activeButUnreferencedRepresentative);
+      _activeButUnreferenced.stream()
+          .filter(src -> !src.equals(_activeButUnreferencedRepresentative))
+          .forEach(src -> builder.put(src, representativeBdd));
+    }
+
+    return builder.build();
   }
 
   /**
@@ -271,5 +325,12 @@ public final class BDDSourceManager {
   /** Test if a {@link BDD} includes a constraint on the source variable. */
   public boolean hasSourceConstraint(BDD bdd) {
     return !bdd.equals(_finiteDomain.existsValue(bdd));
+  }
+
+  /**
+   * Return whether each source is tracked separately (i.e. each has its own value in the domain).
+   */
+  public boolean allSourcesTracked() {
+    return _activeButUnreferencedRepresentative == null;
   }
 }

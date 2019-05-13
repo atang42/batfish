@@ -3,6 +3,7 @@ package org.batfish.dataplane.protocols;
 import java.util.Set;
 import javax.annotation.Nullable;
 import org.batfish.datamodel.AbstractRoute;
+import org.batfish.datamodel.AnnotatedRoute;
 import org.batfish.datamodel.GeneratedRoute;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.routing_policy.Environment.Direction;
@@ -30,31 +31,28 @@ public class GeneratedRouteHelper {
   public static GeneratedRoute.Builder activateGeneratedRoute(
       GeneratedRoute generatedRoute,
       @Nullable RoutingPolicy policy,
-      Set<AbstractRoute> contributingRoutes,
+      Set<AnnotatedRoute<AbstractRoute>> contributingRoutes,
       String vrfName) {
-    boolean active = true;
-    GeneratedRoute.Builder grb = GeneratedRoute.Builder.fromRoute(generatedRoute);
+    GeneratedRoute.Builder grb = generatedRoute.toBuilder();
 
     // Null route if necessary
     if (generatedRoute.getDiscard()) {
       grb.setNextHopInterface(Interface.NULL_INTERFACE_NAME);
     }
 
-    if (policy != null) {
-      active = false;
-      // Find first matching route among candidates
-      for (AbstractRoute contributingCandidate : contributingRoutes) {
-        boolean accept = policy.process(contributingCandidate, grb, null, vrfName, Direction.OUT);
-        if (accept) {
-          if (!generatedRoute.getDiscard()) {
-            grb.setNextHopIp(contributingCandidate.getNextHopIp());
-          }
-          active = true;
-          break;
-        }
-      }
+    if (policy == null) {
+      return grb;
     }
 
-    return active ? grb : null;
+    // Find first matching route among candidates
+    for (AnnotatedRoute<AbstractRoute> contributingCandidate : contributingRoutes) {
+      if (policy.process(contributingCandidate, grb, null, vrfName, Direction.OUT)) {
+        if (!generatedRoute.getDiscard()) {
+          grb.setNextHopIp(contributingCandidate.getAbstractRoute().getNextHopIp());
+        }
+        return grb;
+      }
+    }
+    return null;
   }
 }

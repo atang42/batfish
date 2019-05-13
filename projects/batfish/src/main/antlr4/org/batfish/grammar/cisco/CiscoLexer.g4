@@ -5647,9 +5647,24 @@ ICMP
    'icmp'
 ;
 
+ICMP_ALTERNATE_ADDRESS
+:
+   'icmp-alternate-address'
+;
+
+ICMP_CONVERSION_ERROR
+:
+   'icmp-conversion-error'
+;
+
 ICMP_ECHO
 :
    'icmp-echo'
+;
+
+ICMP_ECHO_REPLY
+:
+   'icmp-echo-reply'
 ;
 
 ICMP_ERROR
@@ -5662,14 +5677,89 @@ ICMP_ERRORS
    'icmp-errors'
 ;
 
+ICMP_INFORMATION_REPLY
+:
+   'icmp-information-reply'
+;
+
+ICMP_INFORMATION_REQUEST
+:
+   'icmp-information-request'
+;
+
+ICMP_MASK_REPLY
+:
+   'icmp-mask-reply'
+;
+
+ICMP_MASK_REQUEST
+:
+   'icmp-mask-request'
+;
+
+ICMP_MOBILE_REDIRECT
+:
+   'icmp-mobile-redirect'
+;
+
 ICMP_OBJECT
 :
    'icmp-object'
 ;
 
+ICMP_PARAMETER_PROBLEM
+:
+   'icmp-parameter-problem'
+;
+
+ICMP_REDIRECT
+:
+   'icmp-redirect'
+;
+
+ICMP_ROUTER_ADVERTISEMENT
+:
+   'icmp-router-advertisement'
+;
+
+ICMP_ROUTER_SOLICITATION
+:
+   'icmp-router-solicitation'
+;
+
+ICMP_SOURCE_QUENCH
+:
+   'icmp-source-quench'
+;
+
+ICMP_TIME_EXCEEDED
+:
+   'icmp-time-exceeded'
+;
+
+ICMP_TIMESTAMP_REPLY
+:
+   'icmp-timestamp-reply'
+;
+
+ICMP_TIMESTAMP_REQUEST
+:
+   'icmp-timestamp-request'
+;
+
+ICMP_TRACEROUTE
+:
+   'icmp-traceroute'
+;
+
 ICMP_TYPE
 :
    'icmp-type'
+;
+
+ICMP_UNREACHABLE
+:
+   'icmp-unreachable'
 ;
 
 ICMP6
@@ -7427,6 +7517,11 @@ MAXIMUM
 MAXIMUM_ACCEPTED_ROUTES
 :
    'maximum-accepted-routes'
+;
+
+MAXIMUM_HOPS
+:
+   'maximum-hops'
 ;
 
 MAXIMUM_PATHS
@@ -10691,6 +10786,11 @@ RIB_METRIC_AS_INTERNAL
    'rib-metric-as-internal'
 ;
 
+RIB_SCALE
+:
+   'rib-scale'
+;
+
 RING
 :
    'ring'
@@ -10794,6 +10894,11 @@ ROUTE_ONLY
 ROUTE_POLICY
 :
    'route-policy'
+;
+
+ROUTE_PREFERENCE
+:
+   'route-preference'
 ;
 
 ROUTE_REFLECTOR_CLIENT
@@ -14010,6 +14115,11 @@ WEIGHTING
    'weighting'
 ;
 
+WEIGHTS
+:
+   'weights'
+;
+
 WELCOME_PAGE
 :
    'welcome-page'
@@ -14254,12 +14364,9 @@ POUND
    '#' -> pushMode ( M_Description )
 ;
 
-COMMUNITY_NUMBER
+STANDARD_COMMUNITY
 :
-   F_Digit
-   {!enableIPV6_ADDRESS}?
-
-   F_Digit* ':' F_Digit+
+  F_StandardCommunity {!enableIPV6_ADDRESS}?
 ;
 
 MAC_ADDRESS_LITERAL
@@ -14554,76 +14661,22 @@ FOUR_BYTE_AS
 
 IP_ADDRESS
 :
-   F_DecByte '.'
-   {enableIP_ADDRESS}?
-
-   F_DecByte '.' F_DecByte '.' F_DecByte
+  F_IpAddress {enableIP_ADDRESS}?
 ;
 
 IP_PREFIX
 :
-   F_DecByte '.'
-   {enableIP_ADDRESS}?
-
-   F_DecByte '.' F_DecByte '.' F_DecByte '/' F_Digit F_Digit?
+  F_IpPrefix {enableIP_ADDRESS}?
 ;
 
 IPV6_ADDRESS
 :
-   (
-      (
-         ':'
-         {enableIPV6_ADDRESS}?
-
-         ':'
-         (
-            (
-               F_HexDigit+ ':'
-            )* F_HexDigit+
-         )?
-      )
-      |
-      (
-         (
-            F_HexDigit+
-            {enableIPV6_ADDRESS}?
-
-            ':' ':'?
-         )+ F_HexDigit*
-      )
-   )
-   (
-      ':' F_DecByte '.' F_DecByte '.' F_DecByte '.' F_DecByte
-   )?
+  F_Ipv6Address {enableIPV6_ADDRESS}?
 ;
 
 IPV6_PREFIX
 :
-   (
-      (
-         ':'
-         {enableIPV6_ADDRESS}?
-
-         ':'
-         (
-            (
-               F_HexDigit+ ':'
-            )* F_HexDigit+
-         )?
-      )
-      |
-      (
-         (
-            F_HexDigit+
-            {enableIPV6_ADDRESS}?
-
-            ':' ':'?
-         )+ F_HexDigit*
-      )
-   )
-   (
-      ':' F_DecByte '.' F_DecByte '.' F_DecByte '.' F_DecByte
-   )? '/' F_DecByte
+  F_Ipv6Prefix {enableIPV6_ADDRESS}?
 ;
 
 NEWLINE
@@ -14737,59 +14790,207 @@ F_Base64String
 ;
 
 fragment
-F_Dec16
-:
-   (
-      F_PositiveDigit F_Digit F_Digit F_Digit F_Digit
-   )
-   |
-   (
-      F_PositiveDigit F_Digit F_Digit F_Digit
-   )
-   |
-   (
-      F_PositiveDigit F_Digit F_Digit
-   )
-   |
-   (
-      F_PositiveDigit F_Digit
-   )
-   | F_Digit
-;
-
-fragment
 F_DecByte
 :
-   (
-      F_PositiveDigit F_Digit F_Digit
-   )
-   |
-   (
-      F_PositiveDigit F_Digit
-   )
-   | F_Digit
+  F_Digit
+  | F_PositiveDigit F_Digit
+  | '1' F_Digit F_Digit
+  | '2' [0-4] F_Digit
+  | '25' [0-5]
 ;
 
 fragment
 F_Digit
 :
-   '0' .. '9'
+  [0-9]
 ;
 
 fragment
 F_HexDigit
 :
-   (
-      '0' .. '9'
-      | 'a' .. 'f'
-      | 'A' .. 'F'
-   )
+  [0-9A-Fa-f]
 ;
 
 fragment
 F_HexWord
 :
-   F_HexDigit F_HexDigit F_HexDigit F_HexDigit
+  F_HexDigit F_HexDigit? F_HexDigit? F_HexDigit?
+;
+
+fragment
+F_HexWord2
+:
+  F_HexWord ':' F_HexWord
+;
+
+fragment
+F_HexWord3
+:
+  F_HexWord2 ':' F_HexWord
+;
+
+fragment
+F_HexWord4
+:
+  F_HexWord3 ':' F_HexWord
+;
+
+fragment
+F_HexWord5
+:
+  F_HexWord4 ':' F_HexWord
+;
+
+fragment
+F_HexWord6
+:
+  F_HexWord5 ':' F_HexWord
+;
+
+fragment
+F_HexWord7
+:
+  F_HexWord6 ':' F_HexWord
+;
+
+fragment
+F_HexWord8
+:
+  F_HexWord6 ':' F_HexWordFinal2
+;
+
+fragment
+F_HexWordFinal2
+:
+  F_HexWord2
+  | F_IpAddress
+;
+
+fragment
+F_HexWordFinal3
+:
+  F_HexWord ':' F_HexWordFinal2
+;
+
+fragment
+F_HexWordFinal4
+:
+  F_HexWord ':' F_HexWordFinal3
+;
+
+fragment
+F_HexWordFinal5
+:
+  F_HexWord ':' F_HexWordFinal4
+;
+
+fragment
+F_HexWordFinal6
+:
+  F_HexWord ':' F_HexWordFinal5
+;
+
+fragment
+F_HexWordFinal7
+:
+  F_HexWord ':' F_HexWordFinal6
+;
+
+fragment
+F_HexWordLE1
+:
+  F_HexWord?
+;
+
+fragment
+F_HexWordLE2
+:
+  F_HexWordLE1
+  | F_HexWordFinal2
+;
+
+fragment
+F_HexWordLE3
+:
+  F_HexWordLE2
+  | F_HexWordFinal3
+;
+
+fragment
+F_HexWordLE4
+:
+  F_HexWordLE3
+  | F_HexWordFinal4
+;
+
+fragment
+F_HexWordLE5
+:
+  F_HexWordLE4
+  | F_HexWordFinal5
+;
+
+fragment
+F_HexWordLE6
+:
+  F_HexWordLE5
+  | F_HexWordFinal6
+;
+
+fragment
+F_HexWordLE7
+:
+  F_HexWordLE6
+  | F_HexWordFinal7
+;
+
+fragment
+F_IpAddress
+:
+  F_DecByte '.' F_DecByte '.' F_DecByte '.' F_DecByte
+;
+
+fragment
+F_IpPrefix
+:
+  F_IpAddress '/' F_IpPrefixLength
+;
+
+fragment
+F_IpPrefixLength
+:
+  F_Digit
+  | [12] F_Digit
+  | [3] [012]
+;
+
+fragment
+F_Ipv6Address
+:
+  '::' F_HexWordLE7
+  | F_HexWord '::' F_HexWordLE6
+  | F_HexWord2 '::' F_HexWordLE5
+  | F_HexWord3 '::' F_HexWordLE4
+  | F_HexWord4 '::' F_HexWordLE3
+  | F_HexWord5 '::' F_HexWordLE2
+  | F_HexWord6 '::' F_HexWordLE1
+  | F_HexWord7 '::'
+  | F_HexWord8
+;
+
+fragment
+F_Ipv6Prefix
+:
+  F_Ipv6Address '/' F_Ipv6PrefixLength
+;
+
+fragment
+F_Ipv6PrefixLength
+:
+  F_Digit
+  | F_PositiveDigit F_Digit
+  | '1' [01] F_Digit
+  | '12' [0-8]
 ;
 
 fragment
@@ -14823,19 +15024,28 @@ F_NonWhitespace
    ~( ' ' | '\t' | '\u000C' | '\u00A0' | '\n' | '\r' )
 ;
 
-F_PositiveHexDigit
-:
-   (
-      '1' .. '9'
-      | 'a' .. 'f'
-      | 'A' .. 'F'
-   )
-;
-
 fragment
 F_PositiveDigit
 :
-   '1' .. '9'
+   [1-9]
+;
+
+fragment
+F_StandardCommunity
+:
+  F_Uint16 ':' F_Uint16
+;
+
+fragment
+F_Uint16
+:
+  F_Digit
+  | F_PositiveDigit F_Digit F_Digit? F_Digit?
+  | [1-5] F_Digit F_Digit F_Digit F_Digit
+  | '6' [0-4] F_Digit F_Digit F_Digit
+  | '65' [0-4] F_Digit F_Digit
+  | '655' [0-2] F_Digit
+  | '6553' [0-5]
 ;
 
 fragment
@@ -15871,64 +16081,22 @@ M_NEIGHBOR_CHANGES
 
 M_NEIGHBOR_IP_ADDRESS
 :
-   F_DecByte '.' F_DecByte '.' F_DecByte '.' F_DecByte -> type ( IP_ADDRESS ) ,
-   popMode
+   F_IpAddress -> type ( IP_ADDRESS ) ,  popMode
 ;
 
 M_NEIGHBOR_IP_PREFIX
 :
-   F_DecByte '.' F_DecByte '.' F_DecByte '.' F_DecByte '/' F_Digit F_Digit? ->
-   type ( IP_PREFIX ) , popMode
+   F_IpPrefix -> type ( IP_PREFIX ) , popMode
 ;
 
 M_NEIGHBOR_IPV6_ADDRESS
 :
-   (
-      (
-         (
-            '::'
-            (
-               (
-                  F_HexDigit+ ':'
-               )* F_HexDigit+
-            )?
-         )
-         |
-         (
-            (
-               F_HexDigit+ ':' ':'?
-            )+ F_HexDigit*
-         )
-      )
-      (
-         ':' F_DecByte '.' F_DecByte '.' F_DecByte '.' F_DecByte
-      )?
-   ) -> type ( IPV6_ADDRESS ) , popMode
+   F_Ipv6Address -> type ( IPV6_ADDRESS ) , popMode
 ;
 
 M_NEIGHBOR_IPV6_PREFIX
 :
-   (
-      (
-         (
-            '::'
-            (
-               (
-                  F_HexDigit+ ':'
-               )* F_HexDigit+
-            )?
-         )
-         |
-         (
-            (
-               F_HexDigit+ ':' ':'?
-            )+ F_HexDigit*
-         )
-      )
-      (
-         ':' F_DecByte '.' F_DecByte '.' F_DecByte '.' F_DecByte
-      )? '/' F_DecByte
-   ) -> type ( IPV6_PREFIX ) , popMode
+   F_Ipv6Prefix -> type ( IPV6_PREFIX ) , popMode
 ;
 
 M_NEIGHBOR_NLRI

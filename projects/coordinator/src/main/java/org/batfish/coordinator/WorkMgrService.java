@@ -51,6 +51,7 @@ import org.batfish.datamodel.answers.Answer;
 import org.batfish.datamodel.answers.AnswerMetadata;
 import org.batfish.datamodel.answers.AutocompleteSuggestion;
 import org.batfish.datamodel.answers.GetAnalysisAnswerMetricsAnswer;
+import org.batfish.datamodel.answers.InputValidationNotes;
 import org.batfish.datamodel.pojo.WorkStatus;
 import org.batfish.datamodel.questions.Question;
 import org.batfish.datamodel.questions.Variable;
@@ -98,12 +99,14 @@ public class WorkMgrService {
       checkClientVersion(clientVersion);
       checkNetworkAccessibility(apiKey, networkName);
 
+      Variable.Type varType = Variable.Type.fromString(completionType);
+
       List<AutocompleteSuggestion> answer =
           Main.getWorkMgr()
               .autoComplete(
                   networkName,
                   snapshotName,
-                  Variable.Type.fromString(completionType),
+                  varType,
                   query,
                   Strings.isNullOrEmpty(maxSuggestions)
                       ? Integer.MAX_VALUE
@@ -118,8 +121,15 @@ public class WorkMgrService {
               .map(BatfishObjectMapper::writeStringRuntimeError)
               .collect(Collectors.toList());
 
+      InputValidationNotes validationNotes =
+          Main.getWorkMgr().validateInput(networkName, snapshotName, varType, query);
+
+      String serializedMetadata = BatfishObjectMapper.writeString(validationNotes);
+
       return successResponse(
-          new JSONObject().put(CoordConsts.SVC_KEY_SUGGESTIONS, serializedSuggestions));
+          new JSONObject()
+              .put(CoordConsts.SVC_KEY_SUGGESTIONS, serializedSuggestions)
+              .put(CoordConsts.SVC_KEY_QUERY_METADATA, serializedMetadata));
     } catch (IllegalArgumentException | AccessControlException e) {
       _logger.errorf("WMS:autoComplete exception: %s\n", e.getMessage());
       return failureResponse(e.getMessage());
@@ -232,7 +242,7 @@ public class WorkMgrService {
               BatfishObjectMapper.mapper()
                   .readValue(addQuestionsStream, new TypeReference<Map<String, Object>>() {});
           for (Entry<String, Object> entry : streamValue.entrySet()) {
-            String textValue = BatfishObjectMapper.writePrettyString(entry.getValue());
+            String textValue = BatfishObjectMapper.writeString(entry.getValue());
             questionsToAdd.put(entry.getKey(), textValue);
           }
         } catch (IOException e) {
@@ -299,7 +309,7 @@ public class WorkMgrService {
 
       Question inputQuestion = Question.parseQuestion(questionTemplate);
       Question outputQuestion = inputQuestion.configureTemplate(exceptions, assertion);
-      String outputQuestionStr = BatfishObjectMapper.writePrettyString(outputQuestion);
+      String outputQuestionStr = BatfishObjectMapper.writeString(outputQuestion);
 
       return successResponse(new JSONObject().put(CoordConsts.SVC_KEY_QUESTION, outputQuestionStr));
     } catch (IllegalArgumentException | AccessControlException e) {
@@ -554,7 +564,7 @@ public class WorkMgrService {
         }
         QueuedWork work = Main.getWorkMgr().getMatchingWork(workItem, QueueType.INCOMPLETE);
         if (work != null) {
-          String taskStr = BatfishObjectMapper.writePrettyString(work.getLastTaskCheckResult());
+          String taskStr = BatfishObjectMapper.writeString(work.getLastTaskCheckResult());
           response
               .put(CoordConsts.SVC_KEY_WORKID, work.getWorkItem().getId())
               .put(CoordConsts.SVC_KEY_WORKSTATUS, work.getStatus().toString())
@@ -564,9 +574,10 @@ public class WorkMgrService {
 
       String answer =
           Main.getWorkMgr()
-              .getAnswer(networkName, snapshotName, questionName, referenceSnapshot, analysisName);
+              .getAnswerString(
+                  networkName, snapshotName, questionName, referenceSnapshot, analysisName);
 
-      String answerStr = BatfishObjectMapper.writePrettyString(answer);
+      String answerStr = BatfishObjectMapper.writeString(answer);
 
       return successResponse(response.put(CoordConsts.SVC_KEY_ANSWER, answerStr));
     } catch (IllegalArgumentException | AccessControlException e) {
@@ -629,7 +640,7 @@ public class WorkMgrService {
         }
         QueuedWork work = Main.getWorkMgr().getMatchingWork(workItem, QueueType.INCOMPLETE);
         if (work != null) {
-          String taskStr = BatfishObjectMapper.writePrettyString(work.getLastTaskCheckResult());
+          String taskStr = BatfishObjectMapper.writeString(work.getLastTaskCheckResult());
           response
               .put(CoordConsts.SVC_KEY_WORKID, work.getWorkItem().getId())
               .put(CoordConsts.SVC_KEY_WORKSTATUS, work.getStatus().toString())
@@ -642,7 +653,7 @@ public class WorkMgrService {
               .getAnalysisAnswers(
                   networkName, snapshotName, referenceSnapshot, analysisName, ImmutableSet.of());
 
-      String answersStr = BatfishObjectMapper.writePrettyString(answers);
+      String answersStr = BatfishObjectMapper.writeString(answers);
 
       return successResponse(response.put(CoordConsts.SVC_KEY_ANSWERS, answersStr));
     } catch (IllegalArgumentException | AccessControlException e) {
@@ -729,7 +740,7 @@ public class WorkMgrService {
 
       GetAnalysisAnswerMetricsAnswer answer = new GetAnalysisAnswerMetricsAnswer(answersMetadata);
 
-      String answerStr = BatfishObjectMapper.writePrettyString(answer);
+      String answerStr = BatfishObjectMapper.writeString(answer);
 
       return successResponse(response.put(CoordConsts.SVC_KEY_ANSWER, answerStr));
     } catch (IllegalArgumentException | AccessControlException e) {
@@ -800,7 +811,7 @@ public class WorkMgrService {
         }
         QueuedWork work = Main.getWorkMgr().getMatchingWork(workItem, QueueType.INCOMPLETE);
         if (work != null) {
-          String taskStr = BatfishObjectMapper.writePrettyString(work.getLastTaskCheckResult());
+          String taskStr = BatfishObjectMapper.writeString(work.getLastTaskCheckResult());
           response
               .put(CoordConsts.SVC_KEY_WORKID, work.getWorkItem().getId())
               .put(CoordConsts.SVC_KEY_WORKSTATUS, work.getStatus().toString())
@@ -820,7 +831,7 @@ public class WorkMgrService {
       Map<String, Answer> answers =
           Main.getWorkMgr().processAnalysisAnswers(rawAnswers, analysisAnswersOptions);
 
-      String answerStr = BatfishObjectMapper.writePrettyString(answers);
+      String answerStr = BatfishObjectMapper.writeString(answers);
 
       return successResponse(response.put(CoordConsts.SVC_KEY_ANSWERS, answerStr));
     } catch (IllegalArgumentException | AccessControlException e) {
@@ -880,7 +891,7 @@ public class WorkMgrService {
         }
         QueuedWork work = Main.getWorkMgr().getMatchingWork(workItem, QueueType.INCOMPLETE);
         if (work != null) {
-          String taskStr = BatfishObjectMapper.writePrettyString(work.getLastTaskCheckResult());
+          String taskStr = BatfishObjectMapper.writeString(work.getLastTaskCheckResult());
           return successResponse(
               new JSONObject()
                   .put(CoordConsts.SVC_KEY_WORKID, work.getWorkItem().getId())
@@ -891,7 +902,7 @@ public class WorkMgrService {
 
       String answer =
           Main.getWorkMgr()
-              .getAnswer(networkName, snapshotName, questionName, referenceSnapshot, null);
+              .getAnswerString(networkName, snapshotName, questionName, referenceSnapshot, null);
 
       return successResponse(new JSONObject().put(CoordConsts.SVC_KEY_ANSWER, answer));
     } catch (IllegalArgumentException | AccessControlException e) {
@@ -979,12 +990,12 @@ public class WorkMgrService {
 
       String rawAnswer =
           Main.getWorkMgr()
-              .getAnswer(
+              .getAnswerString(
                   networkName, snapshotName, questionName, referenceSnapshotName, analysisName);
 
       Answer answer = Main.getWorkMgr().processAnswerRows(rawAnswer, answersRowsOptions);
 
-      String answerStr = BatfishObjectMapper.writePrettyString(answer);
+      String answerStr = BatfishObjectMapper.writeString(answer);
 
       return successResponse(response.put(CoordConsts.SVC_KEY_ANSWER, answerStr));
     } catch (IllegalArgumentException | AccessControlException e) {
@@ -1078,7 +1089,7 @@ public class WorkMgrService {
 
       String rawAnswer =
           Main.getWorkMgr()
-              .getAnswer(
+              .getAnswerString(
                   networkName, snapshotName, questionName, referenceSnapshotName, analysisName);
 
       Answer answer = Main.getWorkMgr().processAnswerRows2(rawAnswer, answersRowsOptions);
@@ -1168,7 +1179,7 @@ public class WorkMgrService {
               .getAnswerMetadata(
                   networkName, snapshotName, question, referenceSnapshotName, analysis);
 
-      String answerStr = BatfishObjectMapper.writePrettyString(answerMetadata);
+      String answerStr = BatfishObjectMapper.writeString(answerMetadata);
 
       return successResponse(response.put(CoordConsts.SVC_KEY_ANSWER, answerStr));
     } catch (IllegalArgumentException | AccessControlException e) {
@@ -1444,7 +1455,7 @@ public class WorkMgrService {
 
       checkNetworkAccessibility(apiKey, networkOpt.get());
 
-      String taskStr = BatfishObjectMapper.writePrettyString(work.getLastTaskCheckResult());
+      String taskStr = BatfishObjectMapper.writeString(work.getLastTaskCheckResult());
 
       // TODO: Use pojo.WorkStatus instead of this custom Json
       return successResponse(
@@ -1706,7 +1717,7 @@ public class WorkMgrService {
 
       return successResponse(
           new JSONObject()
-              .put(CoordConsts.SVC_KEY_WORK_LIST, BatfishObjectMapper.writePrettyString(workList)));
+              .put(CoordConsts.SVC_KEY_WORK_LIST, BatfishObjectMapper.writeString(workList)));
     } catch (IllegalArgumentException | AccessControlException e) {
       _logger.errorf("WMS:listIncompleteWork exception: %s\n", e.getMessage());
       return failureResponse(e.getMessage());
@@ -1808,7 +1819,7 @@ public class WorkMgrService {
           SnapshotMetadata ssMetadata =
               Main.getWorkMgr().getSnapshotMetadata(networkName, snapshot);
 
-          String metadataStr = BatfishObjectMapper.writePrettyString(ssMetadata);
+          String metadataStr = BatfishObjectMapper.writeString(ssMetadata);
           JSONObject jObject =
               new JSONObject()
                   .put(CoordConsts.SVC_KEY_SNAPSHOT_NAME, snapshot)

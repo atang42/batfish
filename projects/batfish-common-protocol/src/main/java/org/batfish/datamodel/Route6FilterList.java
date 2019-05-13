@@ -4,10 +4,8 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
-import com.kjetland.jackson.jsonSchema.annotations.JsonSchemaDescription;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,9 +14,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.batfish.common.util.ComparableStructure;
 
-@JsonSchemaDescription("An access-list used to filter IPV6 routes")
+/** An access-list used to filter IPV6 routes */
 public class Route6FilterList extends ComparableStructure<String> {
-
   private static final String PROP_LINES = "lines";
 
   private static final long serialVersionUID = 1L;
@@ -68,8 +65,8 @@ public class Route6FilterList extends ComparableStructure<String> {
     return other._lines.equals(_lines);
   }
 
+  /** The lines against which to check an IPV6 route. */
   @JsonProperty(PROP_LINES)
-  @JsonPropertyDescription("The lines against which to check an IPV6 route")
   public List<Route6FilterLine> getLines() {
     return _lines;
   }

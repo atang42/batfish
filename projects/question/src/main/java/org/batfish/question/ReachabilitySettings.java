@@ -10,17 +10,18 @@ import org.batfish.datamodel.FlowDisposition;
 import org.batfish.datamodel.HeaderSpace;
 import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.UniverseIpSpace;
-import org.batfish.datamodel.questions.InterfacesSpecifier;
-import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.specifier.AllInterfacesLocationSpecifier;
 import org.batfish.specifier.AllNodesNodeSpecifier;
 import org.batfish.specifier.ConstantIpSpaceSpecifier;
 import org.batfish.specifier.DifferenceLocationSpecifier;
+import org.batfish.specifier.InterfaceSpecifier;
+import org.batfish.specifier.InterfaceSpecifierInterfaceLocationSpecifier;
 import org.batfish.specifier.IntersectionLocationSpecifier;
 import org.batfish.specifier.IpSpaceSpecifier;
 import org.batfish.specifier.LocationSpecifier;
-import org.batfish.specifier.LocationSpecifiers;
 import org.batfish.specifier.NoNodesNodeSpecifier;
+import org.batfish.specifier.NodeSpecifier;
+import org.batfish.specifier.NodeSpecifierInterfaceLocationSpecifier;
 import org.batfish.specifier.NodeSpecifiers;
 
 public final class ReachabilitySettings {
@@ -29,29 +30,27 @@ public final class ReachabilitySettings {
 
     private SortedSet<FlowDisposition> _actions;
 
-    private NodesSpecifier _finalNodes;
+    private NodeSpecifier _finalNodes;
 
     private HeaderSpace _headerSpace;
 
-    private InterfacesSpecifier _ingressInterfaces;
+    private InterfaceSpecifier _ingressInterfaces;
 
-    private NodesSpecifier _ingressNodes;
+    private NodeSpecifier _ingressNodes;
 
     private int _maxChunkSize;
 
-    private NodesSpecifier _nonTransitNodes;
+    private NodeSpecifier _nonTransitNodes;
 
-    private NodesSpecifier _notFinalNodes;
+    private NodeSpecifier _notFinalNodes;
 
-    private NodesSpecifier _notIngressNodes;
+    private NodeSpecifier _notIngressNodes;
 
     private Boolean _srcNatted;
 
-    private NodesSpecifier _transitNodes;
+    private NodeSpecifier _transitNodes;
 
     private boolean _specialize = true;
-
-    private boolean _useCompression;
 
     public ReachabilitySettings build() {
       return new ReachabilitySettings(this);
@@ -61,7 +60,7 @@ public final class ReachabilitySettings {
       return _actions;
     }
 
-    public NodesSpecifier getFinalNodes() {
+    public NodeSpecifier getFinalNodes() {
       return _finalNodes;
     }
 
@@ -69,7 +68,7 @@ public final class ReachabilitySettings {
       return _headerSpace;
     }
 
-    public NodesSpecifier getIngressNodes() {
+    public NodeSpecifier getIngressNodes() {
       return _ingressNodes;
     }
 
@@ -77,15 +76,15 @@ public final class ReachabilitySettings {
       return _maxChunkSize;
     }
 
-    public NodesSpecifier getNonTransitNodes() {
+    public NodeSpecifier getNonTransitNodes() {
       return _nonTransitNodes;
     }
 
-    public NodesSpecifier getNotFinalNodes() {
+    public NodeSpecifier getNotFinalNodes() {
       return _notFinalNodes;
     }
 
-    public NodesSpecifier getNotIngressNodes() {
+    public NodeSpecifier getNotIngressNodes() {
       return _notIngressNodes;
     }
 
@@ -97,12 +96,8 @@ public final class ReachabilitySettings {
       return _srcNatted;
     }
 
-    public NodesSpecifier getTransitNodes() {
+    public NodeSpecifier getTransitNodes() {
       return _transitNodes;
-    }
-
-    public boolean getUseCompression() {
-      return _useCompression;
     }
 
     public Builder setActions(Iterable<FlowDisposition> actions) {
@@ -110,7 +105,7 @@ public final class ReachabilitySettings {
       return this;
     }
 
-    public Builder setFinalNodes(NodesSpecifier finalNodes) {
+    public Builder setFinalNodes(NodeSpecifier finalNodes) {
       _finalNodes = finalNodes;
       return this;
     }
@@ -120,7 +115,7 @@ public final class ReachabilitySettings {
       return this;
     }
 
-    public Builder setIngressNodes(NodesSpecifier ingressNodes) {
+    public Builder setIngressNodes(NodeSpecifier ingressNodes) {
       _ingressNodes = ingressNodes;
       return this;
     }
@@ -130,17 +125,17 @@ public final class ReachabilitySettings {
       return this;
     }
 
-    public Builder setNonTransitNodes(NodesSpecifier nonTransitNodes) {
+    public Builder setNonTransitNodes(NodeSpecifier nonTransitNodes) {
       _nonTransitNodes = nonTransitNodes;
       return this;
     }
 
-    public Builder setNotFinalNodeRegex(NodesSpecifier notFinalNodes) {
+    public Builder setNotFinalNodeRegex(NodeSpecifier notFinalNodes) {
       _notFinalNodes = notFinalNodes;
       return this;
     }
 
-    public Builder setNotIngressNodeRegex(NodesSpecifier notIngressNodes) {
+    public Builder setNotIngressNodeRegex(NodeSpecifier notIngressNodes) {
       _notIngressNodes = notIngressNodes;
       return this;
     }
@@ -155,17 +150,12 @@ public final class ReachabilitySettings {
       return this;
     }
 
-    public Builder setTransitNodes(NodesSpecifier transitNodes) {
+    public Builder setTransitNodes(NodeSpecifier transitNodes) {
       _transitNodes = transitNodes;
       return this;
     }
 
-    public Builder setUseCompression(boolean useCompression) {
-      _useCompression = useCompression;
-      return this;
-    }
-
-    public Builder setIngressInterfaces(InterfacesSpecifier ingressInterfaces) {
+    public Builder setIngressInterfaces(InterfaceSpecifier ingressInterfaces) {
       _ingressInterfaces = ingressInterfaces;
       return this;
     }
@@ -177,29 +167,27 @@ public final class ReachabilitySettings {
 
   private final SortedSet<FlowDisposition> _actions;
 
-  private final NodesSpecifier _finalNodes;
+  private final NodeSpecifier _finalNodes;
 
   private final HeaderSpace _headerSpace;
 
-  private final InterfacesSpecifier _ingressInterfaces;
+  private final InterfaceSpecifier _ingressInterfaces;
 
-  private final NodesSpecifier _ingressNodes;
+  private final NodeSpecifier _ingressNodes;
 
   private final int _maxChunkSize;
 
-  private final NodesSpecifier _nonTransitNodes;
+  private final NodeSpecifier _nonTransitNodes;
 
-  private NodesSpecifier _notFinalNodes;
+  private NodeSpecifier _notFinalNodes;
 
-  private NodesSpecifier _notIngressNodes;
+  private NodeSpecifier _notIngressNodes;
 
   private final Boolean _srcNatted;
 
   private final boolean _specialize;
 
-  private final NodesSpecifier _transitNodes;
-
-  private final boolean _useCompression;
+  private final NodeSpecifier _transitNodes;
 
   private ReachabilitySettings(Builder builder) {
     _finalNodes = builder._finalNodes;
@@ -212,7 +200,6 @@ public final class ReachabilitySettings {
     _transitNodes = builder._transitNodes;
     _nonTransitNodes = builder._nonTransitNodes;
     _specialize = builder._specialize;
-    _useCompression = builder._useCompression;
     _actions = builder._actions;
     _srcNatted = builder._srcNatted;
   }
@@ -235,15 +222,14 @@ public final class ReachabilitySettings {
         && _nonTransitNodes.equals(other._nonTransitNodes)
         && Objects.equals(_srcNatted, other._srcNatted)
         && _transitNodes.equals(other._transitNodes)
-        && _specialize == other._specialize
-        && _useCompression == other._useCompression;
+        && _specialize == other._specialize;
   }
 
   public SortedSet<FlowDisposition> getActions() {
     return _actions;
   }
 
-  public NodesSpecifier getFinalNodes() {
+  public NodeSpecifier getFinalNodes() {
     return _finalNodes;
   }
 
@@ -251,11 +237,11 @@ public final class ReachabilitySettings {
     return _headerSpace;
   }
 
-  public InterfacesSpecifier getIngressInterfaces() {
+  public InterfaceSpecifier getIngressInterfaces() {
     return _ingressInterfaces;
   }
 
-  public NodesSpecifier getIngressNodes() {
+  public NodeSpecifier getIngressNodes() {
     return _ingressNodes;
   }
 
@@ -263,15 +249,15 @@ public final class ReachabilitySettings {
     return _maxChunkSize;
   }
 
-  public NodesSpecifier getNonTransitNodes() {
+  public NodeSpecifier getNonTransitNodes() {
     return _nonTransitNodes;
   }
 
-  public NodesSpecifier getNotFinalNodes() {
+  public NodeSpecifier getNotFinalNodes() {
     return _notFinalNodes;
   }
 
-  public NodesSpecifier getNotIngressNodes() {
+  public NodeSpecifier getNotIngressNodes() {
     return _notIngressNodes;
   }
 
@@ -279,16 +265,12 @@ public final class ReachabilitySettings {
     return _srcNatted;
   }
 
-  public NodesSpecifier getTransitNodes() {
+  public NodeSpecifier getTransitNodes() {
     return _transitNodes;
   }
 
   public boolean getSpecialize() {
     return _specialize;
-  }
-
-  public boolean getUseCompression() {
-    return _useCompression;
   }
 
   @Override
@@ -302,8 +284,7 @@ public final class ReachabilitySettings {
         _nonTransitNodes,
         _srcNatted,
         _transitNodes,
-        _specialize,
-        _useCompression);
+        _specialize);
   }
 
   private static IpSpaceSpecifier toIpSpaceSpecifier(IpSpace include, IpSpace exclude) {
@@ -319,11 +300,15 @@ public final class ReachabilitySettings {
   public ReachabilityParameters toReachabilityParameters() {
     // compute the source LocationSpecifier
     LocationSpecifier ingressInterfaces =
-        _ingressInterfaces == null ? null : LocationSpecifiers.from(_ingressInterfaces);
+        _ingressInterfaces == null
+            ? null
+            : new InterfaceSpecifierInterfaceLocationSpecifier(_ingressInterfaces);
     LocationSpecifier ingressNodes =
-        _ingressNodes == null ? null : LocationSpecifiers.from(_ingressNodes);
+        _ingressNodes == null ? null : new NodeSpecifierInterfaceLocationSpecifier(_ingressNodes);
     LocationSpecifier notIngressNodes =
-        _notIngressNodes == null ? null : LocationSpecifiers.from(_notIngressNodes);
+        _notIngressNodes == null
+            ? null
+            : new NodeSpecifierInterfaceLocationSpecifier(_notIngressNodes);
 
     // combine ingressNodes and notIngressNodes into ingressNodes
     if (ingressNodes != null && notIngressNodes != null) {
@@ -365,20 +350,18 @@ public final class ReachabilitySettings {
         .setDestinationIpSpaceSpecifier(destinationIpSpaceSpecifier)
         .setFinalNodesSpecifier(
             firstNonNull(
-                NodeSpecifiers.difference(
-                    NodeSpecifiers.from(_finalNodes), NodeSpecifiers.from(_notFinalNodes)),
+                NodeSpecifiers.difference(_finalNodes, _notFinalNodes),
                 AllNodesNodeSpecifier.INSTANCE))
         .setForbiddenTransitNodesSpecifier(
-            firstNonNull(NodeSpecifiers.from(_nonTransitNodes), NoNodesNodeSpecifier.INSTANCE))
+            firstNonNull(_nonTransitNodes, NoNodesNodeSpecifier.INSTANCE))
         .setHeaderSpace(headerSpace)
         .setMaxChunkSize(_maxChunkSize)
         .setRequiredTransitNodesSpecifier(
-            firstNonNull(NodeSpecifiers.from(_transitNodes), NoNodesNodeSpecifier.INSTANCE))
+            firstNonNull(_transitNodes, NoNodesNodeSpecifier.INSTANCE))
         .setSourceIpSpaceSpecifier(sourceIpSpaceSpecifier)
         .setSourceLocationSpecifier(sourceLocations)
         .setSrcNatted(SrcNattedConstraint.fromBoolean(_srcNatted))
         .setSpecialize(_specialize)
-        .setUseCompression(_useCompression)
         .build();
   }
 }

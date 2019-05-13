@@ -14,7 +14,6 @@ import org.batfish.datamodel.routing_policy.Environment;
 /** Expression for matching a {@link Prefix} against a named {@link RouteFilterList}. */
 @ParametersAreNonnullByDefault
 public final class NamedPrefixSet extends PrefixSetExpr {
-
   private static final String PROP_NAME = "name";
 
   private static final long serialVersionUID = 1L;
@@ -55,7 +54,7 @@ public final class NamedPrefixSet extends PrefixSetExpr {
 
   @Override
   public boolean matches(Prefix prefix, Environment environment) {
-    RouteFilterList list = environment.getConfiguration().getRouteFilterLists().get(_name);
+    RouteFilterList list = environment.getRouteFilterLists().get(_name);
     if (list != null) {
       return list.permits(prefix);
     } else {

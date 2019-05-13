@@ -21,6 +21,7 @@ public enum RoutingProtocol {
   ISIS_EL2("isisEL2"),
   ISIS_L1("isisL1"),
   ISIS_L2("isisL2"),
+  KERNEL("kernel"),
   LDP("ldp"),
   LISP("lisp"),
   LOCAL("local"),
@@ -119,8 +120,11 @@ public enum RoutingProtocol {
           case CISCO_IOS:
           case CISCO_IOS_XR:
           case CISCO_NX:
+          case CUMULUS_NCLU:
           case FORCE10:
           case FOUNDRY:
+          case F5:
+          case F5_BIGIP_STRUCTURED:
             return 20;
           case FLAT_JUNIPER:
           case JUNIPER:
@@ -133,7 +137,6 @@ public enum RoutingProtocol {
           case EMPTY:
           case IGNORED:
           case BLADENETWORK:
-          case F5:
           case HOST:
           case IPTABLES:
           case MRV:
@@ -244,8 +247,11 @@ public enum RoutingProtocol {
           case CISCO_IOS:
           case CISCO_IOS_XR:
           case CISCO_NX:
+          case CUMULUS_NCLU:
           case FORCE10:
           case FOUNDRY:
+          case F5:
+          case F5_BIGIP_STRUCTURED:
             return 200;
           case FLAT_JUNIPER:
           case JUNIPER:
@@ -258,7 +264,6 @@ public enum RoutingProtocol {
           case EMPTY:
           case IGNORED:
           case BLADENETWORK:
-          case F5:
           case HOST:
           case IPTABLES:
           case MRV:
@@ -435,6 +440,9 @@ public enum RoutingProtocol {
             break;
         }
         break;
+
+      case KERNEL:
+        return 0;
 
       case OSPF:
         switch (vendor) {

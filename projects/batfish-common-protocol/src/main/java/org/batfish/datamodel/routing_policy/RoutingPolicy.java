@@ -19,8 +19,8 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.batfish.common.Warnings;
-import org.batfish.datamodel.AbstractRoute;
 import org.batfish.datamodel.AbstractRouteBuilder;
+import org.batfish.datamodel.AbstractRouteDecorator;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.NetworkFactory;
@@ -81,7 +81,6 @@ public class RoutingPolicy implements Serializable {
   }
 
   private static final long serialVersionUID = 1L;
-
   private static final String PROP_NAME = "name";
   private static final String PROP_STATEMENTS = "statements";
 
@@ -153,13 +152,13 @@ public class RoutingPolicy implements Serializable {
       return false;
     }
     RoutingPolicy policy = (RoutingPolicy) o;
-    // Skip owner, sources for compatibility with ConfigDiffElement
+    // Skip owner, sources
     return Objects.equals(_name, policy._name) && Objects.equals(_statements, policy._statements);
   }
 
   @Override
   public int hashCode() {
-    // Skip owner, sources for compatibility with ConfigDiffElement
+    // Skip owner, sources
     return Objects.hash(_name, _statements);
   }
 
@@ -190,16 +189,21 @@ public class RoutingPolicy implements Serializable {
   }
 
   public boolean process(
-      AbstractRoute inputRoute,
+      AbstractRouteDecorator inputRoute,
       AbstractRouteBuilder<?, ?> outputRoute,
-      @Nullable Ip peerAddress,
+      Ip peerAddress,
       String vrf,
       Direction direction) {
     return process(inputRoute, outputRoute, peerAddress, null, vrf, direction);
   }
 
+  /**
+   * @param peerAddress The address of a known peer.
+   * @param peerPrefix The address of an unknown peer. Used for dynamic BGP.
+   * @return True if the policy accepts the route.
+   */
   public boolean process(
-      AbstractRoute inputRoute,
+      AbstractRouteDecorator inputRoute,
       AbstractRouteBuilder<?, ?> outputRoute,
       @Nullable Ip peerAddress,
       @Nullable Prefix peerPrefix,
@@ -207,8 +211,7 @@ public class RoutingPolicy implements Serializable {
       Direction direction) {
     checkState(_owner != null, "Cannot evaluate routing policy without a Configuration");
     Environment environment =
-        Environment.builder(_owner)
-            .setVrf(vrf)
+        Environment.builder(_owner, vrf)
             .setOriginalRoute(inputRoute)
             .setOutputRoute(outputRoute)
             .setPeerAddress(peerAddress)

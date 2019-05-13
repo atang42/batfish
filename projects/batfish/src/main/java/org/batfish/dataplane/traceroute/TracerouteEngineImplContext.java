@@ -3,7 +3,6 @@ package org.batfish.dataplane.traceroute;
 import static org.batfish.dataplane.traceroute.TracerouteUtils.buildSessionsByIngressInterface;
 import static org.batfish.dataplane.traceroute.TracerouteUtils.validateInputs;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
@@ -11,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
@@ -25,10 +25,10 @@ import org.batfish.datamodel.Flow;
 import org.batfish.datamodel.FlowDisposition;
 import org.batfish.datamodel.ForwardingAnalysis;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.Topology;
 import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.flow.FirewallSessionTraceInfo;
 import org.batfish.datamodel.flow.Hop;
-import org.batfish.datamodel.flow.RouteInfo;
 import org.batfish.datamodel.flow.Trace;
 import org.batfish.datamodel.flow.TraceAndReverseFlow;
 
@@ -48,9 +48,11 @@ public class TracerouteEngineImplContext {
   private final Set<Flow> _flows;
   private final ForwardingAnalysis _forwardingAnalysis;
   private final boolean _ignoreFilters;
+  private final Topology _topology;
 
   public TracerouteEngineImplContext(
       DataPlane dataPlane,
+      Topology topology,
       Set<FirewallSessionTraceInfo> sessions,
       Set<Flow> flows,
       Map<String, Map<String, Fib>> fibs,
@@ -62,6 +64,7 @@ public class TracerouteEngineImplContext {
     _ignoreFilters = ignoreFilters;
     _forwardingAnalysis = _dataPlane.getForwardingAnalysis();
     _sessionsByIngressInterface = buildSessionsByIngressInterface(sessions);
+    _topology = topology;
   }
 
   /**
@@ -142,20 +145,12 @@ public class TracerouteEngineImplContext {
     return _configurations;
   }
 
-  Fib getFib(String node, String vrf) {
-    return _fibs.get(node).get(vrf);
+  Optional<Fib> getFib(String node, String vrf) {
+    return Optional.ofNullable(_fibs.getOrDefault(node, ImmutableMap.of()).get(vrf));
   }
 
   boolean getIgnoreFilters() {
     return _ignoreFilters;
-  }
-
-  List<RouteInfo> longestPrefixMatch(String node, String vrf, Ip ip) {
-    return _dataPlane.getRibs().get(node).get(vrf).longestPrefixMatch(ip).stream()
-        .sorted()
-        .map(rc -> new RouteInfo(rc.getProtocol(), rc.getNetwork(), rc.getNextHopIp()))
-        .distinct()
-        .collect(ImmutableList.toImmutableList());
   }
 
   Collection<FirewallSessionTraceInfo> getSessions(String node, String inputIface) {
@@ -187,10 +182,10 @@ public class TracerouteEngineImplContext {
   }
 
   /**
-   * @return true if the an ARP request for {@param arpIp} sent out {@param outIface} will receive a
-   *     reply.
+   * @return true if the an ARP request for {@param arpIp} sent out {@param outIface} will not
+   *     receive a reply.
    */
-  boolean receivesArpReply(String node, String vrf, String outIface, Ip arpIp) {
+  boolean willNotReceiveArpReply(String node, String vrf, String outIface, Ip arpIp) {
     return _forwardingAnalysis
         .getNeighborUnreachableOrExitsNetwork()
         .get(node)
@@ -202,8 +197,6 @@ public class TracerouteEngineImplContext {
   @Nonnull
   SortedSet<NodeInterfacePair> getInterfaceNeighbors(
       String currentNodeName, String outgoingIfaceName) {
-    return _dataPlane
-        .getTopology()
-        .getNeighbors(new NodeInterfacePair(currentNodeName, outgoingIfaceName));
+    return _topology.getNeighbors(new NodeInterfacePair(currentNodeName, outgoingIfaceName));
   }
 }

@@ -1,10 +1,9 @@
 package org.batfish.datamodel.matchers;
 
-import java.util.List;
 import javax.annotation.Nonnull;
-import org.batfish.datamodel.BgpActivePeerConfig;
-import org.batfish.datamodel.BgpPassivePeerConfig;
 import org.batfish.datamodel.BgpPeerConfig;
+import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.LongSpace;
 import org.hamcrest.FeatureMatcher;
 import org.hamcrest.Matcher;
 
@@ -42,6 +41,28 @@ final class BgpNeighborMatchersImpl {
     }
   }
 
+  static final class HasDescription extends FeatureMatcher<BgpPeerConfig, String> {
+    HasDescription(@Nonnull Matcher<? super String> subMatcher) {
+      super(subMatcher, "A BgpPeerConfig with description:", "description");
+    }
+
+    @Override
+    protected String featureValueOf(BgpPeerConfig actual) {
+      return actual.getDescription();
+    }
+  }
+
+  static final class HasExportPolicy extends FeatureMatcher<BgpPeerConfig, String> {
+    HasExportPolicy(@Nonnull Matcher<? super String> subMatcher) {
+      super(subMatcher, "A BgpPeerConfig with exportPolicy:", "exportPolicy");
+    }
+
+    @Override
+    protected String featureValueOf(BgpPeerConfig actual) {
+      return actual.getExportPolicy();
+    }
+  }
+
   static final class HasLocalAs extends FeatureMatcher<BgpPeerConfig, Long> {
     HasLocalAs(@Nonnull Matcher<? super Long> subMatcher) {
       super(subMatcher, "A BgpPeerConfig with localAs:", "localAs");
@@ -50,6 +71,17 @@ final class BgpNeighborMatchersImpl {
     @Override
     protected Long featureValueOf(BgpPeerConfig actual) {
       return actual.getLocalAs();
+    }
+  }
+
+  static final class HasLocalIp extends FeatureMatcher<BgpPeerConfig, Ip> {
+    HasLocalIp(@Nonnull Matcher<? super Ip> subMatcher) {
+      super(subMatcher, "A BgpPeerConfig with localIp:", "localIp");
+    }
+
+    @Override
+    protected Ip featureValueOf(BgpPeerConfig actual) {
+      return actual.getLocalIp();
     }
   }
 
@@ -64,25 +96,14 @@ final class BgpNeighborMatchersImpl {
     }
   }
 
-  static final class HasRemoteAs extends FeatureMatcher<BgpActivePeerConfig, Long> {
-    HasRemoteAs(@Nonnull Matcher<? super Long> subMatcher) {
+  static final class HasRemoteAs extends FeatureMatcher<BgpPeerConfig, LongSpace> {
+    HasRemoteAs(@Nonnull Matcher<? super LongSpace> subMatcher) {
       super(subMatcher, "A BgpPeerConfig with remoteAs:", "remoteAs");
     }
 
     @Override
-    protected Long featureValueOf(BgpActivePeerConfig actual) {
-      return actual.getRemoteAs();
-    }
-  }
-
-  static final class HasRemoteAses extends FeatureMatcher<BgpPassivePeerConfig, List<Long>> {
-    HasRemoteAses(@Nonnull Matcher<? super List<Long>> subMatcher) {
-      super(subMatcher, "A BgpPeerConfig with remoteAs:", "remoteAs");
-    }
-
-    @Override
-    protected List<Long> featureValueOf(BgpPassivePeerConfig actual) {
-      return actual.getRemoteAs();
+    protected LongSpace featureValueOf(BgpPeerConfig actual) {
+      return actual.getRemoteAsns();
     }
   }
 }

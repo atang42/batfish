@@ -4,10 +4,8 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
-import com.kjetland.jackson.jsonSchema.annotations.JsonSchemaDescription;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.SortedMap;
@@ -17,23 +15,16 @@ import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.common.util.ComparableStructure;
 
+/** An IPV4 firewall zone */
 @ParametersAreNonnullByDefault
-@JsonSchemaDescription("An IPV4 firewall zone")
 public final class Zone extends ComparableStructure<String> {
-
   private static final String PROP_FROM_HOST_FILTER = "fromHostFilter";
-
   private static final String PROP_INBOUND_FILTER = "inboundFilter";
-
   private static final String PROP_INBOUND_INTERFACE_FILTERS = "inboundInterfaceFilters";
-
   private static final String PROP_INTERFACES = "interfaces";
-
   private static final String PROP_TO_HOST_FILTER = "toHostFilter";
-
   private static final String PROP_TO_ZONE_POLICIES = "toZonePolicies";
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   @Nullable private String _fromHostFilterName;
@@ -71,28 +62,28 @@ public final class Zone extends ComparableStructure<String> {
         && Objects.equals(_toZonePoliciesNames, other._toZonePoliciesNames);
   }
 
+  /** Filter applied against packets originating from an interface in this zone on this node. */
   @JsonProperty(PROP_FROM_HOST_FILTER)
-  @JsonPropertyDescription(
-      "Filter applied against packets originating from an interface in this zone on this node")
   @Nullable
   public String getFromHostFilterName() {
     return _fromHostFilterName;
   }
 
+  /**
+   * Filter applied against packets whose final destination is an interface in this zone that does
+   * not have its own inbound filter.
+   */
   @JsonProperty(PROP_INBOUND_FILTER)
-  @JsonPropertyDescription(
-      "Filter applied against packets whose final destination is an interface in this zone that "
-          + "does not have its own inbound filter")
   @Nullable
   public String getInboundFilterName() {
     return _inboundFilterName;
   }
 
+  /**
+   * Mapping of interfaces in this zone to their corresponding inbound filters: the filter applied
+   * against packets whose final destination is the interface whose name is the key in this mapping.
+   */
   @JsonProperty(PROP_INBOUND_INTERFACE_FILTERS)
-  @JsonPropertyDescription(
-      "Mapping of interfaces in this zone to their corresponding inbound filters: the filter "
-          + "applied against packets whose final destination is the interface whose name is the "
-          + "key in this mapping")
   @Nonnull
   public SortedMap<String, String> getInboundInterfaceFiltersNames() {
     return _inboundInterfaceFiltersNames;
@@ -104,20 +95,21 @@ public final class Zone extends ComparableStructure<String> {
     return _interfaces;
   }
 
+  /**
+   * Filter applied against packets whose final destination is an interface in this zone. If this
+   * filter exists, it is applied IN ADDITION to the interface-specific or default inbound filter.
+   */
   @JsonProperty(PROP_TO_HOST_FILTER)
-  @JsonPropertyDescription(
-      "Filter applied against packets whose final destination is an interface in this zone. If "
-          + "this filter exists, it is applied IN ADDITION to the interface-specific or default "
-          + "inbound filter.")
   @Nullable
   public String getToHostFilterName() {
     return _toHostFilterName;
   }
 
+  /**
+   * Maps names of destination zones to the corresponding filter applied against packets which are
+   * received on this zone and routed to the named zone.
+   */
   @JsonProperty(PROP_TO_ZONE_POLICIES)
-  @JsonPropertyDescription(
-      "Maps names of destination zones to the corresponding filter applied against packets which "
-          + "are received on this zone and routed to the named zone")
   @Nonnull
   public SortedMap<String, String> getToZonePoliciesNames() {
     return _toZonePoliciesNames;

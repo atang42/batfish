@@ -3,46 +3,40 @@ package org.batfish.datamodel;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkArgument;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Ordering;
-import java.util.Comparator;
-import java.util.Objects;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import org.batfish.common.util.CommonUtil;
+import org.batfish.datamodel.bgp.community.Community;
 
-/**
- * A BGP Route. Captures attributes of both iBGP and eBGP routes.
- *
- * <p>For computational efficiency may contain additional attributes (that would otherwise be
- * present only in BGP advertisements on the wire)
- */
+/** A generic BGP route containing the common properties among different types of BGP routes */
 @ParametersAreNonnullByDefault
-public final class BgpRoute extends AbstractRoute {
+public abstract class BgpRoute extends AbstractRoute {
 
   /** Builder for {@link BgpRoute} */
   @ParametersAreNonnullByDefault
-  public static final class Builder extends AbstractRouteBuilder<Builder, BgpRoute> {
+  public abstract static class Builder<B extends Builder<B, R>, R extends BgpRoute>
+      extends AbstractRouteBuilder<B, R> {
 
-    @Nonnull private AsPath _asPath;
-    @Nonnull private ImmutableSortedSet.Builder<Long> _clusterList;
-    @Nonnull private SortedSet<Long> _communities;
-    private boolean _discard;
-    private long _localPreference;
-    @Nullable private Ip _originatorIp;
-    @Nullable private OriginType _originType;
-    @Nullable private RoutingProtocol _protocol;
-    @Nullable private Ip _receivedFromIp;
-    private boolean _receivedFromRouteReflectorClient;
-    @Nullable private RoutingProtocol _srcProtocol;
-    private int _weight;
+    @Nonnull protected AsPath _asPath;
+    @Nonnull protected ImmutableSortedSet.Builder<Long> _clusterList;
+    @Nonnull protected SortedSet<Community> _communities;
+    protected boolean _discard;
+    protected long _localPreference;
+    @Nullable protected String _nextHopInterface;
+    @Nullable protected Ip _originatorIp;
+    @Nullable protected OriginType _originType;
+    @Nullable protected RoutingProtocol _protocol;
+    @Nullable protected Ip _receivedFromIp;
+    protected boolean _receivedFromRouteReflectorClient;
+    @Nullable protected RoutingProtocol _srcProtocol;
+    protected int _weight;
 
     public Builder() {
       _asPath = AsPath.empty();
@@ -50,31 +44,24 @@ public final class BgpRoute extends AbstractRoute {
       _clusterList = new ImmutableSortedSet.Builder<>(Ordering.natural());
     }
 
+    /**
+     * Returns a completely new builder of type {@link B} which has all the fields unset.
+     *
+     * @return A completely new builder of type {@link B}.
+     */
+    /* This is needed in cases where we need to create a new builder having type same as any of the
+    subclasses of BgpRoute's builder but we are not sure of the exact type of the concrete child
+    class.
+    For example while evaluating a routing policy and executing its statements we need
+    to create a completely new builder which should be of the same type as environment's output
+    route builder but we are not sure of the concrete type and only know that it extends the
+    abstract BgpRoute's builder. */
+    @Nonnull
+    public abstract B newBuilder();
+
+    @Nonnull
     @Override
-    public BgpRoute build() {
-      checkArgument(_originatorIp != null, "Missing %s", PROP_ORIGINATOR_IP);
-      checkArgument(_originType != null, "Missing %s", PROP_ORIGIN_TYPE);
-      checkArgument(_protocol != null, "Missing %s", PROP_PROTOCOL);
-      return new BgpRoute(
-          getNetwork(),
-          getNextHopIp(),
-          getAdmin(),
-          _asPath,
-          _communities,
-          _discard,
-          _localPreference,
-          getMetric(),
-          _originatorIp,
-          _clusterList.build(),
-          _receivedFromRouteReflectorClient,
-          _originType,
-          _protocol,
-          _receivedFromIp,
-          _srcProtocol,
-          _weight,
-          getNonForwarding(),
-          getNonRouting());
-    }
+    public abstract R build();
 
     @Nonnull
     public AsPath getAsPath() {
@@ -87,7 +74,7 @@ public final class BgpRoute extends AbstractRoute {
     }
 
     @Nonnull
-    public SortedSet<Long> getCommunities() {
+    public SortedSet<Community> getCommunities() {
       return _communities;
     }
 
@@ -112,104 +99,107 @@ public final class BgpRoute extends AbstractRoute {
 
     @Override
     @Nonnull
-    protected Builder getThis() {
-      return this;
-    }
+    protected abstract B getThis();
 
     public int getWeight() {
       return _weight;
     }
 
-    public Builder setAsPath(AsPath asPath) {
+    public B setAsPath(AsPath asPath) {
       _asPath = asPath;
       return getThis();
     }
 
     /** Overwrite the clusterList attribute */
-    public Builder setClusterList(Set<Long> clusterList) {
+    public B setClusterList(Set<Long> clusterList) {
       _clusterList = new ImmutableSortedSet.Builder<>(Ordering.natural());
       _clusterList.addAll(clusterList);
       return getThis();
     }
 
     /** Add to the cluster list attribute */
-    public Builder addClusterList(Set<Long> clusterList) {
+    public B addClusterList(Set<Long> clusterList) {
       _clusterList.addAll(clusterList);
       return getThis();
     }
 
     /** Add to the cluster list attribute */
-    public Builder addToClusterList(Long cluster) {
+    public B addToClusterList(Long cluster) {
       _clusterList.add(cluster);
       return getThis();
     }
 
     /** Overwrite communities */
-    public Builder setCommunities(Set<Long> communities) {
-      _communities = new TreeSet<>();
+    public B setCommunities(Set<Community> communities) {
+      _communities = new TreeSet<Community>();
       _communities.addAll(communities);
       return getThis();
     }
 
     /** Add communities */
-    public Builder addCommunities(Set<Long> communities) {
+    public B addCommunities(Set<Community> communities) {
       _communities.addAll(communities);
       return getThis();
     }
 
     /** Add a single community */
-    public Builder addCommunity(Long community) {
+    public B addCommunity(Community community) {
       _communities.add(community);
       return getThis();
     }
 
     /** Add communities */
-    public Builder removeCommunities(Set<Long> communities) {
+    public B removeCommunities(Set<Community> communities) {
       _communities.removeAll(communities);
       return getThis();
     }
 
-    public Builder setDiscard(boolean discard) {
+    public B setDiscard(boolean discard) {
       _discard = discard;
       return getThis();
     }
 
-    public Builder setLocalPreference(long localPreference) {
+    public B setLocalPreference(long localPreference) {
       _localPreference = localPreference;
       return getThis();
     }
 
-    public Builder setOriginatorIp(Ip originatorIp) {
+    public @Nonnull B setNextHopInterface(String nextHopInterface) {
+      _nextHopInterface = nextHopInterface;
+      return getThis();
+    }
+
+    public B setOriginatorIp(Ip originatorIp) {
       _originatorIp = originatorIp;
       return getThis();
     }
 
-    public Builder setOriginType(OriginType originType) {
+    public B setOriginType(OriginType originType) {
       _originType = originType;
       return getThis();
     }
 
-    public Builder setProtocol(RoutingProtocol protocol) {
+    public B setProtocol(RoutingProtocol protocol) {
       _protocol = protocol;
       return getThis();
     }
 
-    public Builder setReceivedFromIp(@Nullable Ip receivedFromIp) {
+    public B setReceivedFromIp(@Nullable Ip receivedFromIp) {
       _receivedFromIp = receivedFromIp;
       return getThis();
     }
 
-    public Builder setReceivedFromRouteReflectorClient(boolean receivedFromRouteReflectorClient) {
+    public B setReceivedFromRouteReflectorClient(boolean receivedFromRouteReflectorClient) {
       _receivedFromRouteReflectorClient = receivedFromRouteReflectorClient;
       return getThis();
     }
 
-    public Builder setSrcProtocol(@Nullable RoutingProtocol srcProtocol) {
+    public B setSrcProtocol(@Nullable RoutingProtocol srcProtocol) {
       _srcProtocol = srcProtocol;
       return getThis();
     }
 
-    public Builder setWeight(int weight) {
+    public B setWeight(int weight) {
       _weight = weight;
       return getThis();
     }
@@ -218,114 +208,48 @@ public final class BgpRoute extends AbstractRoute {
   /** Default local preference for a BGP route if one is not set explicitly */
   public static final long DEFAULT_LOCAL_PREFERENCE = 100L;
 
-  private static final String PROP_AS_PATH = "asPath";
-
-  private static final String PROP_CLUSTER_LIST = "clusterList";
-
-  private static final String PROP_COMMUNITIES = "communities";
-
-  private static final String PROP_DISCARD = "discard";
-
-  private static final String PROP_LOCAL_PREFERENCE = "localPreference";
-
-  private static final String PROP_ORIGIN_TYPE = "originType";
-
-  private static final String PROP_ORIGINATOR_IP = "originatorIp";
-
-  private static final String PROP_RECEIVED_FROM_IP = "receivedFromIp";
-
-  private static final String PROP_RECEIVED_FROM_ROUTE_REFLECTOR_CLIENT =
+  public static final String PROP_AS_PATH = "asPath";
+  static final String PROP_CLUSTER_LIST = "clusterList";
+  public static final String PROP_COMMUNITIES = "communities";
+  static final String PROP_DISCARD = "discard";
+  public static final String PROP_LOCAL_PREFERENCE = "localPreference";
+  static final String PROP_ORIGIN_TYPE = "originType";
+  static final String PROP_ORIGINATOR_IP = "originatorIp";
+  static final String PROP_RECEIVED_FROM_IP = "receivedFromIp";
+  static final String PROP_RECEIVED_FROM_ROUTE_REFLECTOR_CLIENT =
       "receivedFromRouteReflectorClient";
-
-  private static final String PROP_SRC_PROTOCOL = "srcProtocol";
-
-  private static final String PROP_WEIGHT = "weight";
-
-  private static final Comparator<BgpRoute> COMPARATOR =
-      Comparator.comparing(BgpRoute::getAsPath)
-          .thenComparing(BgpRoute::getClusterList, CommonUtil::compareCollection)
-          .thenComparing(BgpRoute::getCommunities, CommonUtil::compareCollection)
-          .thenComparing(BgpRoute::getDiscard)
-          .thenComparing(BgpRoute::getLocalPreference)
-          .thenComparing(BgpRoute::getOriginType)
-          .thenComparing(BgpRoute::getOriginatorIp)
-          .thenComparing(BgpRoute::getReceivedFromIp)
-          .thenComparing(BgpRoute::getReceivedFromRouteReflectorClient)
-          .thenComparing(BgpRoute::getSrcProtocol)
-          .thenComparing(BgpRoute::getWeight);
+  static final String PROP_SRC_PROTOCOL = "srcProtocol";
+  static final String PROP_WEIGHT = "weight";
 
   private static final long serialVersionUID = 1L;
 
-  @Nonnull private final AsPath _asPath;
-  @Nonnull private final SortedSet<Long> _clusterList;
-  @Nonnull private final SortedSet<Long> _communities;
-  private final boolean _discard;
-  private final long _localPreference;
-  private final long _med;
-  @Nonnull private final Ip _nextHopIp;
-  @Nonnull private final Ip _originatorIp;
-  @Nonnull private final OriginType _originType;
-  @Nonnull private final RoutingProtocol _protocol;
-  @Nullable private final Ip _receivedFromIp;
-  private final boolean _receivedFromRouteReflectorClient;
-  @Nullable private final RoutingProtocol _srcProtocol;
+  @Nonnull protected final AsPath _asPath;
+  @Nonnull protected final SortedSet<Long> _clusterList;
+  @Nonnull protected final SortedSet<Community> _communities;
+  protected final boolean _discard;
+  protected final long _localPreference;
+  protected final long _med;
+  @Nonnull protected final String _nextHopInterface;
+  @Nonnull protected final Ip _nextHopIp;
+  @Nonnull protected final Ip _originatorIp;
+  @Nonnull protected final OriginType _originType;
+  @Nonnull protected final RoutingProtocol _protocol;
+  @Nullable protected final Ip _receivedFromIp;
+  protected final boolean _receivedFromRouteReflectorClient;
+  @Nullable protected final RoutingProtocol _srcProtocol;
   /* NOTE: Cisco-only attribute */
-  private final int _weight;
-  /* Cache the hashcode */
-  private transient volatile int _hashCode = 0;
+  protected final int _weight;
 
-  @JsonCreator
-  private static BgpRoute jsonCreator(
-      @Nullable @JsonProperty(PROP_NETWORK) Prefix network,
-      @Nullable @JsonProperty(PROP_NEXT_HOP_IP) Ip nextHopIp,
-      @JsonProperty(PROP_ADMINISTRATIVE_COST) int admin,
-      @Nullable @JsonProperty(PROP_AS_PATH) AsPath asPath,
-      @Nullable @JsonProperty(PROP_COMMUNITIES) SortedSet<Long> communities,
-      @JsonProperty(PROP_DISCARD) boolean discard,
-      @JsonProperty(PROP_LOCAL_PREFERENCE) long localPreference,
-      @JsonProperty(PROP_METRIC) long med,
-      @Nullable @JsonProperty(PROP_ORIGINATOR_IP) Ip originatorIp,
-      @Nullable @JsonProperty(PROP_CLUSTER_LIST) SortedSet<Long> clusterList,
-      @JsonProperty(PROP_RECEIVED_FROM_ROUTE_REFLECTOR_CLIENT)
-          boolean receivedFromRouteReflectorClient,
-      @Nullable @JsonProperty(PROP_ORIGIN_TYPE) OriginType originType,
-      @Nullable @JsonProperty(PROP_PROTOCOL) RoutingProtocol protocol,
-      @Nullable @JsonProperty(PROP_RECEIVED_FROM_IP) Ip receivedFromIp,
-      @Nullable @JsonProperty(PROP_SRC_PROTOCOL) RoutingProtocol srcProtocol,
-      @JsonProperty(PROP_WEIGHT) int weight) {
-    checkArgument(originatorIp != null, "Missing %s", PROP_ORIGINATOR_IP);
-    checkArgument(originType != null, "Missing %s", PROP_ORIGIN_TYPE);
-    checkArgument(protocol != null, "Missing %s", PROP_PROTOCOL);
-    return new BgpRoute(
-        network,
-        nextHopIp,
-        admin,
-        asPath,
-        communities,
-        discard,
-        localPreference,
-        med,
-        originatorIp,
-        clusterList,
-        receivedFromRouteReflectorClient,
-        originType,
-        protocol,
-        receivedFromIp,
-        srcProtocol,
-        weight,
-        false,
-        false);
-  }
-
-  private BgpRoute(
+  protected BgpRoute(
       @Nullable Prefix network,
       @Nullable Ip nextHopIp,
       int admin,
       @Nullable AsPath asPath,
-      @Nullable SortedSet<Long> communities,
+      @Nullable SortedSet<Community> communities,
       boolean discard,
       long localPreference,
       long med,
+      String nextHopInterface,
       Ip originatorIp,
       @Nullable SortedSet<Long> clusterList,
       boolean receivedFromRouteReflectorClient,
@@ -337,6 +261,11 @@ public final class BgpRoute extends AbstractRoute {
       boolean nonForwarding,
       boolean nonRouting) {
     super(network, admin, nonRouting, nonForwarding);
+    checkArgument(
+        protocol == RoutingProtocol.BGP
+            || protocol == RoutingProtocol.IBGP
+            || protocol == RoutingProtocol.AGGREGATE,
+        "Invalid BgpRoute protocol");
     _asPath = firstNonNull(asPath, AsPath.empty());
     _clusterList =
         clusterList == null ? ImmutableSortedSet.of() : ImmutableSortedSet.copyOf(clusterList);
@@ -345,6 +274,7 @@ public final class BgpRoute extends AbstractRoute {
     _discard = discard;
     _localPreference = localPreference;
     _med = med;
+    _nextHopInterface = nextHopInterface;
     _nextHopIp = firstNonNull(nextHopIp, Route.UNSET_ROUTE_NEXT_HOP_IP);
     _originatorIp = originatorIp;
     _originType = originType;
@@ -353,65 +283,6 @@ public final class BgpRoute extends AbstractRoute {
     _receivedFromRouteReflectorClient = receivedFromRouteReflectorClient;
     _srcProtocol = srcProtocol;
     _weight = weight;
-  }
-
-  public static Builder builder() {
-    return new Builder();
-  }
-
-  @Override
-  public boolean equals(@Nullable Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (!(o instanceof BgpRoute)) {
-      return false;
-    }
-    BgpRoute other = (BgpRoute) o;
-    return Objects.equals(_network, other._network)
-        && _admin == other._admin
-        && getNonRouting() == other.getNonRouting()
-        && getNonForwarding() == other.getNonForwarding()
-        && _discard == other._discard
-        && _localPreference == other._localPreference
-        && _med == other._med
-        && _receivedFromRouteReflectorClient == other._receivedFromRouteReflectorClient
-        && _weight == other._weight
-        && Objects.equals(_asPath, other._asPath)
-        && Objects.equals(_clusterList, other._clusterList)
-        && Objects.equals(_communities, other._communities)
-        && Objects.equals(_nextHopIp, other._nextHopIp)
-        && Objects.equals(_originatorIp, other._originatorIp)
-        && _originType == other._originType
-        && _protocol == other._protocol
-        && Objects.equals(_receivedFromIp, other._receivedFromIp)
-        && _srcProtocol == other._srcProtocol;
-  }
-
-  @Override
-  public int hashCode() {
-    if (_hashCode != 0) {
-      return _hashCode;
-    }
-    _hashCode =
-        Objects.hash(
-            _admin,
-            _asPath,
-            _clusterList,
-            _communities,
-            _discard,
-            _localPreference,
-            _med,
-            _network,
-            _nextHopIp,
-            _originatorIp,
-            _originType.ordinal(),
-            _protocol.ordinal(),
-            _receivedFromIp,
-            _receivedFromRouteReflectorClient,
-            _srcProtocol == null ? 0 : _srcProtocol.ordinal(),
-            _weight);
-    return _hashCode;
   }
 
   @Nonnull
@@ -428,7 +299,7 @@ public final class BgpRoute extends AbstractRoute {
 
   @Nonnull
   @JsonProperty(PROP_COMMUNITIES)
-  public SortedSet<Long> getCommunities() {
+  public SortedSet<Community> getCommunities() {
     return _communities;
   }
 
@@ -449,10 +320,12 @@ public final class BgpRoute extends AbstractRoute {
     return _med;
   }
 
+  @JsonIgnore(false)
+  @JsonProperty(PROP_NEXT_HOP_INTERFACE)
   @Nonnull
   @Override
   public String getNextHopInterface() {
-    return Route.UNSET_NEXT_HOP_INTERFACE;
+    return _nextHopInterface;
   }
 
   @Nonnull
@@ -508,36 +381,5 @@ public final class BgpRoute extends AbstractRoute {
   @JsonProperty(PROP_WEIGHT)
   public int getWeight() {
     return _weight;
-  }
-
-  @Override
-  public int routeCompare(@Nonnull AbstractRoute rhs) {
-    if (getClass() != rhs.getClass()) {
-      return 0;
-    }
-    return COMPARATOR.compare(this, (BgpRoute) rhs);
-  }
-
-  @Override
-  public Builder toBuilder() {
-    return builder()
-        .setNetwork(getNetwork())
-        .setAdmin(getAdministrativeCost())
-        .setNonRouting(getNonRouting())
-        .setNonForwarding(getNonForwarding())
-        .setAsPath(_asPath)
-        .setClusterList(_clusterList)
-        .setCommunities(_communities)
-        .setDiscard(_discard)
-        .setLocalPreference(_localPreference)
-        .setMetric(_med)
-        .setNextHopIp(_nextHopIp)
-        .setOriginatorIp(_originatorIp)
-        .setOriginType(_originType)
-        .setProtocol(_protocol)
-        .setReceivedFromIp(_receivedFromIp)
-        .setReceivedFromRouteReflectorClient(_receivedFromRouteReflectorClient)
-        .setSrcProtocol(_srcProtocol)
-        .setWeight(_weight);
   }
 }

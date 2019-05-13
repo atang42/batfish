@@ -66,14 +66,14 @@ bgp_asn
 
 community
 :
-   com = ACCEPT_OWN
-   | com = COMMUNITY_NUMBER
-   | com = DEC
-   | com = GSHUT
-   | com = INTERNET
-   | com = LOCAL_AS
-   | com = NO_ADVERTISE
-   | com = NO_EXPORT
+   ACCEPT_OWN
+   | GSHUT
+   | INTERNET
+   | LOCAL_AS
+   | NO_ADVERTISE
+   | NO_EXPORT
+   | STANDARD_COMMUNITY
+   | uint32
 ;
 
 description_line
@@ -158,6 +158,29 @@ icmp_object_type
    | TRACEROUTE
    | UNREACHABLE
    | UNSET
+;
+
+icmp_inline_object_type
+:
+   ICMP_ALTERNATE_ADDRESS
+   | ICMP_CONVERSION_ERROR
+   | ICMP_ECHO
+   | ICMP_ECHO_REPLY
+   | ICMP_INFORMATION_REPLY
+   | ICMP_INFORMATION_REQUEST
+   | ICMP_MASK_REPLY
+   | ICMP_MASK_REQUEST
+   | ICMP_MOBILE_REDIRECT
+   | ICMP_PARAMETER_PROBLEM
+   | ICMP_REDIRECT
+   | ICMP_ROUTER_ADVERTISEMENT
+   | ICMP_ROUTER_SOLICITATION
+   | ICMP_SOURCE_QUENCH
+   | ICMP_TIME_EXCEEDED
+   | ICMP_TIMESTAMP_REPLY
+   | ICMP_TIMESTAMP_REQUEST
+   | ICMP_TRACEROUTE
+   | ICMP_UNREACHABLE
 ;
 
 int_expr
@@ -291,7 +314,10 @@ port_specifier
    )
    |
    (
-      NEQ arg = port
+      NEQ
+      (
+         args += port
+      )+
    )
    |
    (
@@ -668,6 +694,11 @@ switchport_trunk_encapsulation
    | NEGOTIATE
 ;
 
+uint32
+:
+  DEC
+;
+
 variable
 :
    ~NEWLINE
@@ -727,4 +758,11 @@ variable_group_id
 variable_vlan
 :
    ~( NEWLINE | ACCESS_MAP | DEC )
+;
+
+vlan_id
+:
+  v = DEC
+  {isVlanId($v)}?
+
 ;

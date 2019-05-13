@@ -8,8 +8,10 @@ import static java.util.Comparator.nullsFirst;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.collect.Comparators;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Ordering;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -21,7 +23,7 @@ import java.util.TreeSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import org.batfish.common.util.CommonUtil;
+import org.batfish.datamodel.Names;
 
 @ParametersAreNonnullByDefault
 public final class NodeRoleDimension implements Comparable<NodeRoleDimension> {
@@ -39,16 +41,18 @@ public final class NodeRoleDimension implements Comparable<NodeRoleDimension> {
     private Builder() {
       _roleRegexes = ImmutableList.of();
       _roles = ImmutableSortedSet.of();
-      _type = Type.CUSTOM;
+      _type = NodeRoleDimension.Type.CUSTOM;
     }
 
     public @Nonnull NodeRoleDimension build() {
       checkArgument(_name != null, "Name of node role cannot be null");
       checkArgument(
-          _type != Type.AUTO || _name.startsWith(AUTO_DIMENSION_PREFIX),
+          _type != NodeRoleDimension.Type.AUTO || _name.startsWith(AUTO_DIMENSION_PREFIX),
           "Name for a AUTO role dimension must begin with: %s",
           AUTO_DIMENSION_PREFIX);
-      return new NodeRoleDimension(_name, _roles, firstNonNull(_type, Type.CUSTOM), _roleRegexes);
+      Names.checkName(_name, "role dimension", Names.Type.REFERENCE_OBJECT);
+      return new NodeRoleDimension(
+          _name, _roles, firstNonNull(_type, NodeRoleDimension.Type.CUSTOM), _roleRegexes);
     }
 
     public @Nonnull Builder setName(String name) {
@@ -84,13 +88,9 @@ public final class NodeRoleDimension implements Comparable<NodeRoleDimension> {
   public static final String AUTO_DIMENSION_PREFIX = "auto";
 
   public static final String AUTO_DIMENSION_PRIMARY = "auto0";
-
   private static final String PROP_NAME = "name";
-
   private static final String PROP_ROLES = "roles";
-
   private static final String PROP_ROLE_REGEXES = "roleRegexes";
-
   private static final String PROP_TYPE = "type";
 
   @Nonnull private final String _name;
@@ -123,22 +123,25 @@ public final class NodeRoleDimension implements Comparable<NodeRoleDimension> {
       @Nullable @JsonProperty(PROP_ROLE_REGEXES) List<String> roleRegexes) {
     checkArgument(name != null, "Name of node role cannot be null");
     checkArgument(
-        type != Type.AUTO || name.startsWith(AUTO_DIMENSION_PREFIX),
+        type != NodeRoleDimension.Type.AUTO || name.startsWith(AUTO_DIMENSION_PREFIX),
         "Name for a AUTO role dimension must begin with: %s",
         AUTO_DIMENSION_PREFIX);
     return new NodeRoleDimension(
         name,
         firstNonNull(roles, ImmutableSortedSet.of()),
-        firstNonNull(type, Type.CUSTOM),
+        firstNonNull(type, NodeRoleDimension.Type.CUSTOM),
         firstNonNull(roleRegexes, ImmutableList.of()));
   }
 
   private static final Comparator<NodeRoleDimension> COMPARATOR =
       comparing(NodeRoleDimension::getName)
-          .thenComparing(NodeRoleDimension::getRoles, nullsFirst(CommonUtil::compareCollection))
+          .thenComparing(
+              NodeRoleDimension::getRoles,
+              nullsFirst(Comparators.lexicographical(Ordering.natural())))
           .thenComparing(NodeRoleDimension::getType)
           .thenComparing(
-              NodeRoleDimension::getRoleRegexes, nullsFirst(CommonUtil::compareCollection));
+              NodeRoleDimension::getRoleRegexes,
+              nullsFirst(Comparators.lexicographical(Ordering.natural())));
 
   @Override
   public int compareTo(NodeRoleDimension o) {

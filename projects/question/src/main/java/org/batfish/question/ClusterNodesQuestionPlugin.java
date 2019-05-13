@@ -26,7 +26,6 @@ import org.batfish.datamodel.questions.Question;
 public class ClusterNodesQuestionPlugin extends QuestionPlugin {
 
   public static class ClusterNodesAnswerElement extends AnswerElement {
-
     private static final String PROP_CLUSTERS = "clusters";
 
     private List<Set<String>> _clusters;
@@ -290,33 +289,16 @@ public class ClusterNodesQuestionPlugin extends QuestionPlugin {
     }
   }
 
-  // <question_page_comment>
   /*
    * Uses a form of clustering to partition nodes into equivalence classes.
    *
    * <p>Clusters nodes based on how similar their configurations are, based on the results of
    * CompareSameName.
-   *
-   * @type ClusterNodes multifile
-   * @param namedStructTypes Set of structure types to analyze drawn from ( AsPathAccessList,
-   *     CommunityList, IkePhase1Policy, IkePhase1Proposal, IkePhase1Key, IpAccessList, IpsecPhase2Policy,
-   *     IpsecPhase2Proposal, IpsecPeerConfig, RouteFilterList, RoutingPolicy) Default value is '[]' (which
-   *     denotes all structure types).
-   * @param nodeRegex Regular expression for names of nodes to include. Default value is '.*' (all
-   *     nodes).
-   * @param numClusters The number of clusters to produce. Default value is 5.
-   * @param nameOnly If true, the clustering is based only on the presence/absence of structures of
-   *     a given name in each configuration, but the definitions of these structures are ignored.
-   *     Default value is false.
    */
   public static final class ClusterNodesQuestion extends Question {
-
     private static final String PROP_NAME_ONLY = "nameOnly";
-
     private static final String PROP_NAMED_STRUCT_TYPES = "namedStructTypes";
-
     private static final String PROP_NODE_REGEX = "nodeRegex";
-
     private static final String PROP_NUM_CLUSTERS = "numClusters";
 
     private SortedSet<String> _namedStructTypes;

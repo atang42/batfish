@@ -2,9 +2,13 @@ package org.batfish.representation.juniper;
 
 import java.io.Serializable;
 import java.util.Objects;
+import java.util.Optional;
+import org.batfish.datamodel.flow.TransformationStep.TransformationType;
+import org.batfish.datamodel.transformation.AssignPortFromPool;
+import org.batfish.datamodel.transformation.PortField;
+import org.batfish.datamodel.transformation.TransformationStep;
 
 public class PatPool implements PortAddressTranslation, Serializable {
-  /** */
   private static final long serialVersionUID = 1L;
 
   private final int _fromPort;
@@ -38,5 +42,11 @@ public class PatPool implements PortAddressTranslation, Serializable {
   @Override
   public int hashCode() {
     return Objects.hash(_fromPort, _toPort);
+  }
+
+  @Override
+  public Optional<TransformationStep> toTransformationStep(
+      TransformationType type, PortField field) {
+    return Optional.of(new AssignPortFromPool(type, field, _fromPort, _toPort));
   }
 }

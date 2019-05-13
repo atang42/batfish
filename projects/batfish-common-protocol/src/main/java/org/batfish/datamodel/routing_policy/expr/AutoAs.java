@@ -10,7 +10,6 @@ import org.batfish.datamodel.routing_policy.Environment.Direction;
 
 public class AutoAs extends AsExpr {
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   @Override
@@ -29,7 +28,7 @@ public class AutoAs extends AsExpr {
 
   @Override
   public long evaluate(Environment environment) {
-    BgpProcess proc = environment.getVrf().getBgpProcess();
+    BgpProcess proc = environment.getBgpProcess();
     if (proc == null) {
       throw new BatfishException("Expected BGP process");
     }
@@ -46,7 +45,7 @@ public class AutoAs extends AsExpr {
       throw new BatfishException("Expected a peer with address: " + peerAddress);
     }
     if (direction == Direction.IN) {
-      as = neighbor.getRemoteAs();
+      as = neighbor.getRemoteAsns().singletonValue();
     } else if (direction == Direction.OUT) {
       as = neighbor.getLocalAs();
     } else {

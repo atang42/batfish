@@ -21,8 +21,10 @@ import java.util.Set;
 import java.util.SortedMap;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
+import org.batfish.datamodel.ConnectedRoute;
 import org.batfish.datamodel.DataPlane;
 import org.batfish.datamodel.Fib;
+import org.batfish.datamodel.FibEntry;
 import org.batfish.datamodel.Flow;
 import org.batfish.datamodel.FlowDisposition;
 import org.batfish.datamodel.Interface;
@@ -63,10 +65,12 @@ public class TracerouteEngineTest {
      * 2. the interface's vrf has a route to the destination
      * 3. the destination is not on the incoming edge.
      */
-    Set<String> nextHopInterfaces = ifaceFib.getNextHopInterfaces(arpIp);
+    Set<FibEntry> nextHopInterfaces = ifaceFib.get(arpIp);
     return iface.getProxyArp()
         && !nextHopInterfaces.isEmpty()
-        && nextHopInterfaces.stream().noneMatch(iface.getName()::equals);
+        && nextHopInterfaces.stream()
+            .map(FibEntry::getInterfaceName)
+            .noneMatch(iface.getName()::equals);
   }
 
   /*
@@ -108,7 +112,9 @@ public class TracerouteEngineTest {
 
     // Compute flow traces
     SortedMap<Flow, List<Trace>> traces =
-        new TracerouteEngineImpl(dp).computeTraces(ImmutableSet.of(flow1, flow2), false);
+        new TracerouteEngineImpl(
+                dp, batfish.getTopologyProvider().getLayer3Topology(batfish.getNetworkSnapshot()))
+            .computeTraces(ImmutableSet.of(flow1, flow2), false);
 
     assertThat(traces, hasEntry(equalTo(flow1), contains(hasDisposition(NO_ROUTE))));
     assertThat(traces, hasEntry(equalTo(flow2), contains(hasDisposition(ACCEPTED))));
@@ -151,7 +157,10 @@ public class TracerouteEngineTest {
             .setTag("tag")
             .build();
     List<Trace> traces =
-        new TracerouteEngineImpl(dp).computeTraces(ImmutableSet.of(flow), false).get(flow);
+        new TracerouteEngineImpl(
+                dp, batfish.getTopologyProvider().getLayer3Topology(batfish.getNetworkSnapshot()))
+            .computeTraces(ImmutableSet.of(flow), false)
+            .get(flow);
 
     /*
      *  Since the 'other' neighbor should not respond to ARP:
@@ -184,13 +193,19 @@ public class TracerouteEngineTest {
     String i4Name = i4.getName();
 
     // vrf1 has no routes to arpIp
-    Fib vrf1Fib = MockFib.builder().setNextHopInterfacesByIp(ImmutableMap.of()).build();
+    Fib vrf1Fib = MockFib.builder().setFibEntries(ImmutableMap.of()).build();
 
     // vrf2 routes arpIp through i4
     Fib vrf2Fib =
         MockFib.builder()
-            .setNextHopInterfacesByIp(
-                ImmutableMap.of(arpIp, ImmutableMap.of(i4Name, ImmutableMap.of())))
+            .setFibEntries(
+                ImmutableMap.of(
+                    arpIp,
+                    ImmutableSet.of(
+                        new FibEntry(
+                            arpIp,
+                            i4Name,
+                            ImmutableList.of(new ConnectedRoute(i4.getPrimaryNetwork(), i4Name))))))
             .build();
 
     assertFalse(
@@ -222,9 +237,18 @@ public class TracerouteEngineTest {
     arpIp = Ip.parse("4.4.4.0");
     vrf2Fib =
         MockFib.builder()
-            .setNextHopInterfacesByIp(
+            .setFibEntries(
                 ImmutableMap.of(
-                    arpIp, ImmutableMap.of(i1Name, ImmutableMap.of(), i4Name, ImmutableMap.of())))
+                    arpIp,
+                    ImmutableSet.of(
+                        new FibEntry(
+                            arpIp,
+                            i1Name,
+                            ImmutableList.of(new ConnectedRoute(i1.getPrimaryNetwork(), i1Name))),
+                        new FibEntry(
+                            arpIp,
+                            i4Name,
+                            ImmutableList.of(new ConnectedRoute(i4.getPrimaryNetwork(), i4Name))))))
             .build();
     assertFalse(
         "ARP request for interface subnet to the same interface should fail, "
@@ -322,7 +346,8 @@ public class TracerouteEngineTest {
 
     _thrown.expect(IllegalArgumentException.class);
     _thrown.expectMessage("Node missingNode is not in the network");
-    new TracerouteEngineImpl(dp)
+    new TracerouteEngineImpl(
+            dp, batfish.getTopologyProvider().getLayer3Topology(batfish.getNetworkSnapshot()))
         .computeTraces(
             ImmutableSet.of(Flow.builder().setTag("tag").setIngressNode("missingNode").build()),
             false);

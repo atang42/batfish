@@ -1,7 +1,6 @@
 package org.batfish.datamodel.visitors;
 
 import java.util.Optional;
-import org.batfish.common.bdd.BDDInteger;
 import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.bdd.IpSpaceToBDD;
 import org.batfish.datamodel.Ip;
@@ -13,8 +12,7 @@ public final class IpSpaceRepresentative {
 
   public IpSpaceRepresentative() {
     BDDPacket bddPacket = new BDDPacket();
-    BDDInteger ipAddrBdd = bddPacket.getDstIp();
-    _ipSpaceToBDD = new IpSpaceToBDD(ipAddrBdd);
+    _ipSpaceToBDD = bddPacket.getDstIpSpaceToBDD();
   }
 
   /** Returns some representative element of an {@link IpSpace ip space}, if any exists. */

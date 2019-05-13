@@ -1,61 +1,54 @@
 package org.batfish.specifier.parboiled;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import static org.batfish.specifier.parboiled.Anchor.Type.CHAR_LITERAL;
+import static org.batfish.specifier.parboiled.Anchor.Type.IGNORE;
+import static org.batfish.specifier.parboiled.Anchor.Type.STRING_LITERAL;
+import static org.batfish.specifier.parboiled.Anchor.Type.WHITESPACE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.annotation.Nullable;
+import java.util.stream.IntStream;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.parboiled.errors.InvalidInputError;
 import org.parboiled.support.MatcherPath;
-import org.parboiled.support.MatcherPath.Element;
 import org.parboiled.support.ParsingResult;
 
 /** A helper class to interpret parser errors */
 @ParametersAreNonnullByDefault
 final class ParserUtils {
 
-  /**
-   * Captures anchors in potentially matching paths for anchor error reporting and auto completion.
-   */
-  private static class PathAnchor {
-    private final Anchor.Type _anchorType;
-    private final Element _element;
-
-    PathAnchor(Element element, Anchor.Type anchorType) {
-      this._element = element;
-      this._anchorType = anchorType;
-    }
-
-    Anchor.Type getAnchorType() {
-      return _anchorType;
-    }
-
-    Element getElement() {
-      return _element;
-    }
-  }
-
   static AstNode getAst(ParsingResult<AstNode> result) {
-    checkArgument(
-        result.parseErrors.isEmpty(),
-        "Cannot get AST because parsing failed for '%s'",
-        result.inputBuffer);
+    if (!result.parseErrors.isEmpty()) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Cannot get AST. Parsing failed for '%s' at index %s",
+              result.inputBuffer.extract(0, Integer.MAX_VALUE),
+              result.parseErrors.get(0).getStartIndex()));
+    }
     return Iterables.getOnlyElement(result.valueStack);
   }
 
   /** Generates a friendly message to explain what might be wrong with parser input */
   static String getErrorString(
       String input,
-      String inputType,
+      Grammar grammar,
       InvalidInputError error,
-      Map<String, Anchor.Type> completionTypes) {
-    return getErrorString(
-        input, inputType, error.getStartIndex(), getPotentialMatches(error, completionTypes, true));
+      Map<String, Anchor.Type> anchorTypes) {
+    return String.format(
+        "%s. See %s for valid grammar.",
+        getErrorString(
+            input,
+            grammar.getFriendlyName(),
+            error.getStartIndex(),
+            getPotentialMatches(error, anchorTypes, true)),
+        grammar.getFullUrl());
   }
 
   /** Generates a friendly message to explain what might be wrong with parser input */
@@ -70,6 +63,7 @@ final class ParserUtils {
       retString.append(
           potentialMatches.stream()
               .map(ParserUtils::getErrorString)
+              .distinct()
               .collect(Collectors.joining(" or ")));
       retString.append(".");
     }
@@ -80,7 +74,7 @@ final class ParserUtils {
   @VisibleForTesting
   static String getErrorString(PotentialMatch pm) {
     if (pm.getAnchorType().equals(Anchor.Type.STRING_LITERAL)) {
-      return String.format("'%s'", pm.getMatchCompletion());
+      return String.format("'%s'", pm.getMatch());
     }
     return String.format("%s", pm.getAnchorType());
   }
@@ -107,83 +101,102 @@ final class ParserUtils {
     ImmutableSet.Builder<PotentialMatch> potentialMatches = ImmutableSet.builder();
 
     for (MatcherPath path : error.getFailedMatchers()) {
-      PathAnchor pathAnchor =
-          findPathAnchor(path, fromTop ? 0 : path.length() - 1, anchorTypes, fromTop);
+      // convert the parboiled path to a list of PathElement
+      List<PathElement> pathElements =
+          IntStream.range(0, path.length())
+              .mapToObj(i -> PathElement.create(path.getElementAtLevel(i), anchorTypes))
+              .collect(ImmutableList.toImmutableList());
 
-      if (pathAnchor == null) {
-        // Getting here means the grammar is missing a Anchor annotation. See Parser's JavaDoc.
-        throw new IllegalStateException(
-            String.format("Useful completion not found in path %s", path));
+      // at least one anchor should exist along every path
+      if (!pathElements.stream().anyMatch(pe -> pe.getAnchorType() != null)) {
+        throw new IllegalStateException(String.format("No anchor found for path %s", path));
       }
 
-      // Ignore paths whose anchor is WHITESPACE -- nothing interesting to report there
-      if (pathAnchor._anchorType.equals(Anchor.Type.WHITESPACE)) {
+      // Do not consider DEPRECATED paths
+      if (pathElements.stream().anyMatch(e -> e.getAnchorType() == Anchor.Type.DEPRECATED)) {
         continue;
       }
 
-      /*
-       The PotentialMatch object is straightforward given the anchor. Except that for string
-       literals, we remove the quotes inserted by parboiled.
-      */
-      String matchPrefix =
-          error
-              .getInputBuffer()
-              .extract(pathAnchor.getElement().startIndex, path.element.startIndex);
+      Optional<PathElement> pathAnchorOpt =
+          fromTop
+              ? findPathAnchorFromTop(pathElements)
+              : findPathAnchorFromBottom(pathElements, path.length() - 1);
 
-      if (pathAnchor._anchorType.equals(Anchor.Type.STRING_LITERAL)) {
-        String fullToken = pathAnchor.getElement().matcher.getLabel();
-        if (fullToken.length() >= 2) { // remove surrounding quotes
-          fullToken = fullToken.substring(1, fullToken.length() - 1);
-        }
-        potentialMatches.add(
-            new PotentialMatch(
-                pathAnchor.getAnchorType(),
-                matchPrefix,
-                fullToken.substring(matchPrefix.length())));
-      } else {
-        potentialMatches.add(new PotentialMatch(pathAnchor.getAnchorType(), matchPrefix, null));
+      if (!pathAnchorOpt.isPresent() || pathAnchorOpt.get().getAnchorType() == WHITESPACE) {
+        continue;
       }
+
+      PathElement pathAnchor = pathAnchorOpt.get();
+      String matchPrefix =
+          error.getInputBuffer().extract(pathAnchor.getStartIndex(), path.element.startIndex);
+
+      potentialMatches.add(new PotentialMatch(pathAnchor, matchPrefix, pathElements));
     }
 
     return potentialMatches.build();
   }
 
-  /** Finds the anchor in the path. Returns null if none is found. */
-  @Nullable
-  private static PathAnchor findPathAnchor(
-      MatcherPath path, int level, Map<String, Anchor.Type> completionTypes, boolean fromTop) {
+  /** Finds the anchor in the path, from bottom to top, starting at {@code level}. */
+  @VisibleForTesting
+  static Optional<PathElement> findPathAnchorFromBottom(List<PathElement> pathElements, int level) {
 
-    MatcherPath.Element element = path.getElementAtLevel(level);
-    String label = element.matcher.getLabel();
-
-    if (completionTypes.containsKey(label)) {
-      return new PathAnchor(element, completionTypes.get(label));
-    } else if (isStringLiteralLabel(label)) {
-      return new PathAnchor(element, Anchor.Type.STRING_LITERAL);
-    } else if (isCharLiteralLabel(label)) {
-      // char literals appear at the bottom; if we are searching from top, we've reached the end
-      if (fromTop || level == 0) {
-        return new PathAnchor(element, Anchor.Type.STRING_LITERAL);
-      }
-      // if the parent label is a literal string (e.g., "@specifier"), use that because we want to
-      // autocomplete the entire string not just one of its characters
-      MatcherPath.Element parentElement = path.getElementAtLevel(level - 1);
-      if (isStringLiteralLabel(parentElement.matcher.getLabel())) {
-        return new PathAnchor(parentElement, Anchor.Type.STRING_LITERAL);
-      }
-      return new PathAnchor(element, Anchor.Type.STRING_LITERAL);
-    } else if ((fromTop && level == path.length() - 1) || (!fromTop && level == 0)) {
-      // we have reached the last element in the path
-      return null;
+    // Return empty if our time is up
+    if (level < 0) {
+      return Optional.empty();
     }
-    return findPathAnchor(path, fromTop ? level + 1 : level - 1, completionTypes, fromTop);
+
+    PathElement element = pathElements.get(level);
+
+    // If we have descended from IGNORE go past that
+    if (level > 0) {
+      Optional<PathElement> ignoreAncestor = findIgnoreAncestor(pathElements, level - 1);
+      if (ignoreAncestor.isPresent()) {
+        return findPathAnchorFromBottom(pathElements, ignoreAncestor.get().getLevel() - 1);
+      }
+    }
+
+    if (element.getAnchorType() == CHAR_LITERAL) {
+      // if the parent label is STRING_LITERAL (e.g., "@specifier"), use that because we want to
+      // autocomplete the entire string not just one of its characters
+      if (level > 0 && pathElements.get(level - 1).getAnchorType() == STRING_LITERAL) {
+        return Optional.of(pathElements.get(level - 1));
+      }
+      return Optional.of(element);
+    } else if (element.getAnchorType() != null && element.getAnchorType() != IGNORE) {
+      return Optional.of(element);
+    }
+    return findPathAnchorFromBottom(pathElements, level - 1);
   }
 
-  private static boolean isCharLiteralLabel(String label) {
+  /**
+   * Checks if an ancestor of element at {@code level} is of Anchor.Type == IGNORE. Returns the
+   * level of the ancestor if so. Returns -1 otherwise.
+   */
+  private static Optional<PathElement> findIgnoreAncestor(
+      List<PathElement> pathElements, int level) {
+    return IntStream.rangeClosed(0, level)
+        .mapToObj(i -> pathElements.get(level - i)) // "level - i" to walk the list from bottom
+        .filter(e -> e.getAnchorType() == IGNORE)
+        .findFirst();
+  }
+
+  private static Optional<PathElement> findPathAnchorFromTop(List<PathElement> pathElements) {
+    return pathElements.stream()
+        .filter(
+            e ->
+                e.getAnchorType() != null
+                    && e.getAnchorType() != IGNORE
+                    && e.getAnchorType() != Anchor.Type.WHITESPACE)
+        .findFirst();
+  }
+
+  @VisibleForTesting
+  static boolean isCharLiteralLabel(String label) {
     return label.startsWith("\'") && label.endsWith("\'");
   }
 
-  private static boolean isStringLiteralLabel(String label) {
+  @VisibleForTesting
+  static boolean isStringLiteralLabel(String label) {
     return label.startsWith("\"") && label.endsWith("\"");
   }
 }

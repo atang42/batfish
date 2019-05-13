@@ -9,8 +9,9 @@
     "maxTraces": "${maxTraces}",
     "pathConstraints": "${pathConstraints}",
     "instance": {
-        "description": "Find flows that match the ingress and egress location, src and dest ip address and disposition constraints, as described by the input specifiers.",
+        "description": "Find flows that match the specified path and header space conditions.",
         "instanceName": "reachability",
+        "longDescription": "Searches across all flows that match the specified conditions and returns examples of such flows. This question can be used to ensure that certain services are globally accessible and parts of the network are perfectly isolated from each other.",
         "orderedVariableNames": [
             "pathConstraints",
             "headers",
@@ -37,18 +38,18 @@
                 "type": "headerConstraint",
                 "displayName": "Headers",
                 "fields": {
-                    "applications": { "optional": true },
+                    "applications": { "optional": true, "type": "applicationSpec"},
                     "dscps": { "optional": true },
-                    "dstIps": { "optional": true },
+                    "dstIps": { "optional": true, "type": "ipSpaceSpec" },
                     "dstPorts": { "optional": true },
                     "ecns": { "optional": true },
                     "flowStates": { "optional": true },
                     "fragmentOffsets": { "optional": true },
                     "icmpCodes": { "optional": true },
                     "icmpTypes": { "optional": true },
-                    "ipProtocols": { "optional": true },
+                    "ipProtocols": { "optional": true, "type": "ipProtocolSpec" },
                     "packetLengths": { "optional": true },
-                    "srcIps": { "optional": true },
+                    "srcIps": { "optional": true, "type": "ipSpaceSpec" },
                     "srcPorts": { "optional": true },
                     "tcpFlags": { "optional": true }
                 }
@@ -77,10 +78,10 @@
                 "type": "pathConstraint",
                 "displayName": "Path Constraints",
                 "fields": {
-                    "startLocation": { "optional": true },
-                    "endLocation": { "optional": true },
-                    "transitLocations": { "optional": true },
-                    "forbiddenLocations": { "optional": true }
+                    "startLocation": { "optional": true, "type": "locationSpec" },
+                    "endLocation": { "optional": true, "type": "nodeSpec" },
+                    "transitLocations": { "optional": true, "type": "nodeSpec" },
+                    "forbiddenLocations": { "optional": true, "type": "nodeSpec" }
                 }
             }
         }

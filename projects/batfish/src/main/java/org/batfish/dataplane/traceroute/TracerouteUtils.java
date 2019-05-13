@@ -8,21 +8,19 @@ import static org.batfish.datamodel.flow.StepAction.NEIGHBOR_UNREACHABLE;
 import static org.batfish.datamodel.flow.StepAction.RECEIVED;
 import static org.batfish.datamodel.transformation.Transformation.always;
 import static org.batfish.datamodel.transformation.TransformationStep.assignSourceIp;
+import static org.batfish.datamodel.transformation.TransformationStep.assignSourcePort;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.TreeMultimap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import org.batfish.datamodel.AbstractRoute;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.FilterResult;
 import org.batfish.datamodel.Flow;
@@ -33,7 +31,7 @@ import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.LineAction;
-import org.batfish.datamodel.Route;
+import org.batfish.datamodel.TcpFlags;
 import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.flow.EnterInputIfaceStep;
 import org.batfish.datamodel.flow.EnterInputIfaceStep.EnterInputIfaceStepDetail;
@@ -181,6 +179,25 @@ public final class TracerouteUtils {
         .setIngressNode(returnIngressNode)
         .setIngressVrf(returnIngressVrf)
         .setIngressInterface(returnIngressIface)
+        .setTcpFlags(getTcpFlagsForReverse(forwardFlow.getTcpFlags()))
+        .build();
+  }
+
+  /**
+   * Find the TCP flags for the reverse flow. Inferring only the SYN and ACK flags for the reverse
+   * flow from the forward TCP flags and copying rest of the flags unmodified.
+   */
+  @VisibleForTesting
+  static TcpFlags getTcpFlagsForReverse(TcpFlags tcpFlags) {
+    return TcpFlags.builder()
+        .setAck(tcpFlags.getSyn() || tcpFlags.getAck())
+        .setSyn(tcpFlags.getSyn() && !tcpFlags.getAck())
+        .setRst(tcpFlags.getRst())
+        .setFin(tcpFlags.getFin())
+        .setUrg(tcpFlags.getUrg())
+        .setEce(tcpFlags.getEce())
+        .setPsh(tcpFlags.getPsh())
+        .setCwr(tcpFlags.getCwr())
         .build();
   }
 
@@ -203,34 +220,6 @@ public final class TracerouteUtils {
     return builder.build();
   }
 
-  @Nonnull
-  static Multimap<Ip, AbstractRoute> resolveNextHopIpRoutes(
-      String nextHopInterfaceName,
-      Map<AbstractRoute, Map<String, Map<Ip, Set<AbstractRoute>>>> nextHopInterfacesByRoute) {
-    TreeMultimap<Ip, AbstractRoute> resolvedNextHopWithRoutes = TreeMultimap.create();
-
-    // Loop over all matching routes that use nextHopInterfaceName as one of the next hop
-    // interfaces.
-    for (Entry<AbstractRoute, Map<String, Map<Ip, Set<AbstractRoute>>>> e :
-        nextHopInterfacesByRoute.entrySet()) {
-      Map<Ip, Set<AbstractRoute>> finalNextHops = e.getValue().get(nextHopInterfaceName);
-      if (finalNextHops == null || finalNextHops.isEmpty()) {
-        continue;
-      }
-
-      AbstractRoute routeCandidate = e.getKey();
-      Ip nextHopIp = routeCandidate.getNextHopIp();
-      if (nextHopIp.equals(Route.UNSET_ROUTE_NEXT_HOP_IP)) {
-        resolvedNextHopWithRoutes.put(nextHopIp, routeCandidate);
-      } else {
-        for (Ip resolvedNextHopIp : finalNextHops.keySet()) {
-          resolvedNextHopWithRoutes.put(resolvedNextHopIp, routeCandidate);
-        }
-      }
-    }
-    return resolvedNextHopWithRoutes;
-  }
-
   @Nullable
   static Transformation sessionTransformation(Flow inputFlow, Flow currentFlow) {
     ImmutableList.Builder<org.batfish.datamodel.transformation.TransformationStep>
@@ -241,11 +230,23 @@ public final class TracerouteUtils {
       transformationStepsBuilder.add(assignSourceIp(origDstIp, origDstIp));
     }
 
+    Integer origDstPort = inputFlow.getDstPort();
+    if (!origDstPort.equals(currentFlow.getDstPort())) {
+      transformationStepsBuilder.add(assignSourcePort(origDstPort, origDstPort));
+    }
+
     Ip origSrcIp = inputFlow.getSrcIp();
     if (!origSrcIp.equals(currentFlow.getSrcIp())) {
       transformationStepsBuilder.add(
           org.batfish.datamodel.transformation.TransformationStep.assignDestinationIp(
               origSrcIp, origSrcIp));
+    }
+
+    Integer origSrcPort = inputFlow.getSrcPort();
+    if (!origSrcPort.equals(currentFlow.getSrcPort())) {
+      transformationStepsBuilder.add(
+          org.batfish.datamodel.transformation.TransformationStep.assignDestinationPort(
+              origSrcPort, origSrcPort));
     }
 
     List<org.batfish.datamodel.transformation.TransformationStep> transformationSteps =

@@ -5,13 +5,14 @@ import static org.hamcrest.Matchers.equalTo;
 
 import com.google.common.collect.ImmutableSet;
 import java.util.Set;
-import java.util.SortedSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.batfish.datamodel.IntegerSpace;
 import org.batfish.datamodel.Interface;
+import org.batfish.datamodel.Interface.Dependency;
 import org.batfish.datamodel.InterfaceAddress;
-import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.InterfaceType;
+import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.SwitchportMode;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.eigrp.EigrpInterfaceSettings;
@@ -24,10 +25,13 @@ import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasAllAddresses;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasAllowedVlans;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasBandwidth;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasDeclaredNames;
+import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasDependencies;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasDescription;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasEigrp;
+import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasEncapsulationVlan;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasHsrpGroup;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasHsrpVersion;
+import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasInterfaceType;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasIsis;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasMlagId;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasMtu;
@@ -36,11 +40,13 @@ import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasNativeVlan;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasOspfArea;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasOspfAreaName;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasOspfCost;
+import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasOspfEnabled;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasOspfPointToPoint;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasSpeed;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasSwitchPortMode;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasVlan;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasVrf;
+import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasVrfName;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.HasZoneName;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.IsActive;
 import org.batfish.datamodel.matchers.InterfaceMatchersImpl.IsOspfPassive;
@@ -113,7 +119,7 @@ public final class InterfaceMatchers {
    * additional arp IPs.
    */
   public static HasAdditionalArpIps hasAdditionalArpIps(
-      @Nonnull Matcher<? super SortedSet<Ip>> subMatcher) {
+      @Nonnull Matcher<? super IpSpace> subMatcher) {
     return new HasAdditionalArpIps(subMatcher);
   }
 
@@ -153,6 +159,15 @@ public final class InterfaceMatchers {
   }
 
   /**
+   * Provides a matcher that matches if the provided {@code subMatcher} matches the {@link
+   * Interface}'s dependencies.
+   */
+  public static @Nonnull Matcher<Interface> hasDependencies(
+      @Nonnull Matcher<? super Set<Dependency>> subMatcher) {
+    return new HasDependencies(subMatcher);
+  }
+
+  /**
    * Provides a matcher that matches if the {@link Interface}'s description is {@code
    * expectedDescription}.
    */
@@ -167,6 +182,32 @@ public final class InterfaceMatchers {
   public static @Nonnull Matcher<Interface> hasEigrp(
       @Nonnull Matcher<? super EigrpInterfaceSettings> subMatcher) {
     return new HasEigrp(subMatcher);
+  }
+
+  /**
+   * Provides a matcher that matches if interface's encapsulationVlan is {@code
+   * expectedEncapsulationVlan}.
+   */
+  public static @Nonnull Matcher<Interface> hasEncapsulationVlan(int expectedEncapsulationVlan) {
+    return new HasEncapsulationVlan(equalTo(expectedEncapsulationVlan));
+  }
+
+  /**
+   * Provides a matcher that matches if interface's encapsulationVlan is matched by the provided
+   * {@code subMatcher}.
+   */
+  public static @Nonnull Matcher<Interface> hasEncapsulationVlan(
+      @Nonnull Matcher<? super Integer> subMatcher) {
+    return new HasEncapsulationVlan(subMatcher);
+  }
+
+  /**
+   * Provides a matcher that matches if the {@link Interface}'s interfaceType is {@code
+   * expectedInterfaceType}.
+   */
+  public static @Nonnull Matcher<Interface> hasInterfaceType(
+      @Nonnull InterfaceType expectedInterfaceType) {
+    return new HasInterfaceType(equalTo(expectedInterfaceType));
   }
 
   /**
@@ -270,6 +311,11 @@ public final class InterfaceMatchers {
     return new HasOspfCost(subMatcher);
   }
 
+  /** Provides an {@link Interface} matcher that matches if the interface has OSPF enabled. */
+  public static HasOspfEnabled hasOspfEnabled() {
+    return new HasOspfEnabled(equalTo(true));
+  }
+
   /**
    * Provides a matcher that matches if the provided {@code subMatcher} matches the interface's OSPF
    * point to point.
@@ -325,6 +371,11 @@ public final class InterfaceMatchers {
    */
   public static HasVrf hasVrf(Matcher<? super Vrf> subMatcher) {
     return new HasVrf(subMatcher);
+  }
+
+  /** Provides a matcher that matches if the interface's vrfName is {@code expectedVrfName}. */
+  public static @Nonnull Matcher<Interface> hasVrfName(@Nonnull String expectedVrfName) {
+    return new HasVrfName(equalTo(expectedVrfName));
   }
 
   /**

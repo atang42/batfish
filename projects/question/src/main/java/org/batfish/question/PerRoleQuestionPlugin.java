@@ -28,7 +28,6 @@ import org.batfish.role.NodeRoleDimension;
 public class PerRoleQuestionPlugin extends QuestionPlugin {
 
   public static class PerRoleAnswerElement extends AnswerElement {
-
     private static final String PROP_ANSWERS = "answers";
 
     private SortedMap<String, AnswerElement> _answers;
@@ -125,8 +124,7 @@ public class PerRoleQuestionPlugin extends QuestionPlugin {
     }
   }
 
-  // <question_page_comment>
-  /*
+  /**
    * Answers a given question separately on each "role" within the specified dimension.
    *
    * <p>It is common for the nodes in a network to be partitioned into roles that each have a
@@ -135,23 +133,11 @@ public class PerRoleQuestionPlugin extends QuestionPlugin {
    * responsible for delivering packets to end hosts within the network. Roles can be useful for
    * improving the precision and utility of several other questions. For example, it may only make
    * sense to run the CompareSameName question on nodes that have the same role.
-   *
-   * @type PerRole multifile
-   * @param question The question to ask on each role. This parameter is mandatory.
-   * @param roles List of the role names to include in the answer. Default is to use all role names.
-   * @param nodeRegex Regular expression for names of nodes to include. Default value is '.*' (all
-   *     nodes). *
-   * @param roleDimension Specifies the role dimension to use. If not provided, the default is to
-   *     use the primary auto inferred role dimension.
    */
   public static final class PerRoleQuestion extends Question {
-
     private static final String PROP_NODE_REGEX = "nodeRegex";
-
     private static final String PROP_QUESTION = "question";
-
     private static final String PROP_ROLES = "roles";
-
     private static final String PROP_ROLE_DIMENSION = "roleDimension";
 
     @Nonnull private NodesSpecifier _nodeRegex;

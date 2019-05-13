@@ -7,7 +7,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.io.Serializable;
-import java.util.Comparator;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -16,14 +15,10 @@ import javax.annotation.ParametersAreNonnullByDefault;
  * A base class for all types of routes supported in the dataplane computation, making this the most
  * general route type available. "Main" non-protocol-specific RIBs store and reason about this type
  * of route.
- *
- * <p><i>Note:</i> This class implements {@link Comparable} because we put AbstractRoute in ordered
- * collections all throughout the codebase. {@link #compareTo(AbstractRoute)} has <b>NO</b> impact
- * on route preference.
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, property = "class")
 @ParametersAreNonnullByDefault
-public abstract class AbstractRoute implements Serializable, Comparable<AbstractRoute> {
+public abstract class AbstractRoute implements AbstractRouteDecorator, Serializable {
 
   private static final long serialVersionUID = 1L;
 
@@ -31,7 +26,7 @@ public abstract class AbstractRoute implements Serializable, Comparable<Abstract
   public static final int NO_TAG = -1;
 
   static final String PROP_ADMINISTRATIVE_COST = "administrativeCost";
-  static final String PROP_METRIC = "metric";
+  public static final String PROP_METRIC = "metric";
   static final String PROP_NETWORK = "network";
   static final String PROP_NEXT_HOP_INTERFACE = "nextHopInterface";
   static final String PROP_NEXT_HOP_IP = "nextHopIp";
@@ -62,24 +57,16 @@ public abstract class AbstractRoute implements Serializable, Comparable<Abstract
   }
 
   @Override
-  public final int compareTo(AbstractRoute rhs) {
-    return Comparator.comparing(AbstractRoute::getNetwork)
-        .thenComparingInt(AbstractRoute::getAdministrativeCost)
-        .thenComparing(AbstractRoute::getMetric)
-        .thenComparing(AbstractRoute::routeCompare)
-        .thenComparing(AbstractRoute::getNextHopIp)
-        .thenComparing(AbstractRoute::getNextHopInterface)
-        .thenComparingInt(AbstractRoute::getTag)
-        .thenComparing(AbstractRoute::getNonRouting)
-        .thenComparing(AbstractRoute::getNonForwarding)
-        .compare(this, rhs);
-  }
-
-  @Override
   public abstract boolean equals(Object o);
 
   @Override
   public abstract int hashCode();
+
+  @JsonIgnore
+  @Override
+  public AbstractRoute getAbstractRoute() {
+    return this;
+  }
 
   public final int getAdministrativeCost() {
     return _admin;
@@ -90,6 +77,7 @@ public abstract class AbstractRoute implements Serializable, Comparable<Abstract
 
   /** IPV4 network of this route */
   @JsonProperty(PROP_NETWORK)
+  @Override
   @Nonnull
   public final Prefix getNetwork() {
     return _network;
@@ -100,7 +88,6 @@ public abstract class AbstractRoute implements Serializable, Comparable<Abstract
    * Route#UNSET_NEXT_HOP_INTERFACE} must be returned.
    */
   @JsonIgnore
-  @Nonnull
   public abstract String getNextHopInterface();
 
   /**
@@ -108,7 +95,6 @@ public abstract class AbstractRoute implements Serializable, Comparable<Abstract
    * returned.
    */
   @JsonIgnore
-  @Nonnull
   public abstract Ip getNextHopIp();
 
   /**
@@ -132,18 +118,6 @@ public abstract class AbstractRoute implements Serializable, Comparable<Abstract
   /** Return the route's tag or {@link #NO_TAG} if no tag is present */
   @JsonIgnore
   public abstract int getTag();
-
-  /**
-   * Helps implement the {@link Comparable} interface. Implement this function to establish ordering
-   * for a particular type of route (presumably with more properties than only {@link #_network} and
-   * {@link #_admin}).
-   *
-   * <p>Guiding principle: comparison with routes of a different type should return 0.
-   *
-   * <p><b>Note</b>: this does nothing for route preference computation, that's the job of a {@link
-   * GenericRib}.
-   */
-  public abstract int routeCompare(@Nonnull AbstractRoute rhs);
 
   @Override
   public String toString() {

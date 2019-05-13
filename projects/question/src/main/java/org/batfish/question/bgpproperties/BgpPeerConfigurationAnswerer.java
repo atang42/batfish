@@ -18,7 +18,6 @@ import com.google.common.collect.Multiset;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -30,7 +29,7 @@ import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.BgpPassivePeerConfig;
 import org.batfish.datamodel.BgpPeerConfig;
 import org.batfish.datamodel.BgpProcess;
-import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.BgpUnnumberedPeerConfig;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.answers.Schema;
@@ -46,11 +45,14 @@ import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.Row.RowBuilder;
 import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.datamodel.table.TableMetadata;
+import org.batfish.specifier.NodeSpecifier;
+import org.batfish.specifier.SpecifierContext;
 
 public class BgpPeerConfigurationAnswerer extends Answerer {
 
   public static final String COL_NODE = "Node";
   public static final String COL_VRF = "VRF";
+  public static final String COL_LOCAL_INTERFACE = "Local_Interface";
   public static final String COL_REMOTE_IP = "Remote_IP";
 
   private static final List<String> COLUMN_ORDER =
@@ -59,6 +61,7 @@ public class BgpPeerConfigurationAnswerer extends Answerer {
           COL_VRF,
           LOCAL_AS,
           LOCAL_IP,
+          COL_LOCAL_INTERFACE,
           REMOTE_AS,
           COL_REMOTE_IP,
           ROUTE_REFLECTOR_CLIENT,
@@ -95,6 +98,9 @@ public class BgpPeerConfigurationAnswerer extends Answerer {
     columnMetadatas.put(COL_NODE, new ColumnMetadata(COL_NODE, Schema.NODE, "Node", true, false));
     columnMetadatas.put(COL_VRF, new ColumnMetadata(COL_VRF, Schema.STRING, "VRF", true, false));
     columnMetadatas.put(
+        COL_LOCAL_INTERFACE,
+        new ColumnMetadata(COL_LOCAL_INTERFACE, Schema.STRING, "Local Interface", true, false));
+    columnMetadatas.put(
         COL_REMOTE_IP,
         new ColumnMetadata(COL_REMOTE_IP, Schema.SELF_DESCRIBING, "Remote IP", true, false));
 
@@ -129,14 +135,16 @@ public class BgpPeerConfigurationAnswerer extends Answerer {
   @Override
   public AnswerElement answer() {
     BgpPeerConfigurationQuestion question = (BgpPeerConfigurationQuestion) _question;
-    Map<String, Configuration> configurations = _batfish.loadConfigurations();
-    Set<String> nodes = question.getNodesSpecifier().resolve(_batfish.specifierContext());
 
     TableMetadata tableMetadata = createTableMetadata(question);
     TableAnswerElement answer = new TableAnswerElement(tableMetadata);
 
     Multiset<Row> propertyRows =
-        getAnswerRows(configurations, nodes, tableMetadata.toColumnMap(), question.getProperties());
+        getAnswerRows(
+            _batfish.specifierContext(),
+            question.getNodeSpecifier(),
+            tableMetadata.toColumnMap(),
+            question.getProperties());
 
     answer.postProcessAnswer(question, propertyRows);
     return answer;
@@ -144,15 +152,15 @@ public class BgpPeerConfigurationAnswerer extends Answerer {
 
   @VisibleForTesting
   public static Multiset<Row> getAnswerRows(
-      Map<String, Configuration> configurations,
-      Set<String> nodes,
+      SpecifierContext ctxt,
+      NodeSpecifier nodeSpecifier,
       Map<String, ColumnMetadata> columnMetadata,
       BgpPeerPropertySpecifier propertySpecifier) {
 
     Multiset<Row> rows = HashMultiset.create();
 
-    for (String nodeName : nodes) {
-      for (Vrf vrf : configurations.get(nodeName).getVrfs().values()) {
+    for (String nodeName : nodeSpecifier.resolve(ctxt)) {
+      for (Vrf vrf : ctxt.getConfigs().get(nodeName).getVrfs().values()) {
         BgpProcess bgpProcess = vrf.getBgpProcess();
         if (bgpProcess == null) {
           continue;
@@ -162,6 +170,9 @@ public class BgpPeerConfigurationAnswerer extends Answerer {
           rows.add(getRow(node, vrf.getName(), peer, columnMetadata, propertySpecifier));
         }
         for (BgpPassivePeerConfig peer : bgpProcess.getPassiveNeighbors().values()) {
+          rows.add(getRow(node, vrf.getName(), peer, columnMetadata, propertySpecifier));
+        }
+        for (BgpUnnumberedPeerConfig peer : bgpProcess.getInterfaceNeighbors().values()) {
           rows.add(getRow(node, vrf.getName(), peer, columnMetadata, propertySpecifier));
         }
       }
@@ -175,11 +186,16 @@ public class BgpPeerConfigurationAnswerer extends Answerer {
       BgpPeerConfig peer,
       Map<String, ColumnMetadata> columnMetadata,
       BgpPeerPropertySpecifier propertySpecifier) {
-    RowBuilder rowBuilder =
-        Row.builder(columnMetadata)
-            .put(COL_NODE, node)
-            .put(COL_VRF, vrfName)
-            .put(COL_REMOTE_IP, getRemoteIp(peer));
+    RowBuilder rowBuilder = Row.builder(columnMetadata).put(COL_NODE, node).put(COL_VRF, vrfName);
+
+    // Row should have local interface for unnumbered peers, local & remote IP for other peers.
+    // Local IP will be taken care of in BgpPeerPropertySpecifier (see its getLocalIp() method).
+    if (peer instanceof BgpUnnumberedPeerConfig) {
+      rowBuilder.put(COL_LOCAL_INTERFACE, ((BgpUnnumberedPeerConfig) peer).getPeerInterface());
+    } else {
+      rowBuilder.put(COL_REMOTE_IP, getRemoteIp(peer));
+    }
+
     for (String property : propertySpecifier.getMatchingProperties()) {
       PropertyDescriptor<BgpPeerConfig> propertyDescriptor =
           BgpPeerPropertySpecifier.JAVA_MAP.get(property);

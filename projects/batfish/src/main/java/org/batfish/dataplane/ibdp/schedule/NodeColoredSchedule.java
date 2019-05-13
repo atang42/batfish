@@ -3,14 +3,14 @@ package org.batfish.dataplane.ibdp.schedule;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.graph.EndpointPair;
-import com.google.common.graph.ValueGraph;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.batfish.datamodel.BgpPeerConfigId;
-import org.batfish.datamodel.BgpSessionProperties;
+import org.batfish.datamodel.ospf.OspfTopology.EdgeId;
 import org.batfish.dataplane.ibdp.Node;
+import org.batfish.dataplane.ibdp.TopologyContext;
 import org.jgrapht.Graph;
 import org.jgrapht.alg.color.GreedyColoring;
 import org.jgrapht.alg.color.RandomGreedyColoring;
@@ -35,14 +35,12 @@ public class NodeColoredSchedule extends IbdpSchedule {
    * Create a new schedule based on existing nodes and topology
    *
    * @param nodes all nodes in the network
-   * @param bgpTopology the bgp peering relationships
+   * @param topologyContext the various network topologies
    */
   public NodeColoredSchedule(
-      Map<String, Node> nodes,
-      Coloring algorithm,
-      ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology) {
+      Map<String, Node> nodes, Coloring algorithm, TopologyContext topologyContext) {
     super(nodes);
-    makeGraph(nodes, bgpTopology);
+    makeGraph(nodes, topologyContext);
 
     // Color the graph
     VertexColoringAlgorithm<String> coloringAlg = getColoringAlgorithmInstance(algorithm, _graph);
@@ -76,13 +74,14 @@ public class NodeColoredSchedule extends IbdpSchedule {
    * Create a graph for coloring purposes, and color it.
    *
    * @param nodes all nodes in the network
+   * @param topologyContext the various network topologies
    */
   @SuppressWarnings("deprecation")
-  private void makeGraph(
-      Map<String, Node> nodes, ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology) {
+  private void makeGraph(Map<String, Node> nodes, TopologyContext topologyContext) {
     /*
      * For the purposes of coloring, two nodes are adjacent if:
      * - They have established a BGP session
+     * - They have an OSPF adjacency
      */
 
     // Add all nodes first
@@ -90,8 +89,12 @@ public class NodeColoredSchedule extends IbdpSchedule {
     nodes.keySet().forEach(n -> _graph.addVertex(n));
 
     // Process BGP connections
-    for (EndpointPair<BgpPeerConfigId> edge : bgpTopology.edges()) {
+    for (EndpointPair<BgpPeerConfigId> edge : topologyContext.getBgpTopology().getGraph().edges()) {
       _graph.addEdge(edge.source().getHostname(), edge.target().getHostname());
+    }
+    // Process OSPF edges
+    for (EdgeId edge : topologyContext.getOspfTopology().edges()) {
+      _graph.addEdge(edge.getTail().getHostname(), edge.getHead().getHostname());
     }
   }
 

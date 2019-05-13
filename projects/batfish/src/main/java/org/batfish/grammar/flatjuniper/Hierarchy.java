@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.antlr.v4.runtime.CommonToken;
 import org.antlr.v4.runtime.Token;
@@ -42,7 +44,8 @@ public final class Hierarchy {
 
     private static boolean isHostnameStatement(StatementContext ctx) {
       IsHostnameStatement listener = new IsHostnameStatement();
-      ParseTreeWalker walker = new BatfishParseTreeWalker();
+      // Use simple ParseTreeWalker since exception should not occur during walk
+      ParseTreeWalker walker = new ParseTreeWalker();
       walker.walk(listener, ctx);
       return listener._isHostname;
     }
@@ -141,6 +144,23 @@ public final class Hierarchy {
       protected Set<String> _blacklistedGroups;
       private Map<String, HierarchyChildNode> _children;
 
+      /**
+       * Add a set line to {@code output} prefixed by {@code prefix} for each path from this node to
+       * a leaf.
+       */
+      protected final void appendSetLines(@Nonnull String prefix, @Nonnull StringBuilder output) {
+        String prefixString = prefix;
+        if (_children.isEmpty()) {
+          // leaf, so append set line
+          output.append(prefix).append("\n");
+        }
+        _children.forEach(
+            (childText, child) -> {
+              // append set lines for every path from child to leaf
+              child.appendSetLines(String.format("%s %s", prefixString, childText), output);
+            });
+      }
+
       public HierarchyNode() {
         _children = new LinkedHashMap<>();
         _blacklistedGroups = new HashSet<>();
@@ -203,12 +223,7 @@ public final class Hierarchy {
       }
 
       public String pathString() {
-        StringBuilder sb = new StringBuilder();
-        for (HierarchyChildNode node : _nodes) {
-          sb.append(node._text + " ");
-        }
-        String out = sb.toString().trim();
-        return out;
+        return _nodes.stream().map(node -> node._text).collect(Collectors.joining(" "));
       }
 
       public void setStatement(StatementContext statement) {
@@ -517,7 +532,7 @@ public final class Hierarchy {
       }
       Flat_juniper_configurationContext newConfiguration =
           parser.getParser().flat_juniper_configuration();
-      markTokenInputs(newConfiguration, newStatementText, tokenInputs);
+      markTokenInputs(newConfiguration, newStatementText, tokenInputs, parser);
       if (markWildcards) {
         parser.setMarkWildcards(false);
       }
@@ -596,9 +611,10 @@ public final class Hierarchy {
     private static void markTokenInputs(
         Flat_juniper_configurationContext newConfiguration,
         String newStatementText,
-        Map<Token, String> tokenInputs) {
+        Map<Token, String> tokenInputs,
+        FlatJuniperCombinedParser parser) {
       TokenInputMarker listener = new TokenInputMarker(newStatementText, tokenInputs);
-      ParseTreeWalker walker = new BatfishParseTreeWalker();
+      ParseTreeWalker walker = new BatfishParseTreeWalker(parser);
       walker.walk(listener, newConfiguration);
     }
 
@@ -673,6 +689,16 @@ public final class Hierarchy {
     public void setApplyGroupsExcept(HierarchyPath path, String groupName) {
       HierarchyChildNode node = findExactPathMatchNode(path);
       node.addBlacklistedGroup(groupName);
+    }
+
+    /**
+     * Returns a string consisting of newline-separated set lines corresponding to this tree. One
+     * set line is produced for each path from the root to a leaf.
+     */
+    private @Nonnull String toSetLines(@Nonnull String header) {
+      StringBuilder output = new StringBuilder(header);
+      _root.appendSetLines("set", output);
+      return output.toString();
     }
   }
 
@@ -753,5 +779,14 @@ public final class Hierarchy {
 
   public Map<Token, String> getTokenInputs() {
     return _tokenInputs;
+  }
+
+  /**
+   * Returns a string consisting of newline-separated flat Juniper set lines corresponding to the
+   * master tree, i.e. all the set lines in the configuration from which this {@link Hierarchy} was
+   * produced.
+   */
+  public @Nonnull String toSetLines(@Nonnull String header) {
+    return _masterTree.toSetLines(header);
   }
 }

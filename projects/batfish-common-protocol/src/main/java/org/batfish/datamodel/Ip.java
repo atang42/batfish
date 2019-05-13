@@ -7,10 +7,12 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import java.io.Serializable;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import org.batfish.common.BatfishException;
 
+/** An IPv4 address */
 public class Ip implements Comparable<Ip>, Serializable {
 
   // Soft values: let it be garbage collected in times of pressure.
@@ -106,6 +108,18 @@ public class Ip implements Comparable<Ip>, Serializable {
     return create(mask);
   }
 
+  /**
+   * Return an {@link Optional} {@link Ip} from a string, or {@link Optional#empty} if the string
+   * does not represent an {@link Ip}.
+   */
+  public static @Nonnull Optional<Ip> tryParse(@Nonnull String text) {
+    try {
+      return Optional.of(parse(text));
+    } catch (IllegalArgumentException e) {
+      return Optional.empty();
+    }
+  }
+
   private final long _ip;
 
   private Ip(long ipAsLong) {
@@ -118,6 +132,7 @@ public class Ip implements Comparable<Ip>, Serializable {
   }
 
   public static Ip create(long ipAsLong) {
+    checkArgument(ipAsLong <= 0xFFFFFFFFL, "Invalid IP value: %d", ipAsLong);
     try {
       return CACHE.get(ipAsLong, () -> new Ip(ipAsLong));
     } catch (ExecutionException e) {
@@ -155,7 +170,7 @@ public class Ip implements Comparable<Ip>, Serializable {
     } else if (firstOctet <= 223) {
       return create(0xFFFFFF00L);
     } else {
-      throw new BatfishException("Cannot compute classmask");
+      throw new IllegalArgumentException("Cannot compute classmask");
     }
   }
 
@@ -220,6 +235,7 @@ public class Ip implements Comparable<Ip>, Serializable {
     }
   }
 
+  @Nonnull
   public IpIpSpace toIpSpace() {
     return new IpIpSpace(this);
   }

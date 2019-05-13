@@ -8,16 +8,16 @@ import java.util.TreeSet;
 import javax.annotation.Nullable;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.bgp.community.Community;
 
 public class StaticRoute implements Serializable {
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   /* https://www.juniper.net/documentation/en_US/junos/topics/reference/general/routing-protocols-default-route-preference-values.html */
   private static final int DEFAULT_ADMIN_DISTANCE = 5;
 
-  private Set<Long> _communities;
+  private Set<Community> _communities;
 
   private int _distance;
 
@@ -45,7 +45,7 @@ public class StaticRoute implements Serializable {
     _distance = DEFAULT_ADMIN_DISTANCE;
   }
 
-  public Set<Long> getCommunities() {
+  public Set<Community> getCommunities() {
     return _communities;
   }
 

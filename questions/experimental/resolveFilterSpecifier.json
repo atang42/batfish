@@ -3,9 +3,11 @@
     "filterSpecifierInput": "${filters}",
     "nodeSpecifierInput": "${nodes}",
     "queryType": "filter",
+    "specifierFactoryVersion": "${grammarVersion}", 
     "instance": {
-        "description": "Show the resolved values for filter specifier",
+        "description": "Returns resolved values for filter specifier.",
         "instanceName": "resolveFilterSpecifier",
+        "longDescription": "Helper question that shows how specified filterSpec values resolve to the filters in the network.",
         "tags": [
             "specifiers"
         ],
@@ -13,8 +15,14 @@
             "filters": {
                 "description": "Input to the FilterSpecifier",
                 "optional": true,
-                "type": "string",
+                "type": "filterSpec",
                 "displayName": "Filters"
+            },
+            "grammarVersion": {
+                "description": "Version of grammar to use for resolution",
+                "optional": true,
+                "type": "string",
+                "displayName": "Grammar version"               
             },
             "nodes": {
                 "description": "Input to the NodeSpecifier",
@@ -22,6 +30,7 @@
                 "type": "nodeSpec",
                 "displayName": "Nodes"
             }
+
         }
     }
 }

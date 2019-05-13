@@ -1,14 +1,15 @@
 package org.batfish.datamodel.matchers;
 
 import java.util.Set;
-import java.util.SortedSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.batfish.datamodel.IntegerSpace;
 import org.batfish.datamodel.Interface;
+import org.batfish.datamodel.Interface.Dependency;
 import org.batfish.datamodel.InterfaceAddress;
-import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.InterfaceType;
 import org.batfish.datamodel.IpAccessList;
+import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.SwitchportMode;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.eigrp.EigrpInterfaceSettings;
@@ -32,13 +33,13 @@ final class InterfaceMatchersImpl {
     }
   }
 
-  static final class HasAdditionalArpIps extends FeatureMatcher<Interface, SortedSet<Ip>> {
-    HasAdditionalArpIps(@Nonnull Matcher<? super SortedSet<Ip>> subMatcher) {
+  static final class HasAdditionalArpIps extends FeatureMatcher<Interface, IpSpace> {
+    HasAdditionalArpIps(@Nonnull Matcher<? super IpSpace> subMatcher) {
       super(subMatcher, "An interface with additionalArpIps:", "additionalArpIps");
     }
 
     @Override
-    protected SortedSet<Ip> featureValueOf(Interface actual) {
+    protected IpSpace featureValueOf(Interface actual) {
       return actual.getAdditionalArpIps();
     }
   }
@@ -98,6 +99,17 @@ final class InterfaceMatchersImpl {
     }
   }
 
+  static final class HasDependencies extends FeatureMatcher<Interface, Set<Dependency>> {
+    HasDependencies(@Nonnull Matcher<? super Set<Dependency>> subMatcher) {
+      super(subMatcher, "An Interface with dependencies:", "dependencies");
+    }
+
+    @Override
+    protected Set<Dependency> featureValueOf(Interface actual) {
+      return actual.getDependencies();
+    }
+  }
+
   static final class HasDescription extends FeatureMatcher<Interface, String> {
     HasDescription(@Nonnull Matcher<? super String> subMatcher) {
       super(subMatcher, "An Interface with description:", "description");
@@ -118,6 +130,18 @@ final class InterfaceMatchersImpl {
     @Nullable
     protected EigrpInterfaceSettings featureValueOf(Interface actual) {
       return actual.getEigrp();
+    }
+  }
+
+  static final class HasEncapsulationVlan extends FeatureMatcher<Interface, Integer> {
+    HasEncapsulationVlan(@Nonnull Matcher<? super Integer> subMatcher) {
+      super(subMatcher, "an Interface with encapsulationVlan:", "encapsulationVlan");
+    }
+
+    @Override
+    @Nullable
+    protected Integer featureValueOf(Interface actual) {
+      return actual.getEncapsulationVlan();
     }
   }
 
@@ -239,6 +263,17 @@ final class InterfaceMatchersImpl {
     }
   }
 
+  static final class HasOspfEnabled extends FeatureMatcher<Interface, Boolean> {
+    HasOspfEnabled(@Nonnull Matcher<? super Boolean> subMatcher) {
+      super(subMatcher, "an Interface with ospfEnabled:", "ospfEnabled");
+    }
+
+    @Override
+    protected Boolean featureValueOf(Interface actual) {
+      return actual.getOspfEnabled();
+    }
+  }
+
   static final class HasOspfPointToPoint extends FeatureMatcher<Interface, Boolean> {
     HasOspfPointToPoint(@Nonnull Matcher<? super Boolean> subMatcher) {
       super(subMatcher, "an Interface with ospfPointToPoint:", "ospfPointToPoint");
@@ -258,6 +293,17 @@ final class InterfaceMatchersImpl {
     @Override
     protected IpAccessList featureValueOf(Interface actual) {
       return actual.getIncomingFilter();
+    }
+  }
+
+  static final class HasInterfaceType extends FeatureMatcher<Interface, InterfaceType> {
+    HasInterfaceType(@Nonnull Matcher<? super InterfaceType> subMatcher) {
+      super(subMatcher, "An Interface with interfaceType:", "interfaceType");
+    }
+
+    @Override
+    protected InterfaceType featureValueOf(Interface actual) {
+      return actual.getInterfaceType();
     }
   }
 
@@ -355,6 +401,17 @@ final class InterfaceMatchersImpl {
     @Override
     protected Vrf featureValueOf(Interface actual) {
       return actual.getVrf();
+    }
+  }
+
+  static final class HasVrfName extends FeatureMatcher<Interface, String> {
+    HasVrfName(@Nonnull Matcher<? super String> subMatcher) {
+      super(subMatcher, "an Interface with vrfName:", "vrfName");
+    }
+
+    @Override
+    protected String featureValueOf(Interface actual) {
+      return actual.getVrfName();
     }
   }
 

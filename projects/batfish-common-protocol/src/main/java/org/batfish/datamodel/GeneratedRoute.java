@@ -6,8 +6,10 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.collect.Comparators;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Ordering;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.Set;
@@ -15,24 +17,49 @@ import java.util.SortedSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import org.batfish.common.util.CommonUtil;
+import org.batfish.datamodel.bgp.community.Community;
 
-/** A generated/aggregate IPV4 route. */
+/**
+ * A generated/aggregate IPV4 route.
+ *
+ * <p>Implements {@link Comparable}, but {@link #compareTo(GeneratedRoute)} <em>should not</em> be
+ * used for determining route preference in RIBs.
+ */
 @ParametersAreNonnullByDefault
-public final class GeneratedRoute extends AbstractRoute {
+public final class GeneratedRoute extends AbstractRoute implements Comparable<GeneratedRoute> {
+
+  // The comparator has no impact on route preference in RIBs and should not be used as such
+  private static final Comparator<GeneratedRoute> COMPARATOR =
+      Comparator.comparing(GeneratedRoute::getNetwork)
+          .thenComparing(GeneratedRoute::getNextHopIp)
+          .thenComparing(GeneratedRoute::getNextHopInterface)
+          .thenComparing(GeneratedRoute::getMetric)
+          .thenComparing(GeneratedRoute::getAdministrativeCost)
+          .thenComparing(GeneratedRoute::getTag)
+          .thenComparing(GeneratedRoute::getNonRouting)
+          .thenComparing(GeneratedRoute::getNonForwarding)
+          .thenComparing(GeneratedRoute::getAsPath)
+          .thenComparing(
+              GeneratedRoute::getAttributePolicy, Comparator.nullsLast(String::compareTo))
+          .thenComparing(
+              GeneratedRoute::getCommunities, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(GeneratedRoute::getDiscard)
+          .thenComparing(
+              GeneratedRoute::getGenerationPolicy, Comparator.nullsLast(String::compareTo));
 
   /** A {@link GeneratedRoute} builder */
   public static class Builder extends AbstractRouteBuilder<Builder, GeneratedRoute> {
 
     @Nullable private AsPath _asPath;
     @Nullable private String _attributePolicy;
-    @Nullable private Set<Long> _communities;
+    @Nullable private Set<Community> _communities;
     private boolean _discard;
     @Nullable private String _generationPolicy;
     @Nullable private String _nextHopInterface;
 
     private Builder() {}
 
+    @Nonnull
     @Override
     public GeneratedRoute build() {
       return new GeneratedRoute(
@@ -50,24 +77,10 @@ public final class GeneratedRoute extends AbstractRoute {
           getNonRouting());
     }
 
+    @Nonnull
     @Override
     protected Builder getThis() {
       return this;
-    }
-
-    public static Builder fromRoute(@Nonnull GeneratedRoute route) {
-      return new Builder()
-          // General route properties
-          .setNetwork(route.getNetwork())
-          .setMetric(firstNonNull(route.getMetric(), 0L))
-          .setAdmin(route.getAdministrativeCost())
-          // GeneratedRoute properties
-          .setAsPath(route.getAsPath())
-          .setAttributePolicy(route.getAttributePolicy())
-          .setCommunities(route.getCommunities())
-          .setDiscard(route.getDiscard())
-          .setGenerationPolicy(route.getGenerationPolicy())
-          .setNextHopInterface(route.getNextHopInterface());
     }
 
     public Builder setAsPath(@Nullable AsPath asPath) {
@@ -80,7 +93,7 @@ public final class GeneratedRoute extends AbstractRoute {
       return this;
     }
 
-    public Builder setCommunities(@Nullable Set<Long> communities) {
+    public Builder setCommunities(@Nullable Set<Community> communities) {
       _communities = communities;
       return this;
     }
@@ -106,26 +119,19 @@ public final class GeneratedRoute extends AbstractRoute {
   }
 
   private static final String PROP_AS_PATH = "asPath";
-
   private static final String PROP_ATTRIBUTE_POLICY = "attributePolicy";
-
   private static final String PROP_ATTRIBUTE_POLICY_SOURCES = "attributePolicySources";
-
   private static final String PROP_COMMUNITIES = "communities";
-
   private static final String PROP_DISCARD = "discard";
-
   private static final String PROP_GENERATION_POLICY = "generationPolicy";
-
   private static final String PROP_GENERATION_POLICY_SOURCES = "generationPolicySources";
-
   private static final String PROP_METRIC = "metric";
 
   private static final long serialVersionUID = 1L;
 
   private final AsPath _asPath;
   @Nullable private final String _attributePolicy;
-  @Nonnull private final SortedSet<Long> _communities;
+  @Nonnull private final SortedSet<Community> _communities;
   private final boolean _discard;
   @Nullable private final String _generationPolicy;
   private final Long _metric;
@@ -135,7 +141,7 @@ public final class GeneratedRoute extends AbstractRoute {
   private SortedSet<String> _attributePolicySources;
   private SortedSet<String> _generationPolicySources;
   // Cache the hashcode
-  private transient volatile int _hashcode = 0;
+  private transient int _hashCode = 0;
 
   @JsonCreator
   private static GeneratedRoute jsonCreator(
@@ -144,7 +150,7 @@ public final class GeneratedRoute extends AbstractRoute {
       @Nullable @JsonProperty(PROP_NEXT_HOP_IP) Ip nextHopIp,
       @Nullable @JsonProperty(PROP_AS_PATH) AsPath asPath,
       @Nullable @JsonProperty(PROP_ATTRIBUTE_POLICY) String attributePolicy,
-      @Nullable @JsonProperty(PROP_COMMUNITIES) SortedSet<Long> communities,
+      @Nullable @JsonProperty(PROP_COMMUNITIES) SortedSet<Community> communities,
       @JsonProperty(PROP_DISCARD) boolean discard,
       @Nullable @JsonProperty(PROP_GENERATION_POLICY) String generationPolicy,
       @Nullable @JsonProperty(PROP_METRIC) Long metric,
@@ -172,7 +178,7 @@ public final class GeneratedRoute extends AbstractRoute {
       Ip nextHopIp,
       AsPath asPath,
       @Nullable String attributePolicy,
-      SortedSet<Long> communities,
+      @Nullable SortedSet<Community> communities,
       boolean discard,
       @Nullable String generationPolicy,
       Long metric,
@@ -217,8 +223,9 @@ public final class GeneratedRoute extends AbstractRoute {
 
   @Override
   public int hashCode() {
-    if (_hashcode == 0) {
-      _hashcode =
+    int h = _hashCode;
+    if (h == 0) {
+      h =
           Objects.hash(
               _network,
               _admin,
@@ -232,8 +239,9 @@ public final class GeneratedRoute extends AbstractRoute {
               _metric,
               _nextHopInterface,
               _nextHopIp);
+      _hashCode = h;
     }
-    return _hashcode;
+    return h;
   }
 
   /** A BGP AS-path attribute to associate with this generated route */
@@ -257,7 +265,7 @@ public final class GeneratedRoute extends AbstractRoute {
   /** The communities attached to this route */
   @Nonnull
   @JsonProperty(PROP_COMMUNITIES)
-  public SortedSet<Long> getCommunities() {
+  public SortedSet<Community> getCommunities() {
     return _communities;
   }
 
@@ -311,22 +319,28 @@ public final class GeneratedRoute extends AbstractRoute {
   }
 
   @Override
-  public int routeCompare(@Nonnull AbstractRoute rhs) {
-    if (getClass() != rhs.getClass()) {
-      return 0;
-    }
-    GeneratedRoute castRhs = (GeneratedRoute) rhs;
-    return Comparator.comparing(GeneratedRoute::getAsPath)
-        .thenComparing(GeneratedRoute::getAttributePolicy, Comparator.nullsLast(String::compareTo))
-        .thenComparing(GeneratedRoute::getCommunities, CommonUtil::compareCollection)
-        .thenComparing(GeneratedRoute::getDiscard)
-        .thenComparing(GeneratedRoute::getGenerationPolicy, Comparator.nullsLast(String::compareTo))
-        .compare(this, castRhs);
+  public int compareTo(GeneratedRoute rhs) {
+    // The comparator has no impact on route preference in RIBs and should not be used as such
+    return COMPARATOR.compare(this, rhs);
   }
 
   @Override
-  public AbstractRouteBuilder<?, ?> toBuilder() {
-    throw new UnsupportedOperationException();
+  public Builder toBuilder() {
+    return new Builder()
+        // General route properties
+        .setNetwork(getNetwork())
+        .setAdmin(getAdministrativeCost())
+        .setNonForwarding(getNonForwarding())
+        .setNonRouting(getNonRouting())
+        .setMetric(firstNonNull(getMetric(), 0L))
+        .setNextHopIp(getNextHopIp())
+        // GeneratedRoute properties
+        .setAsPath(getAsPath())
+        .setAttributePolicy(getAttributePolicy())
+        .setCommunities(getCommunities())
+        .setDiscard(getDiscard())
+        .setGenerationPolicy(getGenerationPolicy())
+        .setNextHopInterface(getNextHopInterface());
   }
 
   @JsonProperty(PROP_ATTRIBUTE_POLICY_SOURCES)

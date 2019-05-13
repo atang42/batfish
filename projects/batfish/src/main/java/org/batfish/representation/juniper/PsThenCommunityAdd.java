@@ -1,11 +1,13 @@
 package org.batfish.representation.juniper;
 
+import com.google.common.collect.ImmutableSet;
 import java.util.List;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.bgp.community.StandardCommunity;
 import org.batfish.datamodel.routing_policy.expr.LiteralCommunitySet;
 import org.batfish.datamodel.routing_policy.statement.AddCommunity;
 import org.batfish.datamodel.routing_policy.statement.Comment;
@@ -14,7 +16,6 @@ import org.batfish.datamodel.routing_policy.statement.Statement;
 @ParametersAreNonnullByDefault
 public final class PsThenCommunityAdd extends PsThen {
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   private JuniperConfiguration _configuration;
@@ -62,7 +63,12 @@ public final class PsThenCommunityAdd extends PsThen {
                     + "regex community expressions in '%s' are ignored in this context.",
                 _name, _name, _name));
       }
-      statements.add(new AddCommunity(new LiteralCommunitySet(literalCommunities)));
+      statements.add(
+          new AddCommunity(
+              new LiteralCommunitySet(
+                  literalCommunities.stream()
+                      .map(StandardCommunity::of)
+                      .collect(ImmutableSet.toImmutableSet()))));
     }
   }
 

@@ -2,7 +2,6 @@ package org.batfish.datamodel;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import java.util.Comparator;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -58,19 +57,34 @@ public class RipInternalRoute extends RipRoute {
     return NO_TAG;
   }
 
-  @Override
-  public int routeCompare(@Nonnull AbstractRoute rhs) {
-    if (rhs instanceof RipInternalRoute) {
-      RipInternalRoute other = (RipInternalRoute) rhs;
-      return Comparator.comparing(RipInternalRoute::getNextHopIp)
-          .thenComparing(RipRoute::getMetric)
-          .compare(this, other);
-    }
-    return 0;
+  public static Builder builder() {
+    return new Builder();
   }
 
   @Override
-  public AbstractRouteBuilder<?, ?> toBuilder() {
-    throw new UnsupportedOperationException();
+  public Builder toBuilder() {
+    return new Builder()
+        .setNetwork(getNetwork())
+        .setNextHopIp(getNextHopIp())
+        .setAdmin(getAdministrativeCost())
+        .setMetric(getMetric());
+  }
+
+  /** A {@link RipInternalRoute} builder */
+  public static class Builder extends AbstractRouteBuilder<Builder, RipInternalRoute> {
+
+    private Builder() {}
+
+    @Nonnull
+    @Override
+    public RipInternalRoute build() {
+      return new RipInternalRoute(getNetwork(), getNextHopIp(), getAdmin(), getMetric());
+    }
+
+    @Nonnull
+    @Override
+    protected Builder getThis() {
+      return this;
+    }
   }
 }

@@ -12,6 +12,12 @@
     "description" : "Trace the path(s) for the specified flow, along with path(s) for reverse flows.",
     "instanceName" : "qname",
     "longDescription" : "This question performs a virtual traceroute in the network from a starting node. A destination IP and ingress (source) node must be specified. Other IP headers are given default values if unspecified.\nIf the trace succeeds, a traceroute is performed in the reverse direction.",
+    "orderedVariableNames" : [
+      "startLocation",
+      "headers",
+      "maxTraces",
+      "ignoreFilters"
+    ],
     "tags" : [
       "dataPlane",
       "reachability",
@@ -23,13 +29,15 @@
         "displayName" : "Headers",
         "fields" : {
           "applications" : {
-            "optional" : true
+            "optional" : true,
+            "type" : "applicationSpec"
           },
           "dscps" : {
             "optional" : true
           },
           "dstIps" : {
-            "optional" : false
+            "optional" : false,
+            "type" : "ipSpaceSpec"
           },
           "dstPorts" : {
             "optional" : true
@@ -50,13 +58,15 @@
             "optional" : true
           },
           "ipProtocols" : {
-            "optional" : true
+            "optional" : true,
+            "type" : "ipProtocolSpec"
           },
           "packetLengths" : {
             "optional" : true
           },
           "srcIps" : {
-            "optional" : true
+            "optional" : true,
+            "type" : "ipSpaceSpec"
           },
           "srcPorts" : {
             "optional" : true
@@ -90,7 +100,7 @@
         "displayName" : "Start Location",
         "minLength" : 1,
         "optional" : false,
-        "type" : "string",
+        "type" : "locationSpec",
         "value" : "location"
       }
     }

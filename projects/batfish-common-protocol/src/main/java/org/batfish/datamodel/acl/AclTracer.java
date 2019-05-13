@@ -1,11 +1,11 @@
 package org.batfish.datamodel.acl;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
-import static org.batfish.common.util.CommonUtil.rangesContain;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.graph.Traverser;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +22,7 @@ import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.IpSpaceMetadata;
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.Protocol;
+import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.visitors.IpSpaceDescriber;
 import org.batfish.datamodel.visitors.IpSpaceTracer;
 
@@ -167,6 +168,10 @@ public final class AclTracer extends Evaluator {
         new DefaultDeniedByAclIpSpace(aclIpSpaceName, ip, ipDescription, ipSpaceMetadata));
   }
 
+  private static boolean rangesContain(Collection<SubRange> ranges, @Nullable Integer num) {
+    return num != null && ranges.stream().anyMatch(sr -> sr.includes(num));
+  }
+
   public void recordNamedIpSpaceAction(
       @Nonnull String name,
       @Nonnull String ipSpaceDescription,
@@ -213,7 +218,7 @@ public final class AclTracer extends Evaluator {
         if (dstProtocol.getIpProtocol().equals(_flow.getIpProtocol())) {
           match = true;
           Integer dstPort = dstProtocol.getPort();
-          if (dstPort != null && !dstPort.equals(_flow.getDstPort())) {
+          if (!dstPort.equals(_flow.getDstPort())) {
             match = false;
           }
           if (match) {
@@ -231,7 +236,7 @@ public final class AclTracer extends Evaluator {
         if (notDstProtocol.getIpProtocol().equals(_flow.getIpProtocol())) {
           match = true;
           Integer dstPort = notDstProtocol.getPort();
-          if (dstPort != null && !dstPort.equals(_flow.getDstPort())) {
+          if (!dstPort.equals(_flow.getDstPort())) {
             match = false;
           }
           if (match) {
@@ -296,9 +301,7 @@ public final class AclTracer extends Evaluator {
         if (protocol.getIpProtocol().equals(_flow.getIpProtocol())) {
           match = true;
           Integer port = protocol.getPort();
-          if (port != null
-              && !port.equals(_flow.getDstPort())
-              && !port.equals(_flow.getSrcPort())) {
+          if (!port.equals(_flow.getDstPort()) && !port.equals(_flow.getSrcPort())) {
             match = false;
           }
           if (match) {
@@ -331,7 +334,7 @@ public final class AclTracer extends Evaluator {
         if (srcProtocol.getIpProtocol().equals(_flow.getIpProtocol())) {
           match = true;
           Integer srcPort = srcProtocol.getPort();
-          if (srcPort != null && !srcPort.equals(_flow.getSrcPort())) {
+          if (!srcPort.equals(_flow.getSrcPort())) {
             match = false;
           }
           if (match) {
@@ -349,7 +352,7 @@ public final class AclTracer extends Evaluator {
         if (notSrcProtocol.getIpProtocol().equals(_flow.getIpProtocol())) {
           match = true;
           Integer srcPort = notSrcProtocol.getPort();
-          if (srcPort != null && !srcPort.equals(_flow.getSrcPort())) {
+          if (!srcPort.equals(_flow.getSrcPort())) {
             match = false;
           }
           if (match) {

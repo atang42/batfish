@@ -224,7 +224,7 @@ public class NodesSpecifier {
 
     int rank = 0;
     for (AutocompleteSuggestion suggestion : suggestions) {
-      suggestion.setRank(rank);
+      AutocompleteSuggestion.builder(suggestion).setRank(rank).build();
       rank++;
     }
 
@@ -241,8 +241,8 @@ public class NodesSpecifier {
     return getMatchingNodes(batfish.specifierContext());
   }
 
+  /** Return the set of nodes that match this specifier. */
   @JsonIgnore
-  /** Return the set of nodes that match this specifier */
   public Set<String> getMatchingNodes(SpecifierContext ctxt) {
     switch (_type) {
       case NAME:

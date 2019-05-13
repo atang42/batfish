@@ -30,9 +30,7 @@ import org.batfish.role.OutliersHypothesis;
 public class PerRoleOutliersQuestionPlugin extends QuestionPlugin {
 
   public static class PerRoleOutliersAnswerElement extends AnswerElement {
-
     private static final String PROP_NAMED_STRUCTURE_OUTLIERS = "namedStructureOutliers";
-
     private static final String PROP_SERVER_OUTLIERS = "serverOutliers";
 
     private SortedSet<NamedStructureOutlierSet<?>> _namedStructureOutliers;
@@ -173,32 +171,11 @@ public class PerRoleOutliersQuestionPlugin extends QuestionPlugin {
     }
   }
 
-  // <question_page_comment>
-  /*
-   * Runs outlier detection on a per-role basis and then does a global ranking of the results.
-   *
-   * @type PerRoleOutliers multifile
-   * @param namedStructTypes Set of structure types to analyze drawn from ( AsPathAccessList,
-   *     AuthenticationKeyChain, CommunityList, IkePhase1Policy, IkePhase1Proposal, IkePhase1Key,
-   *     IpAccessList, IpsecPhase2Policy, IpsecPhase2Proposal, IpsecPeerConfig,, RouteFilterList,
-   *     RoutingPolicy) Default value is '[]' (which denotes all structure types).
-   *     This option is applicable to the "sameName" and "sameDefinition" hypotheses.
-   * @param nodeRegex Regular expression for names of nodes to include. Default value is '.*' (all
-   *     nodes).
-   * @param hypothesis A string that indicates the hypothesis being used to identify outliers.
-   *     "sameDefinition" indicates a hypothesis that same-named structures should have identical
-   *     definitions. "sameName" indicates a hypothesis that all nodes should have structures of the
-   *     same names. "sameServers" indicates a hypothesis that all nodes should have the same set of
-   *     protocol-specific servers (e.g., DNS servers). Default is "sameDefinition".
-   */
+  /** Runs outlier detection on a per-role basis and then does a global ranking of the results. */
   public static final class PerRoleOutliersQuestion extends Question {
-
     private static final String PROP_HYPOTHESIS = "hypothesis";
-
     private static final String PROP_NAMED_STRUCT_TYPES = "namedStructTypes";
-
     private static final String PROP_ROLE_DIMENSION = "roleDimension";
-
     private static final String PROP_ROLES = "roles";
 
     @Nonnull private OutliersHypothesis _hypothesis;

@@ -1,15 +1,17 @@
 package org.batfish.dataplane.rib;
 
+import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.OspfRoute;
 import org.batfish.datamodel.RoutingProtocol;
 
+@ParametersAreNonnullByDefault
 public class OspfRib extends AbstractRib<OspfRoute> {
 
   private static final long serialVersionUID = 1L;
 
   public OspfRib() {
-    super(null);
+    super();
   }
 
   @Override

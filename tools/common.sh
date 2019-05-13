@@ -10,22 +10,12 @@ export BATFISH_PATH="$PROJECTS_PATH/batfish"
 export BATFISH_TEST_RIG_PATH="$BATFISH_ROOT/networks"
 export BATFISH="$BATFISH_PATH/batfish"
 export FLATTEN="$BATFISH_PATH/flatten"
+export PREPROCESS_JUNIPER="$BATFISH_PATH/preprocess_juniper"
 
 export BATFISH_CLIENT_PATH="$PROJECTS_PATH/batfish-client"
 export BATFISH_CLIENT="$BATFISH_CLIENT_PATH/batfish-client"
 
 export BATFISH_DOCS_ROOT="$BATFISH_ROOT/docs"
-export BATFISH_DOCS_DATAMODEL="$BATFISH_DOCS_ROOT/datamodel.json"
-
-export BATFISH_WIKI_ROOT="$BATFISH_ROOT/../batfish.wiki"
-export BATFISH_WIKI_DATAMODEL="$BATFISH_WIKI_ROOT/Datamodel.md"
-export BATFISH_WIKI_QUESTIONS="$BATFISH_WIKI_ROOT/Questions.md"
-
-if [ -d "$BATFISH_ROOT/../pybatfish" ]; then
-   export PYBATFISH_ROOT="$BATFISH_ROOT/../pybatfish"
-   export BATFISH_DATAMODEL_PAGE_SCRIPT="${PYBATFISH_ROOT}/datamodel_page.py"
-   export BATFISH_QUESTIONS_PAGE_SCRIPT="${PYBATFISH_ROOT}/questions_page.py"
-fi
 
 export COORDINATOR_PATH="$PROJECTS_PATH/coordinator"
 export COORDINATOR="$COORDINATOR_PATH/coordinator"
@@ -36,7 +26,7 @@ export ALLINONE="$ALLINONE_PATH/allinone"
 export COMMON_PATH="$PROJECTS_PATH/batfish-common-protocol"
 export COMMON_JAR="$COMMON_PATH/target/batfish-common-protocol-${BATFISH_VERSION}.jar"
 
-export QUESTION_PATH="$PROJECTS_PATH/question"
+export QUESTIONS_PATH="${BATFISH_ROOT}/questions"
 export BATFISH_QUESTION_PLUGIN_DIR="$PROJECTS_PATH/question/target/"
 
 export ALLINONE_COMPLETION_FILE="$BATFISH_TOOLS_PATH/completion-allinone.tmp"
@@ -224,21 +214,6 @@ batfish_unit_tests_parser() {
 }
 export -f batfish_unit_tests_parser
 
-batfish_datamodel() {
-   echo "Generating datamodel to " ${BATFISH_DOCS_DATAMODEL}
-   batfish_client -runmode gendatamodel > "$BATFISH_DOCS_DATAMODEL"
-
-   echo "Generating wiki page to " ${BATFISH_WIKI_DATAMODEL}
-   python "$BATFISH_DATAMODEL_PAGE_SCRIPT" "$BATFISH_DOCS_DATAMODEL" > "$BATFISH_WIKI_DATAMODEL"
-}
-export -f batfish_datamodel
-
-batfish_wiki_questions() {
-   echo "Generating questions to " ${BATFISH_WIKI_QUESTIONS}
-   python "$BATFISH_QUESTIONS_PAGE_SCRIPT" "$QUESTION_PATH/src" > "$BATFISH_WIKI_QUESTIONS"
-}
-export -f batfish_wiki_questions
-
 int_to_ip() {
    batfish_expect_args 1 $# || return 1
    local INPUT=$1
@@ -409,5 +384,24 @@ flatten() {
    "$FLATTEN" "$@"
 }
 export -f flatten
+
+preprocess_juniper() {
+   # if cygwin, shift and replace each parameter
+   if batfish_cygwin; then
+      local NUMARGS=$#
+      local IGNORE_CURRENT_ARG=no;
+      for i in $(seq 1 ${NUMARGS}); do
+         local CURRENT_ARG=$1
+         local NEW_ARG="$(cygpath -w -- ${CURRENT_ARG})"
+         set -- "$@" "${NEW_ARG}"
+         shift
+      done
+   fi
+   if [ "$BATFISH_PRINT_CMDLINE" = "yes" ]; then
+      echo "$BATFISH $BATFISH_COMMON_ARGS $@" >&2
+   fi
+   "${PREPROCESS_JUNIPER}" "$@"
+}
+export -f preprocess_juniper
 
 

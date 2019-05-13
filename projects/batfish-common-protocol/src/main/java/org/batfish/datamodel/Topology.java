@@ -14,6 +14,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedSet;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import org.batfish.common.util.CommonUtil;
 import org.batfish.datamodel.collections.NodeInterfacePair;
 
@@ -24,6 +25,8 @@ import org.batfish.datamodel.collections.NodeInterfacePair;
 public final class Topology implements Serializable {
 
   private static final long serialVersionUID = 1L;
+
+  public static final Topology EMPTY = new Topology(ImmutableSortedSet.of());
 
   @JsonCreator
   private static Topology jacksonCreateTopology(SortedSet<Edge> edges) {
@@ -105,5 +108,21 @@ public final class Topology implements Serializable {
   @JsonValue
   public SortedSet<Edge> sortedEdges() {
     return _edges;
+  }
+
+  @Override
+  public boolean equals(@Nullable Object obj) {
+    if (this == obj) {
+      return true;
+    }
+    if (!(obj instanceof Topology)) {
+      return false;
+    }
+    return _edges.equals(((Topology) obj)._edges);
+  }
+
+  @Override
+  public int hashCode() {
+    return _edges.hashCode();
   }
 }

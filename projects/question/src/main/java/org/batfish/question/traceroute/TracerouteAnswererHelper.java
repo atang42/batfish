@@ -1,6 +1,7 @@
 package org.batfish.question.traceroute;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static org.batfish.datamodel.SetFlowStartLocation.setStartLocation;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -8,9 +9,11 @@ import com.google.common.collect.ImmutableSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import javax.annotation.Nonnull;
+import java.util.stream.Collectors;
+import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.EmptyIpSpace;
 import org.batfish.datamodel.Flow;
+import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpProtocol;
 import org.batfish.datamodel.IpSpace;
@@ -18,19 +21,18 @@ import org.batfish.datamodel.NamedPort;
 import org.batfish.datamodel.PacketHeaderConstraints;
 import org.batfish.datamodel.PacketHeaderConstraintsUtil;
 import org.batfish.datamodel.visitors.IpSpaceRepresentative;
-import org.batfish.specifier.FlexibleInferFromLocationIpSpaceSpecifierFactory;
-import org.batfish.specifier.FlexibleLocationSpecifierFactory;
+import org.batfish.specifier.AllInterfacesLocationSpecifier;
+import org.batfish.specifier.InferFromLocationIpSpaceSpecifier;
 import org.batfish.specifier.InterfaceLinkLocation;
 import org.batfish.specifier.InterfaceLocation;
 import org.batfish.specifier.IpSpaceAssignment;
 import org.batfish.specifier.IpSpaceAssignment.Entry;
 import org.batfish.specifier.IpSpaceSpecifier;
-import org.batfish.specifier.IpSpaceSpecifierFactory;
 import org.batfish.specifier.Location;
 import org.batfish.specifier.LocationSpecifier;
-import org.batfish.specifier.LocationSpecifierFactory;
 import org.batfish.specifier.LocationVisitor;
 import org.batfish.specifier.SpecifierContext;
+import org.batfish.specifier.SpecifierFactories;
 
 /**
  * Helper for {@link TracerouteAnswerer} and {@link BidirectionalTracerouteAnswerer}. Processes
@@ -42,6 +44,27 @@ public final class TracerouteAnswererHelper {
   private final String _sourceLocationStr;
   private final IpSpaceAssignment _sourceIpAssignment;
   private final SpecifierContext _specifierContext;
+  private final LocationVisitor<Boolean> _isActiveLocation =
+      new LocationVisitor<Boolean>() {
+        private boolean isActiveInterface(String hostname, String ifaceName) {
+          Configuration config = _specifierContext.getConfigs().get(hostname);
+          if (config == null) {
+            return false;
+          }
+          Interface iface = config.getAllInterfaces().get(ifaceName);
+          return iface != null && iface.getActive();
+        }
+
+        @Override
+        public Boolean visitInterfaceLinkLocation(InterfaceLinkLocation loc) {
+          return isActiveInterface(loc.getNodeName(), loc.getInterfaceName());
+        }
+
+        @Override
+        public Boolean visitInterfaceLocation(InterfaceLocation loc) {
+          return isActiveInterface(loc.getNodeName(), loc.getInterfaceName());
+        }
+      };
 
   public TracerouteAnswererHelper(
       PacketHeaderConstraints packetHeaderConstraints,
@@ -57,11 +80,6 @@ public final class TracerouteAnswererHelper {
             _sourceLocationStr, _packetHeaderConstraints.getSrcIps(), _specifierContext);
   }
 
-  private static final String SRC_LOCATION_SPECIFIER_FACTORY =
-      FlexibleLocationSpecifierFactory.NAME;
-  private static final String IP_SPECIFIER_FACTORY =
-      FlexibleInferFromLocationIpSpaceSpecifierFactory.NAME;
-
   private static final int TRACEROUTE_PORT = 33434;
 
   @VisibleForTesting
@@ -69,11 +87,12 @@ public final class TracerouteAnswererHelper {
       String sourceLocation, String sourceIps, SpecifierContext specifierContext) {
     /* construct specifiers */
     LocationSpecifier sourceLocationSpecifier =
-        LocationSpecifierFactory.load(SRC_LOCATION_SPECIFIER_FACTORY)
-            .buildLocationSpecifier(sourceLocation);
+        SpecifierFactories.getLocationSpecifierOrDefault(
+            sourceLocation, AllInterfacesLocationSpecifier.INSTANCE);
 
     IpSpaceSpecifier sourceIpSpaceSpecifier =
-        IpSpaceSpecifierFactory.load(IP_SPECIFIER_FACTORY).buildIpSpaceSpecifier(sourceIps);
+        SpecifierFactories.getIpSpaceSpecifierOrDefault(
+            sourceIps, InferFromLocationIpSpaceSpecifier.INSTANCE);
 
     /* resolve specifiers */
     Set<Location> sourceLocations = sourceLocationSpecifier.resolve(specifierContext);
@@ -86,7 +105,8 @@ public final class TracerouteAnswererHelper {
     if (headerSrcIp != null) {
       // interpret given Src IP "flexibly"
       IpSpaceSpecifier srcIpSpecifier =
-          IpSpaceSpecifierFactory.load(IP_SPECIFIER_FACTORY).buildIpSpaceSpecifier(headerSrcIp);
+          SpecifierFactories.getIpSpaceSpecifierOrDefault(
+              headerSrcIp, InferFromLocationIpSpaceSpecifier.INSTANCE);
       // Resolve to set of locations/IPs
       IpSpaceAssignment srcIps = srcIpSpecifier.resolve(ImmutableSet.of(), _specifierContext);
       // Filter out empty IP assignments
@@ -95,16 +115,18 @@ public final class TracerouteAnswererHelper {
               .filter(e -> !e.getIpSpace().equals(EmptyIpSpace.INSTANCE))
               .collect(ImmutableList.toImmutableList());
       checkArgument(
-          !nonEmptyIpSpaces.isEmpty(), "At least one source IP is required, could not resolve any");
+          !nonEmptyIpSpaces.isEmpty(),
+          "Specified source '%s' could not be resolved to any IP.",
+          headerSrcIp);
       checkArgument(
           nonEmptyIpSpaces.size() == 1,
-          "Specified source IP %s resolves to more than one location/IP: %s",
+          "Specified source '%s' resolves to more than one location/IP: %s",
           headerSrcIp,
           nonEmptyIpSpaces);
       IpSpace space = srcIps.getEntries().iterator().next().getIpSpace();
       Optional<Ip> srcIp = _ipSpaceRepresentative.getRepresentative(space);
       // Extra check to ensure that we actually got an IP
-      checkArgument(srcIp.isPresent(), "At least one source IP is required, could not resolve any");
+      checkArgument(srcIp.isPresent(), "Specified source '%s' has no IPs", headerSrcIp);
       builder.setSrcIp(srcIp.get());
     } else {
       // Use from source location to determine header Src IP
@@ -131,15 +153,16 @@ public final class TracerouteAnswererHelper {
     checkArgument(
         constraints.getDstIps() != null, "Cannot perform traceroute without a destination");
     IpSpaceSpecifier dstIpSpecifier =
-        IpSpaceSpecifierFactory.load(IP_SPECIFIER_FACTORY).buildIpSpaceSpecifier(headerDstIp);
+        SpecifierFactories.getIpSpaceSpecifierOrDefault(
+            headerDstIp, InferFromLocationIpSpaceSpecifier.INSTANCE);
     IpSpaceAssignment dstIps = dstIpSpecifier.resolve(ImmutableSet.of(), _specifierContext);
     checkArgument(
         dstIps.getEntries().size() == 1,
-        "Specified destination: %s, resolves to more than one IP",
+        "Specified destination '%s' resolves to more than one IP",
         headerDstIp);
     IpSpace space = dstIps.getEntries().iterator().next().getIpSpace();
     Optional<Ip> dstIp = _ipSpaceRepresentative.getRepresentative(space);
-    checkArgument(dstIp.isPresent(), "At least one destination IP is required");
+    checkArgument(dstIp.isPresent(), "Specified destination '%s' has no IPs.", headerDstIp);
     builder.setDstIp(dstIp.get());
   }
 
@@ -162,10 +185,14 @@ public final class TracerouteAnswererHelper {
     if (builder.getIpProtocol() == null || builder.getIpProtocol() == IpProtocol.IP) {
       builder.setIpProtocol(IpProtocol.UDP);
     }
-    if (builder.getDstPort() == 0) {
+    // set SYN if the user didn't specify any TCP flags
+    if (builder.getIpProtocol() == IpProtocol.TCP && constraints.getTcpFlags() == null) {
+      builder.setTcpFlagsSyn(1);
+    }
+    if (builder.getDstPort() == null) {
       builder.setDstPort(TRACEROUTE_PORT);
     }
-    if (builder.getSrcPort() == 0) {
+    if (builder.getSrcPort() == null) {
       builder.setSrcPort(NamedPort.EPHEMERAL_LOWEST.number());
     }
     return builder;
@@ -175,9 +202,14 @@ public final class TracerouteAnswererHelper {
   @VisibleForTesting
   Set<Flow> getFlows(String tag) {
     Set<Location> srcLocations =
-        LocationSpecifierFactory.load(SRC_LOCATION_SPECIFIER_FACTORY)
-            .buildLocationSpecifier(_sourceLocationStr)
-            .resolve(_specifierContext);
+        SpecifierFactories.getLocationSpecifierOrDefault(
+                _sourceLocationStr, AllInterfacesLocationSpecifier.INSTANCE)
+            .resolve(_specifierContext).stream()
+            .filter(_isActiveLocation::visit)
+            .collect(Collectors.toSet());
+
+    checkArgument(
+        !srcLocations.isEmpty(), "Found no active locations matching %s", _sourceLocationStr);
 
     ImmutableSet.Builder<Flow> setBuilder = ImmutableSet.builder();
     ImmutableSet.Builder<String> allProblems = ImmutableSet.builder();
@@ -186,7 +218,7 @@ public final class TracerouteAnswererHelper {
     for (Location srcLocation : srcLocations) {
       try {
         Flow.Builder flowBuilder = headerConstraintsToFlow(_packetHeaderConstraints, srcLocation);
-        setSourceLocation(flowBuilder, srcLocation);
+        setStartLocation(_specifierContext.getConfigs(), flowBuilder, srcLocation);
         flowBuilder.setTag(tag);
         setBuilder.add(flowBuilder.build());
       } catch (IllegalArgumentException e) {
@@ -201,41 +233,5 @@ public final class TracerouteAnswererHelper {
         "Could not construct a flow for traceroute. Found issues: %s",
         String.join(",", allProblems.build()));
     return flows;
-  }
-
-  private void setSourceLocation(Flow.Builder flowBuilder, Location loc) {
-    loc.accept(
-        new LocationVisitor<Void>() {
-          @Override
-          public Void visitInterfaceLinkLocation(
-              @Nonnull InterfaceLinkLocation interfaceLinkLocation) {
-            flowBuilder
-                .setIngressInterface(interfaceLinkLocation.getInterfaceName())
-                .setIngressNode(interfaceLinkLocation.getNodeName())
-                .setIngressVrf(null);
-            return null;
-          }
-
-          @Override
-          public Void visitInterfaceLocation(@Nonnull InterfaceLocation interfaceLocation) {
-            flowBuilder
-                .setIngressInterface(null)
-                .setIngressNode(interfaceLocation.getNodeName())
-                .setIngressVrf(
-                    interfaceVrf(
-                        interfaceLocation.getNodeName(), interfaceLocation.getInterfaceName()));
-            return null;
-          }
-        });
-  }
-
-  private String interfaceVrf(String node, String iface) {
-    return _specifierContext
-        .getConfigs()
-        .get(node)
-        .getAllInterfaces()
-        .get(iface)
-        .getVrf()
-        .getName();
   }
 }

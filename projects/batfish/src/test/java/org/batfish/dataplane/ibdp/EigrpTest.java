@@ -16,9 +16,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.SortedMap;
-import java.util.SortedSet;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 import org.batfish.common.BatfishLogger;
 import org.batfish.common.topology.TopologyUtil;
@@ -250,9 +249,10 @@ public class EigrpTest {
 
     Interface.Builder nib = nf.interfaceBuilder().setOspfCost(1);
 
-    OspfProcess.Builder opb = nf.ospfProcessBuilder();
+    OspfProcess.Builder opb = nf.ospfProcessBuilder().setProcessId("1");
     OspfArea.Builder oab = nf.ospfAreaBuilder().setNumber(area);
-    Interface.Builder oib = nf.interfaceBuilder().setOspfCost(1).setOspfEnabled(true);
+    Interface.Builder oib =
+        nf.interfaceBuilder().setOspfCost(1).setOspfProcess("1").setOspfEnabled(true);
 
     /* Configuration 1 */
     Configuration c1 = buildConfiguration(R1, eib, epb, oib, opb, nib);
@@ -399,15 +399,17 @@ public class EigrpTest {
     IncrementalBdpEngine engine =
         new IncrementalBdpEngine(
             new IncrementalDataPlaneSettings(),
-            new BatfishLogger(BatfishLogger.LEVELSTR_OUTPUT, false),
-            (s, i) -> new AtomicInteger());
+            new BatfishLogger(BatfishLogger.LEVELSTR_OUTPUT, false));
     OspfTopologyUtils.initNeighborConfigs(NetworkConfigurations.of(configurations));
     Topology topology = TopologyUtil.synthesizeL3Topology(configurations);
     return (IncrementalDataPlane)
         engine.computeDataPlane(
                 configurations,
-                topology,
-                computeOspfTopology(NetworkConfigurations.of(configurations), topology),
+                TopologyContext.builder()
+                    .setLayer3Topology(topology)
+                    .setOspfTopology(
+                        computeOspfTopology(NetworkConfigurations.of(configurations), topology))
+                    .build(),
                 Collections.emptySet())
             ._dataPlane;
   }
@@ -513,7 +515,7 @@ public class EigrpTest {
             EigrpProcessMode.CLASSIC,
             EigrpProcessMode.CLASSIC,
             "GigabitEthernet");
-    SortedMap<String, SortedMap<String, SortedSet<AbstractRoute>>> routes =
+    SortedMap<String, SortedMap<String, Set<AbstractRoute>>> routes =
         IncrementalBdpEngine.getRoutes(dp);
 
     long scale = 256L;
@@ -569,7 +571,7 @@ public class EigrpTest {
             EigrpProcessMode.CLASSIC,
             "GigabitEthernet",
             OSPF);
-    SortedMap<String, SortedMap<String, SortedSet<AbstractRoute>>> routes =
+    SortedMap<String, SortedMap<String, Set<AbstractRoute>>> routes =
         IncrementalBdpEngine.getRoutes(dp);
 
     long scale = 256L;
@@ -628,7 +630,7 @@ public class EigrpTest {
             EigrpProcessMode.CLASSIC,
             "GigabitEthernet",
             RoutingProtocol.EIGRP);
-    SortedMap<String, SortedMap<String, SortedSet<AbstractRoute>>> routes =
+    SortedMap<String, SortedMap<String, Set<AbstractRoute>>> routes =
         IncrementalBdpEngine.getRoutes(dp);
 
     long scale = 256L;
@@ -675,7 +677,7 @@ public class EigrpTest {
             EigrpProcessMode.NAMED,
             EigrpProcessMode.NAMED,
             "GigabitEthernet");
-    SortedMap<String, SortedMap<String, SortedSet<AbstractRoute>>> routes =
+    SortedMap<String, SortedMap<String, Set<AbstractRoute>>> routes =
         IncrementalBdpEngine.getRoutes(dp);
 
     // named scale / rib scale
@@ -737,7 +739,7 @@ public class EigrpTest {
             EigrpProcessMode.CLASSIC,
             EigrpProcessMode.NAMED,
             "GigabitEthernet");
-    SortedMap<String, SortedMap<String, SortedSet<AbstractRoute>>> routes =
+    SortedMap<String, SortedMap<String, Set<AbstractRoute>>> routes =
         IncrementalBdpEngine.getRoutes(dp);
 
     // r1

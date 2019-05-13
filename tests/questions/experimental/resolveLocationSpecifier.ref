@@ -1,28 +1,32 @@
 {
   "class" : "org.batfish.question.specifiers.SpecifiersQuestion",
   "queryType" : "LOCATION",
+  "specifierFactoryVersion" : "V2",
   "differential" : false,
-  "filterSpecifierFactory" : "FlexibleFilterSpecifierFactory",
   "includeOneTableKeys" : true,
   "instance" : {
-    "description" : "Show the resolved values for location specifier",
+    "description" : "Returns resolved values for location specifier.",
     "instanceName" : "qname",
+    "longDescription" : "Helper question that shows how specified locationSpec values resolve to the locations in the network.",
     "tags" : [
       "specifiers"
     ],
     "variables" : {
+      "grammarVersion" : {
+        "description" : "Version of grammar to use for resolution",
+        "displayName" : "Grammar version",
+        "optional" : true,
+        "type" : "string",
+        "value" : "v2"
+      },
       "locations" : {
         "description" : "Input to the LocationSpecifier",
         "displayName" : "Locations",
         "optional" : true,
-        "type" : "string",
+        "type" : "locationSpec",
         "value" : "input"
       }
     }
   },
-  "interfaceSpecifierFactory" : "FlexibleInterfaceSpecifierFactory",
-  "ipSpaceSpecifierFactory" : "FlexibleInferFromLocationIpSpaceSpecifierFactory",
-  "locationSpecifierFactory" : "FlexibleLocationSpecifierFactory",
-  "locationSpecifierInput" : "input",
-  "nodeSpecifierFactory" : "FlexibleNodeSpecifierFactory"
+  "locationSpecifierInput" : "input"
 }

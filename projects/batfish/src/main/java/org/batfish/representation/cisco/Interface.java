@@ -174,6 +174,8 @@ public class Interface implements Serializable {
 
   private boolean _dhcpRelayClient;
 
+  private @Nullable Integer _encapsulationVlan;
+
   private Map<Integer, HsrpGroup> _hsrpGroups;
 
   private String _hsrpVersion;
@@ -203,6 +205,8 @@ public class Interface implements Serializable {
   @Nullable private Boolean _ospfPassive;
 
   private boolean _ospfPointToPoint;
+
+  @Nullable private String _ospfProcess;
 
   private boolean _ospfShutdown;
 
@@ -409,6 +413,10 @@ public class Interface implements Serializable {
     return _dhcpRelayClient;
   }
 
+  public @Nullable Integer getEncapsulationVlan() {
+    return _encapsulationVlan;
+  }
+
   public Map<Integer, HsrpGroup> getHsrpGroups() {
     return _hsrpGroups;
   }
@@ -466,6 +474,10 @@ public class Interface implements Serializable {
   @Nullable
   public Boolean getOspfPassive() {
     return _ospfPassive;
+  }
+
+  public String getOspfProcess() {
+    return _ospfProcess;
   }
 
   public boolean getOspfPointToPoint() {
@@ -602,6 +614,10 @@ public class Interface implements Serializable {
     _dhcpRelayClient = dhcpRelayClient;
   }
 
+  public void setEncapsulationVlan(@Nullable Integer encapsulationVlan) {
+    _encapsulationVlan = encapsulationVlan;
+  }
+
   public void setIncomingFilter(String accessListName) {
     _incomingFilter = accessListName;
   }
@@ -644,6 +660,10 @@ public class Interface implements Serializable {
 
   public void setOspfPassive(@Nullable Boolean ospfPassive) {
     _ospfPassive = ospfPassive;
+  }
+
+  public void setOspfProcess(@Nullable String processName) {
+    _ospfProcess = processName;
   }
 
   public void setOspfPointToPoint(boolean ospfPointToPoint) {

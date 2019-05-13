@@ -1,13 +1,14 @@
 {
   "class" : "org.batfish.question.specifiers.SpecifiersQuestion",
   "queryType" : "FILTER",
+  "specifierFactoryVersion" : "V2",
   "differential" : false,
-  "filterSpecifierFactory" : "FlexibleFilterSpecifierFactory",
   "filterSpecifierInput" : "input",
   "includeOneTableKeys" : true,
   "instance" : {
-    "description" : "Show the resolved values for filter specifier",
+    "description" : "Returns resolved values for filter specifier.",
     "instanceName" : "qname",
+    "longDescription" : "Helper question that shows how specified filterSpec values resolve to the filters in the network.",
     "tags" : [
       "specifiers"
     ],
@@ -16,8 +17,15 @@
         "description" : "Input to the FilterSpecifier",
         "displayName" : "Filters",
         "optional" : true,
-        "type" : "string",
+        "type" : "filterSpec",
         "value" : "input"
+      },
+      "grammarVersion" : {
+        "description" : "Version of grammar to use for resolution",
+        "displayName" : "Grammar version",
+        "optional" : true,
+        "type" : "string",
+        "value" : "v2"
       },
       "nodes" : {
         "description" : "Input to the NodeSpecifier",
@@ -28,9 +36,5 @@
       }
     }
   },
-  "interfaceSpecifierFactory" : "FlexibleInterfaceSpecifierFactory",
-  "ipSpaceSpecifierFactory" : "FlexibleInferFromLocationIpSpaceSpecifierFactory",
-  "locationSpecifierFactory" : "FlexibleLocationSpecifierFactory",
-  "nodeSpecifierFactory" : "FlexibleNodeSpecifierFactory",
   "nodeSpecifierInput" : "input"
 }

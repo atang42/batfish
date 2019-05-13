@@ -17,16 +17,15 @@ import org.batfish.datamodel.acl.MatchHeaderSpace;
 
 public class SimpleExtendedAccessListServiceSpecifier implements AccessListServiceSpecifier {
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   public static class Builder {
 
-    private Set<Integer> _dscps;
+    private Set<Integer> _dscps = ImmutableSet.of();
 
-    private List<SubRange> _dstPortRanges;
+    private List<SubRange> _dstPortRanges = ImmutableList.of();
 
-    private Set<Integer> _ecns;
+    private Set<Integer> _ecns = ImmutableSet.of();
 
     private Integer _icmpCode;
 
@@ -34,11 +33,11 @@ public class SimpleExtendedAccessListServiceSpecifier implements AccessListServi
 
     private IpProtocol _protocol;
 
-    private List<SubRange> _srcPortRanges;
+    private List<SubRange> _srcPortRanges = ImmutableList.of();
 
-    private Set<FlowState> _states;
+    private Set<FlowState> _states = ImmutableSet.of();
 
-    private List<TcpFlagsMatchConditions> _tcpFlags;
+    private List<TcpFlagsMatchConditions> _tcpFlags = ImmutableList.of();
 
     public SimpleExtendedAccessListServiceSpecifier build() {
       return new SimpleExtendedAccessListServiceSpecifier(this);

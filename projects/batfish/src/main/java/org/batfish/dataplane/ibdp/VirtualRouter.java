@@ -4,6 +4,7 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.Objects.requireNonNull;
 import static org.batfish.common.util.CommonUtil.toImmutableSortedMap;
+import static org.batfish.common.util.CommonUtil.toOrderedHashCode;
 import static org.batfish.datamodel.MultipathEquivalentAsPathMatchMode.EXACT_PATH;
 import static org.batfish.datamodel.routing_policy.Environment.Direction.IN;
 import static org.batfish.dataplane.protocols.IsisProtocolHelper.convertRouteLevel1ToLevel2;
@@ -11,20 +12,20 @@ import static org.batfish.dataplane.protocols.IsisProtocolHelper.setOverloadOnAl
 import static org.batfish.dataplane.protocols.StaticRouteHelper.isInterfaceRoute;
 import static org.batfish.dataplane.protocols.StaticRouteHelper.shouldActivateNextHopIpRoute;
 import static org.batfish.dataplane.rib.AbstractRib.importRib;
+import static org.batfish.dataplane.rib.RibDelta.importDeltaToBuilder;
 import static org.batfish.dataplane.rib.RibDelta.importRibDelta;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Ordering;
+import com.google.common.collect.Streams;
 import com.google.common.graph.Network;
 import com.google.common.graph.ValueGraph;
 import java.io.Serializable;
 import java.util.AbstractMap.SimpleEntry;
-import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -44,37 +45,35 @@ import javax.annotation.Nullable;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.AbstractRoute;
 import org.batfish.datamodel.AbstractRouteBuilder;
+import org.batfish.datamodel.AbstractRouteDecorator;
+import org.batfish.datamodel.AnnotatedRoute;
 import org.batfish.datamodel.AsPath;
+import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.BgpAdvertisement;
 import org.batfish.datamodel.BgpAdvertisement.BgpAdvertisementType;
 import org.batfish.datamodel.BgpPeerConfig;
 import org.batfish.datamodel.BgpPeerConfigId;
 import org.batfish.datamodel.BgpProcess;
-import org.batfish.datamodel.BgpRoute;
 import org.batfish.datamodel.BgpSessionProperties;
 import org.batfish.datamodel.BgpTieBreaker;
+import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConnectedRoute;
 import org.batfish.datamodel.Edge;
+import org.batfish.datamodel.EvpnRoute;
+import org.batfish.datamodel.EvpnType3Route;
 import org.batfish.datamodel.Fib;
 import org.batfish.datamodel.FibImpl;
 import org.batfish.datamodel.GeneratedRoute;
-import org.batfish.datamodel.GenericRib;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.InterfaceAddress;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IsisRoute;
 import org.batfish.datamodel.LocalRoute;
+import org.batfish.datamodel.LongSpace;
 import org.batfish.datamodel.MultipathEquivalentAsPathMatchMode;
 import org.batfish.datamodel.NetworkConfigurations;
 import org.batfish.datamodel.OriginType;
-import org.batfish.datamodel.OspfExternalRoute;
-import org.batfish.datamodel.OspfExternalType1Route;
-import org.batfish.datamodel.OspfExternalType2Route;
-import org.batfish.datamodel.OspfInterAreaRoute;
-import org.batfish.datamodel.OspfInternalRoute;
-import org.batfish.datamodel.OspfIntraAreaRoute;
-import org.batfish.datamodel.OspfRoute;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.RipInternalRoute;
 import org.batfish.datamodel.RipProcess;
@@ -82,11 +81,15 @@ import org.batfish.datamodel.Route;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.StaticRoute;
 import org.batfish.datamodel.Topology;
+import org.batfish.datamodel.VniSettings;
 import org.batfish.datamodel.Vrf;
+import org.batfish.datamodel.bgp.BgpTopology;
+import org.batfish.datamodel.bgp.BgpTopology.EdgeId;
+import org.batfish.datamodel.bgp.EvpnAddressFamily;
+import org.batfish.datamodel.bgp.community.Community;
 import org.batfish.datamodel.dataplane.rib.RibGroup;
 import org.batfish.datamodel.dataplane.rib.RibId;
-import org.batfish.datamodel.eigrp.EigrpEdge;
-import org.batfish.datamodel.eigrp.EigrpInterface;
+import org.batfish.datamodel.eigrp.EigrpTopology;
 import org.batfish.datamodel.isis.IsisEdge;
 import org.batfish.datamodel.isis.IsisInterfaceLevelSettings;
 import org.batfish.datamodel.isis.IsisInterfaceMode;
@@ -95,31 +98,20 @@ import org.batfish.datamodel.isis.IsisLevel;
 import org.batfish.datamodel.isis.IsisLevelSettings;
 import org.batfish.datamodel.isis.IsisNode;
 import org.batfish.datamodel.isis.IsisProcess;
-import org.batfish.datamodel.ospf.OspfArea;
-import org.batfish.datamodel.ospf.OspfAreaSummary;
-import org.batfish.datamodel.ospf.OspfMetricType;
-import org.batfish.datamodel.ospf.OspfNeighborConfigId;
-import org.batfish.datamodel.ospf.OspfProcess;
-import org.batfish.datamodel.ospf.OspfSessionProperties;
-import org.batfish.datamodel.ospf.OspfTopology;
-import org.batfish.datamodel.ospf.OspfTopology.EdgeId;
-import org.batfish.datamodel.ospf.StubType;
+import org.batfish.datamodel.isis.IsisTopology;
 import org.batfish.datamodel.routing_policy.Environment.Direction;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.dataplane.exceptions.BgpRoutePropagationException;
 import org.batfish.dataplane.protocols.BgpProtocolHelper;
 import org.batfish.dataplane.protocols.GeneratedRouteHelper;
-import org.batfish.dataplane.protocols.OspfProtocolHelper;
-import org.batfish.dataplane.rib.BgpRib;
+import org.batfish.dataplane.rib.AnnotatedRib;
+import org.batfish.dataplane.rib.Bgpv4Rib;
 import org.batfish.dataplane.rib.ConnectedRib;
+import org.batfish.dataplane.rib.EvpnRib;
 import org.batfish.dataplane.rib.IsisLevelRib;
 import org.batfish.dataplane.rib.IsisRib;
+import org.batfish.dataplane.rib.KernelRib;
 import org.batfish.dataplane.rib.LocalRib;
-import org.batfish.dataplane.rib.OspfExternalType1Rib;
-import org.batfish.dataplane.rib.OspfExternalType2Rib;
-import org.batfish.dataplane.rib.OspfInterAreaRib;
-import org.batfish.dataplane.rib.OspfIntraAreaRib;
-import org.batfish.dataplane.rib.OspfRib;
 import org.batfish.dataplane.rib.Rib;
 import org.batfish.dataplane.rib.RibDelta;
 import org.batfish.dataplane.rib.RibDelta.Builder;
@@ -128,7 +120,6 @@ import org.batfish.dataplane.rib.RipRib;
 import org.batfish.dataplane.rib.RouteAdvertisement;
 import org.batfish.dataplane.rib.RouteAdvertisement.Reason;
 import org.batfish.dataplane.rib.StaticRib;
-import org.batfish.dataplane.topology.BgpEdgeId;
 
 public class VirtualRouter implements Serializable {
 
@@ -138,17 +129,17 @@ public class VirtualRouter implements Serializable {
   private final Configuration _c;
 
   /** Route dependency tracker for BGP aggregate routes */
-  private transient RouteDependencyTracker<BgpRoute, AbstractRoute> _bgpAggDeps =
+  private transient RouteDependencyTracker<Bgpv4Route, AbstractRoute> _bgpAggDeps =
       new RouteDependencyTracker<>();
 
   /** Incoming messages into this router from each BGP neighbor */
-  transient SortedMap<BgpEdgeId, Queue<RouteAdvertisement<BgpRoute>>> _bgpIncomingRoutes;
+  transient SortedMap<EdgeId, Queue<RouteAdvertisement<Bgpv4Route>>> _bgpIncomingRoutes;
 
   /** Combined BGP (both iBGP and eBGP) RIB */
-  BgpRib _bgpRib;
+  Bgpv4Rib _bgpRib;
 
   /** Builder for constructing {@link RibDelta} as pertains to the multipath BGP RIB */
-  private transient RibDelta.Builder<BgpRoute> _bgpDeltaBuilder;
+  private transient RibDelta.Builder<Bgpv4Route> _bgpDeltaBuilder;
 
   /** The RIB containing connected routes */
   private transient ConnectedRib _connectedRib;
@@ -157,25 +148,33 @@ public class VirtualRouter implements Serializable {
    * Queues containing routes that are coming in from other VRFs (as a result of explicitly
    * configured leaking or applied RIB groups).
    */
-  private transient SortedMap<CrossVrfEdgeId, Queue<RouteAdvertisement<AbstractRoute>>>
+  private transient SortedMap<
+          CrossVrfEdgeId, Queue<RouteAdvertisement<AnnotatedRoute<AbstractRoute>>>>
       _crossVrfIncomingRoutes;
 
   /** Helper RIB containing all paths obtained with external BGP */
-  transient BgpRib _ebgpRib;
+  transient Bgpv4Rib _ebgpRib;
 
   /**
    * Helper RIB containing paths obtained with external eBGP during current iteration. An Adj-RIB of
    * sorts.
    */
-  transient BgpRib _ebgpStagingRib;
+  transient Bgpv4Rib _ebgpStagingRib;
 
   /** Helper RIB containing paths obtained with iBGP */
-  transient BgpRib _ibgpRib;
+  transient Bgpv4Rib _ibgpRib;
 
   /**
    * Helper RIB containing paths obtained with iBGP during current iteration. An Adj-RIB of sorts.
    */
-  transient BgpRib _ibgpStagingRib;
+  transient Bgpv4Rib _ibgpStagingRib;
+
+  /** Helper RIB containing paths obtained with EVPN over eBGP */
+  transient EvpnRib<EvpnRoute> _ebgpEvpnRib;
+
+  /** Helper RIB containing paths obtained with EVPN over iBGP */
+  transient EvpnRib<EvpnRoute> _ibgpEvpnRib;
+
   /**
    * The independent RIB contains connected and static routes, which are unaffected by BDP
    * iterations (hence, independent).
@@ -186,59 +185,30 @@ public class VirtualRouter implements Serializable {
   transient SortedMap<IsisEdge, Queue<RouteAdvertisement<IsisRoute>>> _isisIncomingRoutes;
 
   transient IsisLevelRib _isisL1Rib;
-
   transient IsisLevelRib _isisL2Rib;
-
   private transient IsisLevelRib _isisL1StagingRib;
-
   private transient IsisLevelRib _isisL2StagingRib;
-
   private transient IsisRib _isisRib;
-
+  transient KernelRib _kernelRib;
   transient LocalRib _localRib;
 
   /** The finalized RIB, a combination different protocol RIBs */
-  Rib _mainRib;
+  final Rib _mainRib;
 
-  private Map<String, Rib> _mainRibs;
+  private final Map<String, Rib> _mainRibs;
 
   /** Keeps track of changes to the main RIB */
-  private transient RibDelta.Builder<AbstractRoute> _mainRibRouteDeltaBuilder;
-
-  @Nonnull private final Node _node;
-
-  @Nonnull private final String _name;
-
-  transient OspfExternalType1Rib _ospfExternalType1Rib;
-
-  transient OspfExternalType1Rib _ospfExternalType1StagingRib;
-
-  transient OspfExternalType2Rib _ospfExternalType2Rib;
-
-  transient OspfExternalType2Rib _ospfExternalType2StagingRib;
-
   @VisibleForTesting
-  transient SortedMap<OspfTopology.EdgeId, Queue<RouteAdvertisement<OspfExternalRoute>>>
-      _ospfExternalIncomingRoutes;
+  transient RibDelta.Builder<AnnotatedRoute<AbstractRoute>> _mainRibRouteDeltaBuilder;
 
-  transient OspfInterAreaRib _ospfInterAreaRib;
-
-  transient OspfInterAreaRib _ospfInterAreaStagingRib;
-
-  transient OspfIntraAreaRib _ospfIntraAreaRib;
-
-  transient OspfIntraAreaRib _ospfIntraAreaStagingRib;
-
-  transient OspfRib _ospfRib;
+  @Nonnull final String _name;
+  @Nonnull private final Node _node;
+  private transient Map<String, OspfRoutingProcess> _ospfProcesses;
 
   transient RipInternalRib _ripInternalRib;
-
   transient RipInternalRib _ripInternalStagingRib;
-
   transient RipRib _ripRib;
-
   transient StaticRib _staticInterfaceRib;
-
   transient StaticRib _staticNextHopRib;
 
   /** FIB (forwarding information base) built from the main RIB */
@@ -246,8 +216,6 @@ public class VirtualRouter implements Serializable {
 
   /** RIB containing generated routes */
   private transient Rib _generatedRib;
-
-  private transient RibDelta.Builder<OspfExternalRoute> _ospfExternalDeltaBuilder;
 
   /** Metadata about propagated prefixes to/from neighbors */
   private PrefixTracer _prefixTracer;
@@ -263,13 +231,20 @@ public class VirtualRouter implements Serializable {
     _c = node.getConfiguration();
     _name = name;
     _vrf = _c.getVrfs().get(name);
+    // Main RIB + delta builder
+    _mainRib = new Rib();
+    _mainRibs = ImmutableMap.of(RibId.DEFAULT_RIB_NAME, _mainRib);
+    _mainRibRouteDeltaBuilder = RibDelta.builder();
+    // Init rest of the RIBs
     initRibs();
     _bgpIncomingRoutes = new TreeMap<>();
     _prefixTracer = new PrefixTracer();
     _virtualEigrpProcesses = ImmutableMap.of();
+    _ospfProcesses = ImmutableMap.of();
   }
 
-  private void initCrossVrfQueues() {
+  @VisibleForTesting
+  void initCrossVrfQueues() {
     // TODO: also handle non-default RIBs
     // https://github.com/batfish/batfish/issues/3050
     _crossVrfIncomingRoutes =
@@ -291,11 +266,15 @@ public class VirtualRouter implements Serializable {
    */
   static <R extends AbstractRoute, D extends R> void queueDelta(
       Queue<RouteAdvertisement<R>> queue, @Nonnull RibDelta<D> delta) {
-    for (RouteAdvertisement<D> r : delta.getActions()) {
-      // REPLACE does not make sense across routers, update with WITHDRAW
-      Reason reason = r.getReason() == Reason.REPLACE ? Reason.WITHDRAW : r.getReason();
-      queue.add(RouteAdvertisement.<R>builder().setRoute(r.getRoute()).setReason(reason).build());
-    }
+    delta
+        .getActions()
+        .forEach(
+            r -> {
+              // REPLACE does not make sense across routers, update with WITHDRAW
+              Reason reason = r.getReason() == Reason.REPLACE ? Reason.WITHDRAW : r.getReason();
+              queue.add(
+                  RouteAdvertisement.<R>builder().setRoute(r.getRoute()).setReason(reason).build());
+            });
   }
 
   /** Lookup the VirtualRouter owner of a remote BGP neighbor. */
@@ -311,15 +290,18 @@ public class VirtualRouter implements Serializable {
    * iterations (e.g., static route RIB, connected route RIB, etc.)
    */
   @VisibleForTesting
-  void initForIgpComputation() {
+  void initForIgpComputation(TopologyContext topologyContext) {
     initConnectedRib();
+    initKernelRib();
     initLocalRib();
     initStaticRibs();
     // Always import local and connected routes into your own rib
     importRib(_independentRib, _connectedRib);
+    importRib(_independentRib, _kernelRib);
     importRib(_independentRib, _localRib);
-    importRib(_independentRib, _staticInterfaceRib);
+    importRib(_independentRib, _staticInterfaceRib, _name);
     importRib(_mainRib, _independentRib);
+
     // Now check whether any rib groups are applied
     RibGroup connectedRibGroup = _vrf.getAppliedRibGroups().get(RoutingProtocol.CONNECTED);
     importRib(_mainRib, _connectedRib);
@@ -330,22 +312,31 @@ public class VirtualRouter implements Serializable {
     if (localRibGroup != null) {
       applyRibGroup(localRibGroup, _localRib);
     }
-    initIntraAreaOspfRoutes();
+
+    _ospfProcesses =
+        _vrf.getOspfProcesses().entrySet().stream()
+            .collect(
+                ImmutableMap.toImmutableMap(
+                    Entry::getKey,
+                    e ->
+                        new OspfRoutingProcess(
+                            e.getValue(), _name, _c, topologyContext.getOspfTopology())));
+    _ospfProcesses.values().forEach(OspfRoutingProcess::initialize);
+
     initEigrp();
     initBaseRipRoutes();
   }
 
-  /** Apply a rib group to a given source rib */
-  private void applyRibGroup(
-      @Nonnull RibGroup ribGroup, @Nonnull GenericRib<? extends AbstractRoute> sourceRib) {
+  /** Apply a rib group to a given source rib (which belongs to this VRF) */
+  private void applyRibGroup(@Nonnull RibGroup ribGroup, @Nonnull AnnotatedRib<?> sourceRib) {
     RoutingPolicy policy = _c.getRoutingPolicies().get(ribGroup.getImportPolicy());
     checkState(policy != null, "RIB group %s is missing import policy", ribGroup.getName());
-    sourceRib.getRoutes().stream()
+    sourceRib.getTypedRoutes().stream()
         .map(
             route -> {
-              AbstractRouteBuilder<?, ?> builder = route.toBuilder();
+              AbstractRouteBuilder<?, ?> builder = route.getRoute().toBuilder();
               boolean accept = policy.process(route, builder, null, _name, IN);
-              return accept ? builder.build() : null;
+              return accept ? new AnnotatedRoute<AbstractRoute>(builder.build(), _name) : null;
             })
         .filter(Objects::nonNull)
         .forEach(
@@ -364,69 +355,49 @@ public class VirtualRouter implements Serializable {
   }
 
   /**
-   * Prep for the Egp part of the computation
+   * Prepare for the EGP part of the computation
    *
-   * @param allNodes map of all network nodes, keyed by hostname
-   * @param bgpTopology the bgp peering relationships
-   * @param eigrpTopology The topology representing EIGRP adjacencies
-   * @param ospfTopology The OSPF adjacency
+   * @param topologyContext The various network topologies
    */
-  void initForEgpComputation(
-      final Map<String, Node> allNodes,
-      ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology,
-      Network<EigrpInterface, EigrpEdge> eigrpTopology,
-      Network<IsisNode, IsisEdge> isisTopology,
-      OspfTopology ospfTopology) {
-    initQueuesAndDeltaBuilders(bgpTopology, eigrpTopology, isisTopology, ospfTopology);
+  void initForEgpComputation(TopologyContext topologyContext) {
+    initQueuesAndDeltaBuilders(topologyContext);
   }
 
   /**
    * Initializes RIB delta builders and protocol message queues.
    *
-   * @param bgpTopology the bgp peering relationships
-   * @param eigrpTopology The topology representing EIGRP adjacencies
-   * @param ospfTopology Layer 3 network topology
+   * @param topologyContext The various network topologies
    */
   @VisibleForTesting
-  void initQueuesAndDeltaBuilders(
-      final ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology,
-      final Network<EigrpInterface, EigrpEdge> eigrpTopology,
-      final Network<IsisNode, IsisEdge> isisTopology,
-      final OspfTopology ospfTopology) {
+  void initQueuesAndDeltaBuilders(TopologyContext topologyContext) {
 
     // Initialize message queues for each BGP neighbor
-    initBgpQueues(bgpTopology);
+    initBgpQueues(topologyContext.getBgpTopology());
     // Initialize message queues for each EIGRP neighbor
-    initEigrpQueues(eigrpTopology);
+    initEigrpQueues(topologyContext.getEigrpTopology());
     // Initialize message queues for each IS-IS neighbor
-    initIsisQueues(isisTopology);
-    // Initialize message queues for each OSPF neighbor
-    initOspfQueues(ospfTopology);
+    initIsisQueues(topologyContext.getIsisTopology());
     // Initalize message queues for all neighboring VRFs/VirtualRouters
     initCrossVrfQueues();
   }
 
-  private void initOspfQueues(OspfTopology topology) {
-    OspfProcess proc = _vrf.getOspfProcess();
-
-    if (proc == null) {
-      // No OSPF process, nothing to do
-      _ospfExternalIncomingRoutes = ImmutableSortedMap.of();
+  /**
+   * Goes through VRFs that can leak routes into this routing instance, and imports all routes from
+   * their main ribs to {@link #_crossVrfIncomingRoutes}.
+   */
+  void initCrossVrfImports() {
+    if (_vrf.getCrossVrfImportPolicy() == null || _vrf.getCrossVrfImportVrfs() == null) {
       return;
     }
-
-    _ospfExternalIncomingRoutes =
-        proc.getOspfNeighborConfigs().keySet().stream()
-            .flatMap(
-                interfaceName ->
-                    topology
-                        .incomingEdges(
-                            new OspfNeighborConfigId(
-                                _node.getConfiguration().getHostname(), _name, interfaceName))
-                        .stream())
-            .collect(
-                ImmutableSortedMap.toImmutableSortedMap(
-                    Ordering.natural(), Function.identity(), v -> new ConcurrentLinkedQueue<>()));
+    for (String vrfToImport : _vrf.getCrossVrfImportVrfs()) {
+      VirtualRouter exportingVR = _node.getVirtualRouters().get(vrfToImport);
+      CrossVrfEdgeId otherVrfToOurRib = new CrossVrfEdgeId(vrfToImport, RibId.DEFAULT_RIB_NAME);
+      enqueueCrossVrfRoutes(
+          otherVrfToOurRib,
+          // TODO Will need to update once support is added for cross-VRF export policies
+          exportingVR._mainRib.getTypedRoutes().stream().map(RouteAdvertisement::new),
+          _vrf.getCrossVrfImportPolicy());
+    }
   }
 
   /**
@@ -434,25 +405,29 @@ public class VirtualRouter implements Serializable {
    *
    * @param bgpTopology source of truth for which sessions get established.
    */
-  void initBgpQueues(ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology) {
+  void initBgpQueues(BgpTopology bgpTopology) {
+    ValueGraph<BgpPeerConfigId, BgpSessionProperties> graph = bgpTopology.getGraph();
     if (_vrf.getBgpProcess() == null) {
       _bgpIncomingRoutes = ImmutableSortedMap.of();
     } else {
       _bgpIncomingRoutes =
-          Stream.concat(
+          Streams.concat(
                   _vrf.getBgpProcess().getActiveNeighbors().entrySet().stream()
+                      .filter(e -> e.getValue().getIpv4UnicastAddressFamily() != null)
                       .map(
                           e ->
                               new BgpPeerConfigId(
                                   getHostname(), _vrf.getName(), e.getKey(), false)),
                   _vrf.getBgpProcess().getPassiveNeighbors().entrySet().stream()
+                      .filter(e -> e.getValue().getIpv4UnicastAddressFamily() != null)
                       .map(
                           e ->
-                              new BgpPeerConfigId(getHostname(), _vrf.getName(), e.getKey(), true)))
-              .filter(bgpTopology.nodes()::contains)
-              .flatMap(
-                  dst ->
-                      bgpTopology.adjacentNodes(dst).stream().map(src -> new BgpEdgeId(src, dst)))
+                              new BgpPeerConfigId(getHostname(), _vrf.getName(), e.getKey(), true)),
+                  _vrf.getBgpProcess().getInterfaceNeighbors().entrySet().stream()
+                      .filter(e -> e.getValue().getIpv4UnicastAddressFamily() != null)
+                      .map(e -> new BgpPeerConfigId(getHostname(), _vrf.getName(), e.getKey())))
+              .filter(graph.nodes()::contains)
+              .flatMap(dst -> graph.adjacentNodes(dst).stream().map(src -> new EdgeId(src, dst)))
               .collect(
                   toImmutableSortedMap(Function.identity(), e -> new ConcurrentLinkedQueue<>()));
     }
@@ -463,11 +438,12 @@ public class VirtualRouter implements Serializable {
    *
    * @param eigrpTopology The topology representing EIGRP adjacencies
    */
-  private void initEigrpQueues(Network<EigrpInterface, EigrpEdge> eigrpTopology) {
+  private void initEigrpQueues(EigrpTopology eigrpTopology) {
     _virtualEigrpProcesses.values().forEach(proc -> proc.initQueues(eigrpTopology));
   }
 
-  private void initIsisQueues(Network<IsisNode, IsisEdge> isisTopology) {
+  private void initIsisQueues(IsisTopology isisTopology) {
+    Network<IsisNode, IsisEdge> network = isisTopology.getNetwork();
     // Initialize message queues for each IS-IS circuit
     if (_vrf.getIsisProcess() == null) {
       _isisIncomingRoutes = ImmutableSortedMap.of();
@@ -475,8 +451,8 @@ public class VirtualRouter implements Serializable {
       _isisIncomingRoutes =
           _vrf.getInterfaceNames().stream()
               .map(ifaceName -> new IsisNode(_c.getHostname(), ifaceName))
-              .filter(isisTopology.nodes()::contains)
-              .flatMap(n -> isisTopology.inEdges(n).stream())
+              .filter(network.nodes()::contains)
+              .flatMap(n -> network.inEdges(n).stream())
               .collect(
                   toImmutableSortedMap(Function.identity(), e -> new ConcurrentLinkedQueue<>()));
     }
@@ -487,9 +463,8 @@ public class VirtualRouter implements Serializable {
    *
    * @return a new {@link RibDelta} if a new route has been activated, otherwise {@code null}
    */
-  @VisibleForTesting
-  RibDelta<AbstractRoute> activateGeneratedRoutes() {
-    RibDelta.Builder<AbstractRoute> builder = RibDelta.builder();
+  private RibDelta<AnnotatedRoute<AbstractRoute>> activateGeneratedRoutes() {
+    RibDelta.Builder<AnnotatedRoute<AbstractRoute>> builder = RibDelta.builder();
 
     /*
      * Loop over all generated routes and check whether any of the contributing routes can trigger
@@ -498,16 +473,14 @@ public class VirtualRouter implements Serializable {
     for (GeneratedRoute gr : _vrf.getGeneratedRoutes()) {
       String policyName = gr.getGenerationPolicy();
       RoutingPolicy generationPolicy =
-          policyName != null ? _c.getRoutingPolicies().get(gr.getGenerationPolicy()) : null;
+          policyName != null ? _c.getRoutingPolicies().get(policyName) : null;
       GeneratedRoute.Builder grb =
           GeneratedRouteHelper.activateGeneratedRoute(
-              gr, generationPolicy, _mainRib.getRoutes(), _vrf.getName());
+              gr, generationPolicy, _mainRib.getTypedRoutes(), _vrf.getName());
 
       if (grb != null) {
-        GeneratedRoute newGr = grb.build();
         // Routes have been changed
-        RibDelta<AbstractRoute> d = _generatedRib.mergeRouteGetDelta(newGr);
-        builder.from(d);
+        builder.from(_generatedRib.mergeRouteGetDelta(annotateRoute(grb.build())));
       }
     }
     return builder.build();
@@ -518,8 +491,8 @@ public class VirtualRouter implements Serializable {
    * RIB. Check if any BGP aggregates were affected by the new generated routes.
    */
   void recomputeGeneratedRoutes() {
-    RibDelta<AbstractRoute> d;
-    RibDelta.Builder<AbstractRoute> generatedRouteDeltaBuilder = RibDelta.builder();
+    RibDelta<AnnotatedRoute<AbstractRoute>> d;
+    RibDelta.Builder<AnnotatedRoute<AbstractRoute>> generatedRouteDeltaBuilder = RibDelta.builder();
     do {
       d = activateGeneratedRoutes();
       generatedRouteDeltaBuilder.from(d);
@@ -535,9 +508,11 @@ public class VirtualRouter implements Serializable {
      * Updates from these BGP deltas into mainRib will be handled in finalizeBgp routes
      */
     if (!d.isEmpty()) {
-      d.getActions().stream()
+      d.getActions()
           .filter(RouteAdvertisement::isWithdrawn)
-          .forEach(r -> _bgpDeltaBuilder.from(_bgpAggDeps.deleteRoute(r.getRoute(), _bgpRib)));
+          .forEach(
+              r ->
+                  _bgpDeltaBuilder.from(_bgpAggDeps.deleteRoute(r.getRoute().getRoute(), _bgpRib)));
     }
   }
 
@@ -548,14 +523,15 @@ public class VirtualRouter implements Serializable {
    * <p>Removes static route from the main RIB for which next-hop-ip has become unreachable.
    */
   void activateStaticRoutes() {
-    for (StaticRoute sr : _staticNextHopRib.getRoutes()) {
+    for (StaticRoute sr : _staticNextHopRib.getTypedRoutes()) {
       if (shouldActivateNextHopIpRoute(sr, _mainRib)) {
-        _mainRibRouteDeltaBuilder.from(_mainRib.mergeRouteGetDelta(sr));
+        _mainRibRouteDeltaBuilder.from(_mainRib.mergeRouteGetDelta(annotateRoute(sr)));
       } else {
         /*
          * If the route is not in the RIB, this has no effect. But might add some overhead (TODO)
          */
-        _mainRibRouteDeltaBuilder.from(_mainRib.removeRouteGetDelta(sr, Reason.WITHDRAW));
+        _mainRibRouteDeltaBuilder.from(
+            _mainRib.removeRouteGetDelta(annotateRoute(sr), Reason.WITHDRAW));
       }
     }
   }
@@ -563,74 +539,6 @@ public class VirtualRouter implements Serializable {
   /** Compute the FIB from the main RIB */
   public void computeFib() {
     _fib = new FibImpl(_mainRib);
-  }
-
-  boolean computeInterAreaSummaries() {
-    OspfProcess proc = _vrf.getOspfProcess();
-    boolean changed = false;
-    // Ensure we have a running OSPF process on the VRF, otherwise bail.
-    if (proc == null) {
-      return false;
-    }
-    // Admin cost for the given protocol
-    int admin = RoutingProtocol.OSPF_IA.getSummaryAdministrativeCost(_c.getConfigurationFormat());
-
-    // Determine whether to use min metric by default, based on RFC1583 compatibility setting.
-    // Routers (at least Cisco and Juniper) default to min metric unless using RFC2328 with
-    // RFC1583 compatibility explicitly disabled, in which case they default to max.
-    boolean useMin = firstNonNull(proc.getRfc1583Compatible(), Boolean.TRUE);
-
-    // Compute summaries for each area
-    for (Entry<Long, OspfArea> e : proc.getAreas().entrySet()) {
-      long areaNum = e.getKey();
-      OspfArea area = e.getValue();
-      for (Entry<Prefix, OspfAreaSummary> e2 : area.getSummaries().entrySet()) {
-        Prefix prefix = e2.getKey();
-        OspfAreaSummary summary = e2.getValue();
-
-        // Only advertised summaries can contribute
-        if (!summary.getAdvertised()) {
-          continue;
-        }
-
-        Long metric = summary.getMetric();
-        if (summary.getMetric() == null) {
-          // No metric was configured; compute it from any possible contributing routes.
-          for (OspfIntraAreaRoute contributingRoute : _ospfIntraAreaRib.getRoutes()) {
-            metric =
-                OspfProtocolHelper.computeUpdatedOspfSummaryMetric(
-                    contributingRoute, prefix, metric, areaNum, useMin);
-          }
-          for (OspfInterAreaRoute contributingRoute : _ospfInterAreaRib.getRoutes()) {
-            metric =
-                OspfProtocolHelper.computeUpdatedOspfSummaryMetric(
-                    contributingRoute, prefix, metric, areaNum, useMin);
-          }
-        }
-
-        // No routes contributed to the summary, nothing to construct
-        if (metric == null) {
-          continue;
-        }
-
-        // Non-null metric means we generate a new summary and put it in the RIB
-        OspfInterAreaRoute summaryRoute =
-            (OspfInterAreaRoute)
-                OspfInternalRoute.builder()
-                    .setProtocol(RoutingProtocol.OSPF_IA)
-                    .setNetwork(prefix)
-                    .setNextHopIp(Ip.ZERO)
-                    .setAdmin(admin)
-                    .setMetric(metric)
-                    .setArea(areaNum)
-                    .setNonRouting(true)
-                    .build();
-        if (!_ospfInterAreaStagingRib.mergeRouteGetDelta(summaryRoute).isEmpty()) {
-          changed = true;
-        }
-      }
-    }
-    return changed;
   }
 
   /**
@@ -645,7 +553,7 @@ public class VirtualRouter implements Serializable {
       Set<BgpAdvertisement> externalAdverts,
       Map<Ip, Set<String>> ipOwners,
       final Map<String, Node> allNodes,
-      ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology,
+      BgpTopology bgpTopology,
       NetworkConfigurations networkConfigurations) {
 
     BgpProcess proc = _vrf.getBgpProcess();
@@ -655,7 +563,7 @@ public class VirtualRouter implements Serializable {
     }
 
     // Keep track of changes to the RIBs using delta builders, keyed by RIB type
-    Map<BgpRib, RibDelta.Builder<BgpRoute>> ribDeltas = new IdentityHashMap<>();
+    Map<Bgpv4Rib, RibDelta.Builder<Bgpv4Route>> ribDeltas = new IdentityHashMap<>();
     ribDeltas.put(_ebgpStagingRib, RibDelta.builder());
     ribDeltas.put(_ibgpStagingRib, RibDelta.builder());
 
@@ -663,7 +571,7 @@ public class VirtualRouter implements Serializable {
     int ebgpAdmin = RoutingProtocol.BGP.getDefaultAdministrativeCost(_c.getConfigurationFormat());
     int ibgpAdmin = RoutingProtocol.IBGP.getDefaultAdministrativeCost(_c.getConfigurationFormat());
 
-    BgpRoute.Builder outgoingRouteBuilder = new BgpRoute.Builder();
+    Bgpv4Route.Builder outgoingRouteBuilder = new Bgpv4Route.Builder();
     // Process each BGP advertisement
     for (BgpAdvertisement advert : externalAdverts) {
 
@@ -681,7 +589,7 @@ public class VirtualRouter implements Serializable {
       }
 
       Ip srcIp = advert.getSrcIp();
-      // TODO: support passive bgp connections
+      // TODO: support passive and unnumbered bgp connections
       Prefix srcPrefix = Prefix.create(srcIp, Prefix.MAX_PREFIX_LENGTH);
       BgpPeerConfig neighbor = _vrf.getBgpProcess().getActiveNeighbors().get(srcPrefix);
       if (neighbor == null) {
@@ -719,14 +627,14 @@ public class VirtualRouter implements Serializable {
           throw new BatfishException("Missing or invalid bgp advertisement type");
       }
 
-      BgpRib targetRib = ebgp ? _ebgpStagingRib : _ibgpStagingRib;
+      Bgpv4Rib targetRib = ebgp ? _ebgpStagingRib : _ibgpStagingRib;
       RoutingProtocol targetProtocol = ebgp ? RoutingProtocol.BGP : RoutingProtocol.IBGP;
 
       if (received) {
         int admin = ebgp ? ebgpAdmin : ibgpAdmin;
         AsPath asPath = advert.getAsPath();
         SortedSet<Long> clusterList = advert.getClusterList();
-        SortedSet<Long> communities = ImmutableSortedSet.copyOf(advert.getCommunities());
+        SortedSet<Community> communities = ImmutableSortedSet.copyOf(advert.getCommunities());
         long localPreference = advert.getLocalPreference();
         long metric = advert.getMed();
         Prefix network = advert.getNetwork();
@@ -735,7 +643,7 @@ public class VirtualRouter implements Serializable {
         OriginType originType = advert.getOriginType();
         RoutingProtocol srcProtocol = advert.getSrcProtocol();
         int weight = advert.getWeight();
-        BgpRoute.Builder builder = new BgpRoute.Builder();
+        Bgpv4Route.Builder builder = new Bgpv4Route.Builder();
         builder.setAdmin(admin);
         builder.setAsPath(asPath);
         builder.setClusterList(clusterList);
@@ -753,12 +661,12 @@ public class VirtualRouter implements Serializable {
         builder.setSrcProtocol(srcProtocol);
         // TODO: possibly support setting tag
         builder.setWeight(weight);
-        BgpRoute route = builder.build();
+        Bgpv4Route route = builder.build();
         ribDeltas.get(targetRib).from(targetRib.mergeRouteGetDelta(route));
       } else {
         long localPreference;
         if (ebgp) {
-          localPreference = BgpRoute.DEFAULT_LOCAL_PREFERENCE;
+          localPreference = Bgpv4Route.DEFAULT_LOCAL_PREFERENCE;
         } else {
           localPreference = advert.getLocalPreference();
         }
@@ -775,8 +683,8 @@ public class VirtualRouter implements Serializable {
         // TODO:
         // outgoingRouteBuilder.setReceivedFromRouteReflectorClient(...);
         outgoingRouteBuilder.setSrcProtocol(advert.getSrcProtocol());
-        BgpRoute transformedOutgoingRoute = outgoingRouteBuilder.build();
-        BgpRoute.Builder transformedIncomingRouteBuilder = new BgpRoute.Builder();
+        Bgpv4Route transformedOutgoingRoute = outgoingRouteBuilder.build();
+        Bgpv4Route.Builder transformedIncomingRouteBuilder = new Bgpv4Route.Builder();
 
         // Incoming originatorIp
         transformedIncomingRouteBuilder.setOriginatorIp(transformedOutgoingRoute.getOriginatorIp());
@@ -841,6 +749,7 @@ public class VirtualRouter implements Serializable {
         if (importPolicyName != null) {
           RoutingPolicy importPolicy = _c.getRoutingPolicies().get(importPolicyName);
           if (importPolicy != null) {
+            // TODO Figure out whether transformedOutgoingRoute ought to have an annotation
             acceptIncoming =
                 importPolicy.process(
                     transformedOutgoingRoute,
@@ -851,70 +760,73 @@ public class VirtualRouter implements Serializable {
           }
         }
         if (acceptIncoming) {
-          BgpRoute transformedIncomingRoute = transformedIncomingRouteBuilder.build();
+          Bgpv4Route transformedIncomingRoute = transformedIncomingRouteBuilder.build();
           ribDeltas.get(targetRib).from(targetRib.mergeRouteGetDelta(transformedIncomingRoute));
         }
       }
     }
 
-    // Propagate received routes through all the RIBs and send out appropriate messages
-    // to neighbors
-    Map<BgpRib, RibDelta<BgpRoute>> deltas =
+    // Propagate received routes through all the RIBs and send out appropriate messages to neighbors
+    Map<Bgpv4Rib, RibDelta<Bgpv4Route>> deltas =
         ribDeltas.entrySet().stream()
             .filter(e -> !e.getValue().build().isEmpty())
             .collect(Collectors.toMap(Entry::getKey, e -> e.getValue().build()));
     finalizeBgpRoutesAndQueueOutgoingMessages(deltas, allNodes, bgpTopology, networkConfigurations);
   }
 
-  /** Initialize Intra-area OSPF routes from the interface prefixes */
-  private void initIntraAreaOspfRoutes() {
-    OspfProcess proc = _vrf.getOspfProcess();
-    if (proc == null) {
-      return; // nothing to do
+  /**
+   * Initialize the EVPN RIBs using the EVPN address families configured on the active BGP neighbors
+   * on this Virtual Router
+   */
+  @VisibleForTesting
+  void initEvpnRoutes() {
+    BgpProcess bgpProcess = _vrf.getBgpProcess();
+    if (bgpProcess == null) {
+      // Nothing to do
+      return;
     }
-    /*
-     * init intra-area routes from connected routes
-     * For each interface within an OSPF area and each interface prefix,
-     * construct a new OSPF-IA route. Put it in the IA RIB.
-     */
-    proc.getAreas()
-        .forEach(
-            (areaNum, area) -> {
-              for (String ifaceName : area.getInterfaces()) {
-                Interface iface = _c.getAllInterfaces().get(ifaceName);
-                if (iface.getActive()) {
-                  Set<Prefix> allNetworkPrefixes =
-                      iface.getAllAddresses().stream()
-                          .map(InterfaceAddress::getPrefix)
-                          .collect(Collectors.toSet());
-                  int interfaceOspfCost = iface.getOspfCost();
-                  for (Prefix prefix : allNetworkPrefixes) {
-                    long cost = interfaceOspfCost;
-                    boolean stubNetwork = iface.getOspfPassive() || iface.getOspfPointToPoint();
-                    if (stubNetwork) {
-                      if (proc.getMaxMetricStubNetworks() != null) {
-                        cost = proc.getMaxMetricStubNetworks();
-                      }
-                    } else if (proc.getMaxMetricTransitLinks() != null) {
-                      cost = proc.getMaxMetricTransitLinks();
-                    }
-                    OspfIntraAreaRoute route =
-                        (OspfIntraAreaRoute)
-                            OspfInternalRoute.builder()
-                                .setProtocol(RoutingProtocol.OSPF)
-                                .setNetwork(prefix)
-                                .setNextHopIp(null)
-                                .setAdmin(
-                                    RoutingProtocol.OSPF.getDefaultAdministrativeCost(
-                                        _c.getConfigurationFormat()))
-                                .setMetric(cost)
-                                .setArea(areaNum)
-                                .build();
-                    _ospfIntraAreaRib.mergeRouteGetDelta(route);
-                  }
-                }
-              }
-            });
+
+    // default admin costs
+    int ebgpAdmin = RoutingProtocol.BGP.getDefaultAdministrativeCost(_c.getConfigurationFormat());
+    int ibgpAdmin = RoutingProtocol.IBGP.getDefaultAdministrativeCost(_c.getConfigurationFormat());
+
+    for (BgpActivePeerConfig peerConfig : bgpProcess.getActiveNeighbors().values()) {
+      EvpnAddressFamily evpnAddressFamily = peerConfig.getEvpnAddressFamily();
+      if (peerConfig.getLocalAs() == null
+          || peerConfig.getRemoteAsns().isEmpty()
+          || evpnAddressFamily == null) {
+        // nothing to do if we cannot figure out local and remote AS or if the neighbor cannot talk
+        // EVPN
+        continue;
+      }
+
+      // just initialize EVPN type 3 routes for now
+      evpnAddressFamily
+          .getL3VNIs()
+          .forEach(
+              layer3VniConfig -> {
+                boolean ebgp =
+                    !peerConfig.getRemoteAsns().equals(LongSpace.of(peerConfig.getLocalAs()));
+                EvpnRib<EvpnRoute> ribForThisRoute = ebgp ? _ebgpEvpnRib : _ibgpEvpnRib;
+                VniSettings vniSettings = _vrf.getVniSettings().get(layer3VniConfig.getVni());
+                checkState(
+                    vniSettings != null,
+                    String.format(
+                        "Cannot find VNI settings for VNI: %s", layer3VniConfig.getVni()));
+                EvpnType3Route.Builder type3RouteBuilder = EvpnType3Route.builder();
+                type3RouteBuilder.setAdmin(ebgp ? ebgpAdmin : ibgpAdmin);
+                type3RouteBuilder.setCommunities(ImmutableSet.of(layer3VniConfig.getRouteTarget()));
+                type3RouteBuilder.setLocalPreference(Bgpv4Route.DEFAULT_LOCAL_PREFERENCE);
+                type3RouteBuilder.setOriginatorIp(vniSettings.getSourceAddress());
+                type3RouteBuilder.setOriginType(ebgp ? OriginType.EGP : OriginType.IGP);
+                type3RouteBuilder.setProtocol(RoutingProtocol.BGP);
+                type3RouteBuilder.setReceivedFromRouteReflectorClient(false);
+                type3RouteBuilder.setRouteDistinguisher(layer3VniConfig.getRouteDistinguisher());
+                type3RouteBuilder.setSrcProtocol(RoutingProtocol.BGP);
+                type3RouteBuilder.setVniIp(vniSettings.getSourceAddress());
+                ribForThisRoute.mergeRouteGetDelta(type3RouteBuilder.build());
+              });
+    }
   }
 
   /** Initialize RIP routes from the interface prefixes */
@@ -968,11 +880,11 @@ public class VirtualRouter implements Serializable {
       GeneratedRoute gr = (GeneratedRoute) grAbstract;
 
       // Prevent route from being merged into the main RIB by marking it non-routing
-      BgpRoute br =
+      Bgpv4Route br =
           BgpProtocolHelper.convertGeneratedRouteToBgp(
               gr, _vrf.getBgpProcess().getRouterId(), true);
       /* TODO: tests for this */
-      RibDelta<BgpRoute> d1 = _bgpRib.mergeRouteGetDelta(br);
+      RibDelta<Bgpv4Route> d1 = _bgpRib.mergeRouteGetDelta(br);
       _bgpDeltaBuilder.from(d1);
       if (!d1.isEmpty()) {
         _bgpAggDeps.addRouteDependency(br, gr);
@@ -992,11 +904,19 @@ public class VirtualRouter implements Serializable {
         // Create a route for each interface prefix
         for (InterfaceAddress ifaceAddress : i.getAllAddresses()) {
           Prefix prefix = ifaceAddress.getPrefix();
-          ConnectedRoute cr = new ConnectedRoute(prefix, i.getName());
-          _connectedRib.mergeRoute(cr);
+          _connectedRib.mergeRoute(annotateRoute(new ConnectedRoute(prefix, i.getName())));
         }
       }
     }
+  }
+
+  /**
+   * Initialize the kernel RIB -- a RIB containing non-forwarding routes installed unconditionally
+   * for the purpose of redistribution
+   */
+  @VisibleForTesting
+  void initKernelRib() {
+    _vrf.getKernelRoutes().stream().map(this::annotateRoute).forEach(_kernelRib::mergeRoute);
   }
 
   /**
@@ -1011,48 +931,11 @@ public class VirtualRouter implements Serializable {
         // Create a route for each interface prefix
         for (InterfaceAddress ifaceAddress : i.getAllAddresses()) {
           if (ifaceAddress.getNetworkBits() < Prefix.MAX_PREFIX_LENGTH) {
-            LocalRoute lr = new LocalRoute(ifaceAddress, i.getName());
-            _localRib.mergeRoute(lr);
+            _localRib.mergeRoute(annotateRoute(new LocalRoute(ifaceAddress, i.getName())));
           }
         }
       }
     }
-  }
-
-  @Nullable
-  @VisibleForTesting
-  OspfExternalRoute computeOspfExportRoute(
-      AbstractRoute potentialExportRoute, RoutingPolicy exportPolicy, OspfProcess proc) {
-    OspfExternalRoute.Builder outputRouteBuilder = OspfExternalRoute.builder();
-    // Export based on the policy result of processing the potentialExportRoute
-    boolean accept =
-        exportPolicy.process(potentialExportRoute, outputRouteBuilder, null, _name, Direction.OUT);
-    if (!accept) {
-      return null;
-    }
-    OspfMetricType metricType = outputRouteBuilder.getOspfMetricType();
-    outputRouteBuilder.setAdmin(
-        outputRouteBuilder
-            .getOspfMetricType()
-            .toRoutingProtocol()
-            .getDefaultAdministrativeCost(_c.getConfigurationFormat()));
-    outputRouteBuilder.setNetwork(potentialExportRoute.getNetwork());
-    Long maxMetricExternalNetworks = proc.getMaxMetricExternalNetworks();
-    long costToAdvertiser;
-    if (maxMetricExternalNetworks != null) {
-      if (metricType == OspfMetricType.E1) {
-        outputRouteBuilder.setMetric(maxMetricExternalNetworks);
-      }
-      costToAdvertiser = maxMetricExternalNetworks;
-    } else {
-      costToAdvertiser = 0L;
-    }
-    outputRouteBuilder.setCostToAdvertiser(costToAdvertiser);
-    outputRouteBuilder.setAdvertiser(_c.getHostname());
-    outputRouteBuilder.setArea(OspfRoute.NO_AREA);
-    outputRouteBuilder.setLsaMetric(outputRouteBuilder.getMetric());
-    outputRouteBuilder.setNonRouting(true);
-    return outputRouteBuilder.build();
   }
 
   /**
@@ -1063,7 +946,7 @@ public class VirtualRouter implements Serializable {
   void initEigrpExports(Map<String, Node> allNodes) {
     _virtualEigrpProcesses
         .values()
-        .forEach(proc -> proc.initExports(allNodes, _mainRib.getRoutes()));
+        .forEach(proc -> proc.initExports(allNodes, _mainRib.getTypedRoutes()));
   }
 
   void initIsisExports(Map<String, Node> allNodes, NetworkConfigurations nc) {
@@ -1165,103 +1048,56 @@ public class VirtualRouter implements Serializable {
     return _virtualEigrpProcesses.get(asn);
   }
 
-  void initOspfExports(@Nonnull Map<String, Node> allNodes) {
-    OspfProcess proc = _vrf.getOspfProcess();
-    // Nothing to do
-    if (proc == null) {
-      return;
-    }
-
-    // get OSPF export policy name
-    String exportPolicyName = _vrf.getOspfProcess().getExportPolicy();
-    if (exportPolicyName == null) {
-      return; // nothing to export
-    }
-
-    RoutingPolicy exportPolicy = _c.getRoutingPolicies().get(exportPolicyName);
-    if (exportPolicy == null) {
-      return; // nothing to export
-    }
-
-    // For each route in the previous RIB, compute an export route and add it to the appropriate
-    // RIB.
-    RibDelta.Builder<OspfExternalType1Route> d1 = RibDelta.builder();
-    RibDelta.Builder<OspfExternalType2Route> d2 = RibDelta.builder();
-    for (AbstractRoute potentialExport : _mainRib.getRoutes()) {
-      OspfExternalRoute outputRoute = computeOspfExportRoute(potentialExport, exportPolicy, proc);
-      if (outputRoute == null) {
-        continue; // no need to export
-      }
-      if (outputRoute.getOspfMetricType() == OspfMetricType.E1) {
-        d1.from(_ospfExternalType1Rib.mergeRouteGetDelta((OspfExternalType1Route) outputRoute));
-      } else { // assuming here that MetricType exists. Or E2 is the default
-        d2.from(_ospfExternalType2Rib.mergeRouteGetDelta((OspfExternalType2Route) outputRoute));
-      }
-    }
-    queueOutgoingOspfExternalRoutes(allNodes, d1.build(), d2.build());
-  }
-
   /** Initialize all ribs on this router. All RIBs will be empty */
   @VisibleForTesting
   final void initRibs() {
     // Non-learned-protocol RIBs
     _connectedRib = new ConnectedRib();
+    _kernelRib = new KernelRib();
     _localRib = new LocalRib();
     _generatedRib = new Rib();
     _independentRib = new Rib();
-
-    // Main RIB + delta builder
-    _mainRibs = ImmutableMap.of(RibId.DEFAULT_RIB_NAME, new Rib());
-    _mainRib = _mainRibs.get(RibId.DEFAULT_RIB_NAME);
-    _mainRibRouteDeltaBuilder = RibDelta.builder();
 
     // BGP
     BgpProcess proc = _vrf.getBgpProcess();
     MultipathEquivalentAsPathMatchMode mpTieBreaker = getBgpMpTieBreaker();
     BgpTieBreaker tieBreaker = getBestPathTieBreaker();
     _ebgpRib =
-        new BgpRib(
-            null,
+        new Bgpv4Rib(
             _mainRib,
             tieBreaker,
             proc == null || proc.getMultipathEbgp() ? null : 1,
-            mpTieBreaker);
+            mpTieBreaker,
+            false);
     _ibgpRib =
-        new BgpRib(
-            null,
+        new Bgpv4Rib(
             _mainRib,
             tieBreaker,
             proc == null || proc.getMultipathIbgp() ? null : 1,
-            mpTieBreaker);
+            mpTieBreaker,
+            false);
     _bgpRib =
-        new BgpRib(
-            null,
+        new Bgpv4Rib(
             _mainRib,
             tieBreaker,
             proc == null || proc.getMultipathEbgp() || proc.getMultipathIbgp() ? null : 1,
-            mpTieBreaker);
+            mpTieBreaker,
+            false);
     _bgpDeltaBuilder = RibDelta.builder();
 
-    _ebgpStagingRib = new BgpRib(null, _mainRib, tieBreaker, null, mpTieBreaker);
-    _ibgpStagingRib = new BgpRib(null, _mainRib, tieBreaker, null, mpTieBreaker);
+    _ebgpStagingRib = new Bgpv4Rib(_mainRib, tieBreaker, null, mpTieBreaker, false);
+    _ibgpStagingRib = new Bgpv4Rib(_mainRib, tieBreaker, null, mpTieBreaker, false);
+
+    // EVPN
+    _ebgpEvpnRib = new EvpnRib<>(_mainRib, tieBreaker, null, mpTieBreaker);
+    _ibgpEvpnRib = new EvpnRib<>(_mainRib, tieBreaker, null, mpTieBreaker);
 
     // ISIS
     _isisRib = new IsisRib(isL1Only());
-    _isisL1Rib = new IsisLevelRib(new TreeMap<>());
-    _isisL2Rib = new IsisLevelRib(new TreeMap<>());
-    _isisL1StagingRib = new IsisLevelRib(null);
-    _isisL2StagingRib = new IsisLevelRib(null);
-
-    // OSPF
-    _ospfExternalType1Rib = new OspfExternalType1Rib(getHostname(), new TreeMap<>());
-    _ospfExternalType2Rib = new OspfExternalType2Rib(getHostname(), new TreeMap<>());
-    _ospfExternalType1StagingRib = new OspfExternalType1Rib(getHostname(), null);
-    _ospfExternalType2StagingRib = new OspfExternalType2Rib(getHostname(), null);
-    _ospfInterAreaRib = new OspfInterAreaRib();
-    _ospfInterAreaStagingRib = new OspfInterAreaRib();
-    _ospfIntraAreaRib = new OspfIntraAreaRib();
-    _ospfIntraAreaStagingRib = new OspfIntraAreaRib();
-    _ospfRib = new OspfRib();
+    _isisL1Rib = new IsisLevelRib(true);
+    _isisL2Rib = new IsisLevelRib(true);
+    _isisL1StagingRib = new IsisLevelRib(false);
+    _isisL2StagingRib = new IsisLevelRib(false);
 
     // RIP
     _ripInternalRib = new RipInternalRib();
@@ -1325,13 +1161,11 @@ public class VirtualRouter implements Serializable {
    * Process BGP messages from neighbors, return a list of delta changes to the RIBs
    *
    * @param bgpTopology the bgp peering relationships
-   * @return Map from a {@link BgpRib} to {@link RibDelta} objects
+   * @return Map from a {@link Bgpv4Rib} to {@link RibDelta} objects
    */
   @Nonnull
-  Map<BgpRib, RibDelta<BgpRoute>> processBgpMessages(
-      ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology,
-      NetworkConfigurations nc,
-      Map<String, Node> nodes) {
+  Map<Bgpv4Rib, RibDelta<Bgpv4Route>> processBgpMessages(
+      BgpTopology bgpTopology, NetworkConfigurations nc, Map<String, Node> nodes) {
 
     // If we have no BGP process, nothing to do
     if (_vrf.getBgpProcess() == null) {
@@ -1339,35 +1173,40 @@ public class VirtualRouter implements Serializable {
     }
 
     // Keep track of changes to the RIBs using delta builders, keyed by RIB type
-    Map<BgpRib, RibDelta.Builder<BgpRoute>> ribDeltas = new IdentityHashMap<>();
+    Map<Bgpv4Rib, RibDelta.Builder<Bgpv4Route>> ribDeltas = new IdentityHashMap<>();
     ribDeltas.put(_ebgpStagingRib, RibDelta.builder());
     ribDeltas.put(_ibgpStagingRib, RibDelta.builder());
 
     // Process updates from each neighbor
-    for (Entry<BgpEdgeId, Queue<RouteAdvertisement<BgpRoute>>> e : _bgpIncomingRoutes.entrySet()) {
+    for (Entry<EdgeId, Queue<RouteAdvertisement<Bgpv4Route>>> e : _bgpIncomingRoutes.entrySet()) {
 
       // Grab the queue containing all messages from remoteBgpPeerConfig
-      Queue<RouteAdvertisement<BgpRoute>> queue = e.getValue();
+      Queue<RouteAdvertisement<Bgpv4Route>> queue = e.getValue();
 
       // Setup helper vars
-      BgpPeerConfigId remoteConfigId = e.getKey().src();
-      BgpPeerConfigId ourConfigId = e.getKey().dst();
+      BgpPeerConfigId remoteConfigId = e.getKey().tail();
+      BgpPeerConfigId ourConfigId = e.getKey().head();
       BgpSessionProperties sessionProperties =
-          getBgpSessionProperties(bgpTopology, new BgpEdgeId(remoteConfigId, ourConfigId));
-      BgpPeerConfig ourBgpConfig = requireNonNull(nc.getBgpPeerConfig(e.getKey().dst()));
-      BgpPeerConfig remoteBgpConfig = requireNonNull(nc.getBgpPeerConfig(e.getKey().src()));
+          getBgpSessionProperties(bgpTopology, new EdgeId(remoteConfigId, ourConfigId));
+      BgpPeerConfig ourBgpConfig = requireNonNull(nc.getBgpPeerConfig(e.getKey().head()));
+      // sessionProperties represents the incoming edge, so its tailIp is the remote peer's IP
+      Ip remoteIp = sessionProperties.getTailIp();
 
-      BgpRib targetRib = sessionProperties.isEbgp() ? _ebgpStagingRib : _ibgpStagingRib;
-      Builder<AbstractRoute> perNeighborDelta = RibDelta.builder();
+      Bgpv4Rib targetRib = sessionProperties.isEbgp() ? _ebgpStagingRib : _ibgpStagingRib;
+      Builder<AnnotatedRoute<AbstractRoute>> perNeighborDeltaForRibGroups = RibDelta.builder();
 
       // Process all routes from neighbor
       while (queue.peek() != null) {
-        RouteAdvertisement<BgpRoute> remoteRouteAdvert = queue.remove();
-        BgpRoute remoteRoute = remoteRouteAdvert.getRoute();
+        RouteAdvertisement<Bgpv4Route> remoteRouteAdvert = queue.remove();
+        Bgpv4Route remoteRoute = remoteRouteAdvert.getRoute();
 
-        BgpRoute.Builder transformedIncomingRouteBuilder =
+        Bgpv4Route.Builder transformedIncomingRouteBuilder =
             BgpProtocolHelper.transformBgpRouteOnImport(
-                ourBgpConfig, sessionProperties, remoteRoute, _c.getConfigurationFormat());
+                ourConfigId,
+                ourBgpConfig,
+                sessionProperties,
+                remoteRoute,
+                _c.getConfigurationFormat());
         if (transformedIncomingRouteBuilder == null) {
           // Route could not be imported for core protocol reasons
           continue;
@@ -1384,7 +1223,7 @@ public class VirtualRouter implements Serializable {
                 importPolicy.process(
                     remoteRoute,
                     transformedIncomingRouteBuilder,
-                    remoteBgpConfig.getLocalIp(),
+                    remoteIp,
                     ourConfigId.getRemotePeerPrefix(),
                     _name,
                     IN);
@@ -1395,28 +1234,30 @@ public class VirtualRouter implements Serializable {
           _prefixTracer.filtered(
               remoteRoute.getNetwork(),
               ourConfigId.getHostname(),
-              remoteBgpConfig.getLocalIp(),
+              remoteIp,
               remoteConfigId.getVrfName(),
               importPolicyName,
               IN);
           continue;
         }
-        BgpRoute transformedIncomingRoute = transformedIncomingRouteBuilder.build();
+        Bgpv4Route transformedIncomingRoute = transformedIncomingRouteBuilder.build();
+
+        // If new route gets leaked to other VRFs via RibGroup, this VRF should be its source
+        AnnotatedRoute<AbstractRoute> annotatedTransformedRoute =
+            annotateRoute(transformedIncomingRoute);
 
         if (remoteRouteAdvert.isWithdrawn()) {
           // Note this route was removed
           ribDeltas.get(targetRib).remove(transformedIncomingRoute, Reason.WITHDRAW);
-          perNeighborDelta.remove(transformedIncomingRoute, Reason.WITHDRAW);
-          _bgpRib.removeBackupRoute(transformedIncomingRoute);
+          perNeighborDeltaForRibGroups.remove(annotatedTransformedRoute, Reason.WITHDRAW);
         } else {
           // Merge into staging rib, note delta
           ribDeltas.get(targetRib).from(targetRib.mergeRouteGetDelta(transformedIncomingRoute));
-          perNeighborDelta.add(transformedIncomingRoute);
-          _bgpRib.addBackupRoute(transformedIncomingRoute);
+          perNeighborDeltaForRibGroups.add(annotatedTransformedRoute);
           _prefixTracer.installed(
               transformedIncomingRoute.getNetwork(),
               remoteConfigId.getHostname(),
-              remoteBgpConfig.getLocalIp(),
+              remoteIp,
               remoteConfigId.getVrfName(),
               importPolicyName);
         }
@@ -1433,17 +1274,13 @@ public class VirtualRouter implements Serializable {
                         .get(rib.getVrfName())
                         .enqueueCrossVrfRoutes(
                             new CrossVrfEdgeId(_name, rib.getRibName()),
-                            perNeighborDelta.build().getActions(),
+                            perNeighborDeltaForRibGroups.build().getActions(),
                             rg.getImportPolicy()));
       }
     }
     // Return built deltas from RibDelta builders
-    Map<BgpRib, RibDelta<BgpRoute>> builtDeltas = new IdentityHashMap<>();
-    ribDeltas.forEach(
-        (rib, deltaBuilder) -> {
-          RibDelta<BgpRoute> delta = deltaBuilder.build();
-          builtDeltas.put(rib, delta);
-        });
+    Map<Bgpv4Rib, RibDelta<Bgpv4Route>> builtDeltas = new IdentityHashMap<>();
+    ribDeltas.forEach((rib, deltaBuilder) -> builtDeltas.put(rib, deltaBuilder.build()));
     return builtDeltas;
   }
 
@@ -1479,7 +1316,6 @@ public class VirtualRouter implements Serializable {
                 routeLevel == IsisLevel.LEVEL_1 ? RoutingProtocol.ISIS_L1 : RoutingProtocol.ISIS_L2;
             RibDelta.Builder<IsisRoute> deltaBuilder =
                 routeLevel == IsisLevel.LEVEL_1 ? l1DeltaBuilder : l2DeltaBuilder;
-            IsisLevelRib levelRib = routeLevel == IsisLevel.LEVEL_1 ? _isisL1Rib : _isisL2Rib;
             long incrementalMetric =
                 firstNonNull(isisLevelSettings.getCost(), IsisRoute.DEFAULT_METRIC);
             IsisRoute newRoute =
@@ -1493,375 +1329,14 @@ public class VirtualRouter implements Serializable {
                     .build();
             if (withdraw) {
               deltaBuilder.remove(newRoute, Reason.WITHDRAW);
-              levelRib.removeBackupRoute(newRoute);
             } else {
               IsisLevelRib levelStagingRib =
                   routeLevel == IsisLevel.LEVEL_1 ? _isisL1StagingRib : _isisL2StagingRib;
               deltaBuilder.from(levelStagingRib.mergeRouteGetDelta(newRoute));
-              levelRib.addBackupRoute(newRoute);
             }
           }
         });
     return new SimpleEntry<>(l1DeltaBuilder.build(), l2DeltaBuilder.build());
-  }
-
-  /**
-   * Propagate OSPF external routes from our neighbors by reading OSPF route "advertisements" from
-   * our queues.
-   *
-   * @param allNodes map of all nodes, keyed by hostname
-   * @param ospfTopology the OSPF topology to use
-   * @return a pair of {@link RibDelta}s, for Type1 and Type2 routes
-   */
-  @Nullable
-  public Entry<RibDelta<OspfExternalType1Route>, RibDelta<OspfExternalType2Route>>
-      propagateOspfExternalRoutes(final Map<String, Node> allNodes, OspfTopology ospfTopology) {
-    String node = _c.getHostname();
-    OspfProcess proc = _vrf.getOspfProcess();
-    if (proc == null) {
-      return null;
-    }
-
-    RibDelta.Builder<OspfExternalType1Route> builderType1 = RibDelta.builder();
-    RibDelta.Builder<OspfExternalType2Route> builderType2 = RibDelta.builder();
-
-    _ospfExternalIncomingRoutes.forEach(
-        (ospfEdge, queue) -> {
-          if (queue.isEmpty()) {
-            // Exit early if no routes to process.
-            return;
-          }
-
-          OspfNeighborConfigId localNode = ospfEdge.getHead();
-          OspfNeighborConfigId neighborNode = ospfEdge.getTail();
-          // Invariant: edge value (session properties) must exist for each edge
-          OspfSessionProperties session =
-              ospfTopology
-                  .getSession(ospfEdge)
-                  .orElseThrow(() -> new IllegalStateException("No OSPF edge"));
-          assert localNode.getHostname().equals(node); // queue invariant of how we built the queue.
-
-          Interface localInterface = _vrf.getInterfaces().get(localNode.getInterfaceName());
-          assert localInterface != null; // invariant of how routes are pushed into the queue.
-          assert localInterface.getOspfArea() != null; // ^^.
-          long localArea = localInterface.getOspfArea().getAreaNumber();
-
-          Node neighbor = allNodes.get(neighborNode.getHostname());
-          Interface neighborInterface =
-              neighbor.getConfiguration().getAllInterfaces().get(neighborNode.getInterfaceName());
-          OspfProcess neighborProc = neighborInterface.getVrf().getOspfProcess();
-          assert neighborProc != null; // invariant of edge existing.
-
-          /*
-           * We have an ospf neighbor relationship on this edge. So we
-           * should add all ospf external type 1(2) routes from this
-           * neighbor into our ospf external type 1(2) staging rib. For
-           * type 1, the cost of the route increases each time. For type 2,
-           * the cost remains constant, but we must keep track of cost to
-           * advertiser as a tie-breaker.
-           */
-          long incrementalCost =
-              proc.getMaxMetricTransitLinks() != null
-                  ? proc.getMaxMetricTransitLinks()
-                  : localInterface.getOspfCost().longValue();
-
-          while (queue.peek() != null) {
-            RouteAdvertisement<OspfExternalRoute> routeAdvert = queue.remove();
-            boolean withdraw = routeAdvert.isWithdrawn();
-            OspfExternalRoute neighborRoute = routeAdvert.getRoute();
-            long areaInRoute = neighborRoute.getArea();
-            OspfExternalRoute.Builder newRouteB =
-                OspfExternalRoute.builder()
-                    .setNetwork(neighborRoute.getNetwork())
-                    // Neighbor IP is the IP of tail node which means Ip1
-                    .setNextHopIp(session.getIpLink().getIp1())
-                    .setLsaMetric(neighborRoute.getLsaMetric())
-                    .setAdvertiser(neighborRoute.getAdvertiser())
-                    .setOspfMetricType(neighborRoute.getOspfMetricType())
-                    .setAdmin(
-                        neighborRoute
-                            .getOspfMetricType()
-                            .toRoutingProtocol()
-                            .getDefaultAdministrativeCost(_c.getConfigurationFormat()));
-
-            if (neighborRoute instanceof OspfExternalType1Route) {
-              long baseMetric = neighborRoute.getMetric();
-              long baseCostToAdvertiser = neighborRoute.getCostToAdvertiser();
-              if (areaInRoute != OspfRoute.NO_AREA && localArea != areaInRoute) {
-                if (localArea != 0L && areaInRoute != 0L) {
-                  continue;
-                }
-                Long maxMetricSummaryNetworks = neighborProc.getMaxMetricSummaryNetworks();
-                if (maxMetricSummaryNetworks != null) {
-                  baseMetric = maxMetricSummaryNetworks + neighborRoute.getLsaMetric();
-                  baseCostToAdvertiser = maxMetricSummaryNetworks;
-                }
-              }
-              long newMetric = baseMetric + incrementalCost;
-              long newCostToAdvertiser = baseCostToAdvertiser + incrementalCost;
-              OspfExternalType1Route newRoute =
-                  (OspfExternalType1Route)
-                      newRouteB
-                          .setMetric(newMetric)
-                          .setArea(localArea)
-                          .setCostToAdvertiser(newCostToAdvertiser)
-                          .build();
-              if (withdraw) {
-                builderType1.remove(newRoute, Reason.WITHDRAW);
-                _ospfExternalType1Rib.removeBackupRoute(newRoute);
-              } else {
-                builderType1.from(_ospfExternalType1StagingRib.mergeRouteGetDelta(newRoute));
-                _ospfExternalType1Rib.addBackupRoute(newRoute);
-              }
-
-            } else if (neighborRoute instanceof OspfExternalType2Route) {
-              long newArea;
-              long baseCostToAdvertiser = neighborRoute.getCostToAdvertiser();
-              if (areaInRoute == OspfRoute.NO_AREA) {
-                newArea = localArea;
-              } else {
-                newArea = areaInRoute;
-                Long maxMetricSummaryNetworks = neighborProc.getMaxMetricSummaryNetworks();
-                if (localArea != areaInRoute && maxMetricSummaryNetworks != null) {
-                  baseCostToAdvertiser = maxMetricSummaryNetworks;
-                }
-              }
-              long newCostToAdvertiser = baseCostToAdvertiser + incrementalCost;
-              OspfExternalType2Route newRoute =
-                  (OspfExternalType2Route)
-                      newRouteB
-                          .setMetric(neighborRoute.getMetric())
-                          .setArea(newArea)
-                          .setCostToAdvertiser(newCostToAdvertiser)
-                          .build();
-              if (withdraw) {
-                builderType2.remove(newRoute, Reason.WITHDRAW);
-                _ospfExternalType2Rib.addBackupRoute(newRoute);
-              } else {
-                builderType2.from(_ospfExternalType2StagingRib.mergeRouteGetDelta(newRoute));
-                _ospfExternalType2Rib.addBackupRoute(newRoute);
-              }
-            }
-          }
-        });
-    return new SimpleEntry<>(builderType1.build(), builderType2.build());
-  }
-
-  /**
-   * Construct an OSPF Inter-Area route and put into our staging rib. Note, no route validity checks
-   * are performed, (i.e., whether the route should even go into the staging rib). {@link
-   * #propagateOspfInternalRoutesFromNeighbor} takes care of such logic.
-   *
-   * @param neighborRoute the route to propagate
-   * @param nextHopIp nextHopIp for this route (the neighbor's IP)
-   * @param incrementalCost OSPF cost of the interface from which this route came (added to route
-   *     cost)
-   * @param adminCost OSPF administrative distance
-   * @param areaNum area number of the route
-   * @return True if the route was added to the inter-area staging RIB
-   */
-  @VisibleForTesting
-  boolean stageOspfInterAreaRoute(
-      OspfInternalRoute neighborRoute,
-      Long maxMetricSummaryNetworks,
-      Ip nextHopIp,
-      long incrementalCost,
-      int adminCost,
-      long areaNum) {
-    long newCost;
-    if (maxMetricSummaryNetworks != null) {
-      newCost = maxMetricSummaryNetworks + incrementalCost;
-    } else {
-      newCost = neighborRoute.getMetric() + incrementalCost;
-    }
-    OspfInterAreaRoute newRoute =
-        (OspfInterAreaRoute)
-            OspfInternalRoute.builder()
-                .setProtocol(RoutingProtocol.OSPF_IA)
-                .setNetwork(neighborRoute.getNetwork())
-                .setNextHopIp(nextHopIp)
-                .setAdmin(adminCost)
-                .setMetric(newCost)
-                .setArea(areaNum)
-                .build();
-    return _ospfInterAreaStagingRib.mergeRoute(newRoute);
-  }
-
-  private boolean propagateOspfInterAreaRouteFromIntraAreaRoute(
-      Configuration neighbor,
-      OspfProcess neighborProc,
-      OspfIntraAreaRoute neighborRoute,
-      long incrementalCost,
-      Interface neighborInterface,
-      int adminCost,
-      long linkAreaNum) {
-    return OspfProtocolHelper.isOspfInterAreaFromIntraAreaPropagationAllowed(
-            linkAreaNum, neighbor, neighborProc, neighborRoute, neighborInterface.getOspfArea())
-        && stageOspfInterAreaRoute(
-            neighborRoute,
-            neighborInterface.getVrf().getOspfProcess().getMaxMetricSummaryNetworks(),
-            neighborInterface.getAddress().getIp(),
-            incrementalCost,
-            adminCost,
-            linkAreaNum);
-  }
-
-  /**
-   * Propagate OSPF Internal routes from a single neighbor.
-   *
-   * @param proc The receiving OSPF process
-   * @param neighbor the neighbor
-   * @param connectingInterface interface on which we are connected to the neighbor
-   * @param neighborInterface interface that the neighbor uses to connect to us
-   * @param adminCost route administrative distance
-   * @return true if new routes have been added to our staging RIB
-   */
-  boolean propagateOspfInternalRoutesFromNeighbor(
-      OspfProcess proc,
-      Node neighbor,
-      Interface connectingInterface,
-      Interface neighborInterface,
-      int adminCost) {
-    OspfArea area = connectingInterface.getOspfArea();
-    OspfArea neighborArea = neighborInterface.getOspfArea();
-    // Ensure that the link (i.e., both interfaces) has OSPF enabled and OSPF areas are set
-    if (!connectingInterface.getOspfEnabled()
-        || connectingInterface.getOspfPassive()
-        || !neighborInterface.getOspfEnabled()
-        || neighborInterface.getOspfPassive()
-        || area == null
-        || neighborArea == null
-        || area.getAreaNumber() != neighborArea.getAreaNumber()) {
-      return false;
-    }
-    /*
-     * An OSPF neighbor relationship exists on this edge. So we examine all intra- and inter-area
-     * routes belonging to the neighbor to see what should be propagated to this router. We add the
-     * incremental cost associated with our settings and the connecting interface, and use the
-     * neighborInterface's address as the next hop ip.
-     */
-    int connectingInterfaceCost = connectingInterface.getOspfCost();
-    long incrementalCost =
-        proc.getMaxMetricTransitLinks() != null
-            ? proc.getMaxMetricTransitLinks()
-            : connectingInterfaceCost;
-    long linkAreaNum = area.getAreaNumber();
-    Configuration neighborConfiguration = neighbor.getConfiguration();
-    String neighborVrfName = neighborInterface.getVrfName();
-    OspfProcess neighborProc =
-        neighborConfiguration.getVrfs().get(neighborVrfName).getOspfProcess();
-    VirtualRouter neighborVirtualRouter = neighbor.getVirtualRouters().get(neighborVrfName);
-    boolean changed = false;
-    for (OspfIntraAreaRoute neighborRoute : neighborVirtualRouter._ospfIntraAreaRib.getRoutes()) {
-      changed |=
-          propagateOspfIntraAreaRoute(
-              neighborRoute, incrementalCost, neighborInterface, adminCost, linkAreaNum);
-      changed |=
-          propagateOspfInterAreaRouteFromIntraAreaRoute(
-              neighborConfiguration,
-              neighborProc,
-              neighborRoute,
-              incrementalCost,
-              neighborInterface,
-              adminCost,
-              linkAreaNum);
-    }
-    for (OspfInterAreaRoute neighborRoute : neighborVirtualRouter._ospfInterAreaRib.getRoutes()) {
-      changed |=
-          propagateOspfInterAreaRouteFromInterAreaRoute(
-              proc,
-              neighborConfiguration,
-              neighborProc,
-              neighborRoute,
-              incrementalCost,
-              neighborInterface,
-              adminCost,
-              linkAreaNum);
-    }
-    changed |=
-        originateOspfStubAreaDefaultRoute(
-            neighborProc, incrementalCost, neighborInterface, adminCost, area);
-    return changed;
-  }
-
-  /**
-   * If neighbor is an ABR and this is a stub area link, propagate
-   *
-   * @param neighborProc The adjacent {@link OspfProcess}
-   * @param incrementalCost The cost to reach the propagator
-   * @param neighborInterface The propagator's interface on the link
-   * @param adminCost The administrative cost of the route to be installed
-   * @param area The area of the link
-   * @return whether this route changed the RIB into which we merged it
-   */
-  private boolean originateOspfStubAreaDefaultRoute(
-      OspfProcess neighborProc,
-      long incrementalCost,
-      Interface neighborInterface,
-      int adminCost,
-      OspfArea area) {
-    if (!OspfProtocolHelper.isOspfInterAreaDefaultOriginationAllowed(
-        _vrf.getOspfProcess(), neighborProc, area, neighborInterface.getOspfArea())) {
-      return false;
-    }
-    long metric = incrementalCost + area.getMetricOfDefaultRoute();
-    return _ospfInterAreaStagingRib.mergeRoute(
-        (OspfInterAreaRoute)
-            OspfInternalRoute.builder()
-                .setProtocol(RoutingProtocol.OSPF_IA)
-                .setNetwork(Prefix.ZERO)
-                .setNextHopIp(neighborInterface.getAddress().getIp())
-                .setAdmin(adminCost)
-                .setMetric(metric)
-                .setArea(area.getAreaNumber())
-                .build());
-  }
-
-  boolean propagateOspfInterAreaRouteFromInterAreaRoute(
-      OspfProcess proc,
-      Configuration neighbor,
-      OspfProcess neighborProc,
-      OspfInterAreaRoute neighborRoute,
-      long incrementalCost,
-      Interface neighborInterface,
-      int adminCost,
-      long linkAreaNum) {
-    return OspfProtocolHelper.isOspfInterAreaFromInterAreaPropagationAllowed(
-            proc,
-            linkAreaNum,
-            neighbor,
-            neighborProc,
-            neighborRoute,
-            neighborInterface.getOspfArea())
-        && stageOspfInterAreaRoute(
-            neighborRoute,
-            neighborInterface.getVrf().getOspfProcess().getMaxMetricSummaryNetworks(),
-            neighborInterface.getAddress().getIp(),
-            incrementalCost,
-            adminCost,
-            linkAreaNum);
-  }
-
-  boolean propagateOspfIntraAreaRoute(
-      OspfIntraAreaRoute neighborRoute,
-      long incrementalCost,
-      Interface neighborInterface,
-      int adminCost,
-      long linkAreaNum) {
-    long newCost = neighborRoute.getMetric() + incrementalCost;
-    Ip nextHopIp = neighborInterface.getAddress().getIp();
-    OspfIntraAreaRoute newRoute =
-        (OspfIntraAreaRoute)
-            OspfIntraAreaRoute.builder()
-                .setProtocol(RoutingProtocol.OSPF)
-                .setNetwork(neighborRoute.getNetwork())
-                .setNextHopIp(nextHopIp)
-                .setAdmin(adminCost)
-                .setMetric(newCost)
-                .setArea(linkAreaNum)
-                .build();
-    return neighborRoute.getArea() == linkAreaNum
-        && (_ospfIntraAreaStagingRib.mergeRoute(newRoute));
   }
 
   /**
@@ -1880,7 +1355,8 @@ public class VirtualRouter implements Serializable {
                     allNodes,
                     proc.propagateExternalRoutes(nc),
                     _mainRibRouteDeltaBuilder,
-                    _mainRib))
+                    _mainRib,
+                    _name))
         .reduce(false, (a, b) -> a || b);
   }
 
@@ -1888,66 +1364,15 @@ public class VirtualRouter implements Serializable {
    * Propagate EIGRP internal routes from every valid EIGRP neighbors
    *
    * @param nodes mapping of node names to instances.
-   * @param topology network topology
+   * @param topologyContext network topologies
    * @param nc All network configurations
    * @return true if new routes have been added to the staging RIB
    */
   boolean propagateEigrpInternalRoutes(
-      Map<String, Node> nodes,
-      Network<EigrpInterface, EigrpEdge> topology,
-      NetworkConfigurations nc) {
-
+      Map<String, Node> nodes, TopologyContext topologyContext, NetworkConfigurations nc) {
     return _virtualEigrpProcesses.values().stream()
-        .map(proc -> proc.propagateInternalRoutes(nodes, topology, nc))
+        .map(proc -> proc.propagateInternalRoutes(nodes, topologyContext.getEigrpTopology(), nc))
         .reduce(false, (a, b) -> a || b);
-  }
-
-  /**
-   * Propagate OSPF internal routes from every valid OSPF neighbor
-   *
-   * @param nodes mapping of node names to instances.
-   * @param topology network topology
-   * @return true if new routes have been added to the staging RIB
-   */
-  boolean propagateOspfInternalRoutes(Map<String, Node> nodes, Topology topology) {
-    OspfProcess proc = _vrf.getOspfProcess();
-    if (proc == null) {
-      return false; // nothing to do
-    }
-
-    boolean changed = false;
-    String node = _c.getHostname();
-
-    // Default OSPF admin cost for constructing new routes
-    int adminCost = RoutingProtocol.OSPF.getDefaultAdministrativeCost(_c.getConfigurationFormat());
-    SortedSet<Edge> edges = topology.getNodeEdges().get(node);
-    if (edges == null) {
-      // there are no edges, so OSPF won't produce anything
-      return false;
-    }
-
-    for (Edge edge : edges) {
-      if (!edge.getNode1().equals(node)) {
-        continue;
-      }
-
-      String connectingInterfaceName = edge.getInt1();
-      Interface connectingInterface = _vrf.getInterfaces().get(connectingInterfaceName);
-      if (connectingInterface == null) {
-        // wrong vrf, so skip
-        continue;
-      }
-
-      String neighborName = edge.getNode2();
-      Node neighbor = nodes.get(neighborName);
-      Interface neighborInterface =
-          neighbor.getConfiguration().getAllInterfaces().get(edge.getInt2());
-
-      changed |=
-          propagateOspfInternalRoutesFromNeighbor(
-              proc, neighbor, connectingInterface, neighborInterface, adminCost);
-    }
-    return changed;
   }
 
   /**
@@ -2006,7 +1431,8 @@ public class VirtualRouter implements Serializable {
          * from this neighbor into our RIP internal staging rib, adding the incremental cost
          * (?), and using the neighborInterface's address as the next hop ip
          */
-        for (RipInternalRoute neighborRoute : neighborVirtualRouter._ripInternalRib.getRoutes()) {
+        for (RipInternalRoute neighborRoute :
+            neighborVirtualRouter._ripInternalRib.getTypedRoutes()) {
           long newCost = neighborRoute.getMetric() + RipProcess.DEFAULT_RIP_COST;
           Ip nextHopIp = neighborInterface.getAddress().getIp();
           RipInternalRoute newRoute =
@@ -2030,34 +1456,35 @@ public class VirtualRouter implements Serializable {
    * @param bgpTopology the bgp peering relationships
    */
   private void queueOutgoingBgpRoutes(
-      RibDelta<BgpRoute> ebgpBestPathDelta,
-      @Nullable RibDelta<BgpRoute> bgpMultiPathDelta,
-      @Nullable RibDelta<AbstractRoute> mainDelta,
+      RibDelta<Bgpv4Route> ebgpBestPathDelta,
+      RibDelta<Bgpv4Route> bgpMultiPathDelta,
+      RibDelta<AnnotatedRoute<AbstractRoute>> mainDelta,
       final Map<String, Node> allNodes,
-      ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology,
+      BgpTopology bgpTopology,
       NetworkConfigurations networkConfigurations) {
-    for (BgpEdgeId edge : _bgpIncomingRoutes.keySet()) {
+    for (EdgeId edge : _bgpIncomingRoutes.keySet()) {
       final BgpSessionProperties session = getBgpSessionProperties(bgpTopology, edge);
 
-      BgpPeerConfigId remoteConfigId = edge.src();
-      BgpPeerConfigId ourConfigId = edge.dst();
-      BgpPeerConfig ourConfig = networkConfigurations.getBgpPeerConfig(edge.dst());
-      BgpPeerConfig remoteConfig = networkConfigurations.getBgpPeerConfig(edge.src());
+      BgpPeerConfigId remoteConfigId = edge.tail();
+      BgpPeerConfigId ourConfigId = edge.head();
+      BgpPeerConfig ourConfig = networkConfigurations.getBgpPeerConfig(edge.head());
+      BgpPeerConfig remoteConfig = networkConfigurations.getBgpPeerConfig(edge.tail());
       VirtualRouter remoteVirtualRouter = getRemoteBgpNeighborVR(remoteConfigId, allNodes);
       if (remoteVirtualRouter == null) {
         continue;
       }
 
-      Builder<AbstractRoute> finalBuilder = RibDelta.builder();
+      // Needs to retain annotations since export policy will be run on routes from resulting delta.
+      Builder<AnnotatedRoute<AbstractRoute>> preExportPolicyDeltaBuilder = RibDelta.builder();
 
       // Definitely queue mainRib updates
-      finalBuilder.from(mainDelta);
+      preExportPolicyDeltaBuilder.from(mainDelta);
       // These knobs control which additional BGP routes get advertised
       if (session.getAdvertiseExternal()) {
         /*
          * Advertise external ensures that even if we withdrew an external route from the RIB
          */
-        finalBuilder.from(ebgpBestPathDelta);
+        importDeltaToBuilder(preExportPolicyDeltaBuilder, ebgpBestPathDelta, _name);
       }
       if (session.getAdvertiseInactive()) {
         /*
@@ -2066,29 +1493,29 @@ public class VirtualRouter implements Serializable {
          * and advertiseInactive is true, re-add inactive BGP routes from the BGP best-path RIB.
          * If the BGP routes are already active, this will have no effect.
          */
-        if (mainDelta != null) {
-          for (Prefix p : mainDelta.getPrefixes()) {
-            if (_bgpRib.getRoutes(p) == null) {
-              continue;
-            }
-            finalBuilder.add(_bgpRib.getRoutes(p));
-          }
+        for (Prefix p : mainDelta.getPrefixes()) {
+          preExportPolicyDeltaBuilder.add(
+              _bgpRib.getTypedRoutes().stream()
+                  .filter(r -> r.getNetwork().equals(p))
+                  .map(r -> new AnnotatedRoute<AbstractRoute>(r, _name))
+                  .collect(ImmutableSet.toImmutableSet()));
         }
       }
       if (session.getAdditionalPaths()) {
-        finalBuilder.from(bgpMultiPathDelta);
+        importDeltaToBuilder(preExportPolicyDeltaBuilder, bgpMultiPathDelta, _name);
       }
-      RibDelta<AbstractRoute> routesToExport = finalBuilder.build();
+      RibDelta<AnnotatedRoute<AbstractRoute>> routesToExport = preExportPolicyDeltaBuilder.build();
       if (routesToExport.isEmpty()) {
         continue;
       }
 
       // Compute a set of advertisements that can be queued on remote VR
-      Set<RouteAdvertisement<BgpRoute>> exportedAdvertisements =
-          routesToExport.getActions().stream()
+      Set<RouteAdvertisement<Bgpv4Route>> exportedAdvertisements =
+          routesToExport
+              .getActions()
               .map(
                   adv -> {
-                    BgpRoute transformedRoute =
+                    Bgpv4Route transformedRoute =
                         exportBgpRoute(
                             adv.getRoute(),
                             ourConfigId,
@@ -2100,7 +1527,7 @@ public class VirtualRouter implements Serializable {
                     return transformedRoute == null
                         ? null
                         // REPLACE does not make sense across routers, update with WITHDRAW
-                        : RouteAdvertisement.<BgpRoute>builder()
+                        : RouteAdvertisement.<Bgpv4Route>builder()
                             .setReason(
                                 adv.getReason() == Reason.REPLACE
                                     ? Reason.WITHDRAW
@@ -2117,20 +1544,12 @@ public class VirtualRouter implements Serializable {
   }
 
   private static BgpSessionProperties getBgpSessionProperties(
-      ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology, BgpEdgeId edge) {
-    /*
-    BGP topology edges not guaranteed to be symmetrical (in case of dynamic neighbors).
-    So to get session properties, we might need to flip the src/dst edge
-     */
-    Optional<BgpSessionProperties> session = bgpTopology.edgeValue(edge.src(), edge.dst());
-    return session.orElseGet(
-        () ->
-            bgpTopology
-                .edgeValue(edge.dst(), edge.src())
-                .orElseThrow(
-                    () ->
-                        new IllegalArgumentException(
-                            String.format("No BGP edge %s in BGP topology", edge))));
+      BgpTopology bgpTopology, EdgeId edge) {
+    // BGP topology edge guaranteed to exist since the session is established
+    Optional<BgpSessionProperties> session =
+        bgpTopology.getGraph().edgeValue(edge.tail(), edge.head());
+    return session.orElseThrow(
+        () -> new IllegalArgumentException(String.format("No BGP edge %s in BGP topology", edge)));
   }
 
   private void queueOutgoingIsisRoutes(
@@ -2209,43 +1628,6 @@ public class VirtualRouter implements Serializable {
   }
 
   /**
-   * Send out OSPF External route updates to our neighbors
-   *
-   * @param allNodes all network nodes, keyed by hostname
-   * @param type1delta A {@link RibDelta} containing diffs with respect to OSPF Type1 external
-   *     routes
-   * @param type2delta A {@link RibDelta} containing diffs with respect to OSPF Type2 external
-   */
-  private void queueOutgoingOspfExternalRoutes(
-      @Nonnull Map<String, Node> allNodes,
-      @Nonnull RibDelta<OspfExternalType1Route> type1delta,
-      @Nonnull RibDelta<OspfExternalType2Route> type2delta) {
-    if (_vrf.getOspfProcess() == null) {
-      return;
-    }
-    // We can loop over incoming edges here because OSPF edges must be symmetric
-    for (EdgeId ospfEdge : _ospfExternalIncomingRoutes.keySet()) {
-      OspfArea localArea =
-          _vrf.getInterfaces().get(ospfEdge.getHead().getInterfaceName()).getOspfArea();
-      assert localArea != null; // otherwise the edge would not be built.
-
-      // No external routes can propagate out of stub area
-      if (localArea.getStubType() == StubType.STUB) {
-        continue;
-      }
-
-      // Get remote VirtualRouter
-      VirtualRouter remoteVr =
-          allNodes
-              .get(ospfEdge.getTail().getHostname())
-              .getVirtualRouters()
-              .get(ospfEdge.getTail().getVrfName());
-      remoteVr.enqueueOspfExternalRoutes(ospfEdge.reverse(), type1delta);
-      remoteVr.enqueueOspfExternalRoutes(ospfEdge.reverse(), type2delta);
-    }
-  }
-
-  /**
    * Propagate BGP routes received from neighbours into the appropriate RIBs. As the propagation is
    * happening, queue appropriate outgoing messages to neighbors as well.
    *
@@ -2254,25 +1636,26 @@ public class VirtualRouter implements Serializable {
    * @param bgpTopology the bgp peering relationships
    */
   void finalizeBgpRoutesAndQueueOutgoingMessages(
-      Map<BgpRib, RibDelta<BgpRoute>> stagingDeltas,
+      Map<Bgpv4Rib, RibDelta<Bgpv4Route>> stagingDeltas,
       final Map<String, Node> allNodes,
-      ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology,
+      BgpTopology bgpTopology,
       NetworkConfigurations networkConfigurations) {
 
     if (_vrf.getBgpProcess() == null) {
       return;
     }
 
-    RibDelta<BgpRoute> ebgpStagingDelta =
+    RibDelta<Bgpv4Route> ebgpStagingDelta =
         stagingDeltas.getOrDefault(_ebgpStagingRib, RibDelta.empty());
-    RibDelta<BgpRoute> ibgpStagingDelta =
+    RibDelta<Bgpv4Route> ibgpStagingDelta =
         stagingDeltas.getOrDefault(_ibgpStagingRib, RibDelta.empty());
 
-    RibDelta<BgpRoute> ebgpDelta = importRibDelta(_ebgpRib, ebgpStagingDelta);
-    RibDelta<BgpRoute> ibgpDelta = importRibDelta(_ibgpRib, ibgpStagingDelta);
+    RibDelta<Bgpv4Route> ebgpDelta = importRibDelta(_ebgpRib, ebgpStagingDelta);
+    RibDelta<Bgpv4Route> ibgpDelta = importRibDelta(_ibgpRib, ibgpStagingDelta);
     _bgpDeltaBuilder.from(importRibDelta(_bgpRib, ebgpDelta));
     _bgpDeltaBuilder.from(importRibDelta(_bgpRib, ibgpDelta));
-    _mainRibRouteDeltaBuilder.from(importRibDelta(_mainRib, _bgpDeltaBuilder.build()));
+    _mainRibRouteDeltaBuilder.from(
+        RibDelta.importRibDelta(_mainRib, _bgpDeltaBuilder.build(), _name));
 
     queueOutgoingBgpRoutes(
         ebgpDelta,
@@ -2308,36 +1691,9 @@ public class VirtualRouter implements Serializable {
     Builder<IsisRoute> isisDeltaBuilder = RibDelta.builder();
     isisDeltaBuilder.from(importRibDelta(_isisRib, d1));
     isisDeltaBuilder.from(importRibDelta(_isisRib, d2));
-    _mainRibRouteDeltaBuilder.from(importRibDelta(_mainRib, isisDeltaBuilder.build()));
+    _mainRibRouteDeltaBuilder.from(
+        RibDelta.importRibDelta(_mainRib, isisDeltaBuilder.build(), _name));
     return !d1.isEmpty() || !d2.isEmpty();
-  }
-
-  /**
-   * Merges staged OSPF external routes into the "real" OSPF-external RIBs
-   *
-   * @param type1Delta a {@link RibDelta} indicating changes to be made to {@link
-   *     #_ospfExternalType1Rib}
-   * @param type2Delta a {@link RibDelta} indicating changes to be made to {@link
-   *     #_ospfExternalType2Rib}
-   */
-  boolean unstageOspfExternalRoutes(
-      Map<String, Node> allNodes,
-      @Nonnull RibDelta<OspfExternalType1Route> type1Delta,
-      @Nonnull RibDelta<OspfExternalType2Route> type2Delta) {
-    RibDelta<OspfExternalType1Route> d1 = importRibDelta(_ospfExternalType1Rib, type1Delta);
-    RibDelta<OspfExternalType2Route> d2 = importRibDelta(_ospfExternalType2Rib, type2Delta);
-    queueOutgoingOspfExternalRoutes(allNodes, d1, d2);
-    Builder<OspfRoute> ospfDeltaBuilder = RibDelta.builder();
-    ospfDeltaBuilder.from(importRibDelta(_ospfRib, d1));
-    ospfDeltaBuilder.from(importRibDelta(_ospfRib, d2));
-    _mainRibRouteDeltaBuilder.from(importRibDelta(_mainRib, ospfDeltaBuilder.build()));
-    return !d1.isEmpty() || !d2.isEmpty();
-  }
-
-  /** Merges staged OSPF internal routes into the "real" OSPF-internal RIBs */
-  void unstageOspfInternalRoutes() {
-    importRib(_ospfIntraAreaRib, _ospfIntraAreaStagingRib);
-    importRib(_ospfInterAreaRib, _ospfInterAreaStagingRib);
   }
 
   /** Merges staged RIP routes into the "real" RIP RIB */
@@ -2349,12 +1705,10 @@ public class VirtualRouter implements Serializable {
   void reinitForNewIteration() {
     _mainRibRouteDeltaBuilder = RibDelta.builder();
     _bgpDeltaBuilder = RibDelta.builder();
-    _ospfExternalDeltaBuilder = RibDelta.builder();
 
     /*
      * RIBs not read from can just be re-initialized
      */
-    _ospfRib = new OspfRib();
     _ripRib = new RipRib();
 
     /*
@@ -2362,10 +1716,8 @@ public class VirtualRouter implements Serializable {
      */
     BgpTieBreaker tieBreaker = getBestPathTieBreaker();
     MultipathEquivalentAsPathMatchMode mpTieBreaker = getBgpMpTieBreaker();
-    _ebgpStagingRib = new BgpRib(null, _mainRib, tieBreaker, null, mpTieBreaker);
-    _ibgpStagingRib = new BgpRib(null, _mainRib, tieBreaker, null, mpTieBreaker);
-    _ospfExternalType1StagingRib = new OspfExternalType1Rib(getHostname(), null);
-    _ospfExternalType2StagingRib = new OspfExternalType2Rib(getHostname(), null);
+    _ebgpStagingRib = new Bgpv4Rib(_mainRib, tieBreaker, null, mpTieBreaker, false);
+    _ibgpStagingRib = new Bgpv4Rib(_mainRib, tieBreaker, null, mpTieBreaker, false);
 
     /*
      * Add routes that cannot change (does not affect below computation)
@@ -2373,15 +1725,9 @@ public class VirtualRouter implements Serializable {
     _mainRibRouteDeltaBuilder.from(importRib(_mainRib, _independentRib));
 
     /*
-     * Re-add independent OSPF routes to ospfRib for tie-breaking
-     */
-    importRib(_ospfRib, _ospfIntraAreaRib);
-    importRib(_ospfRib, _ospfInterAreaRib);
-    /*
      * Re-add independent RIP routes to ripRib for tie-breaking
      */
     importRib(_ripRib, _ripInternalRib);
-
     /*
      * Re-init/re-add routes for all EIGRP processes
      */
@@ -2394,44 +1740,7 @@ public class VirtualRouter implements Serializable {
   void importEigrpInternalRoutes() {
     _virtualEigrpProcesses
         .values()
-        .forEach(process -> process.importInternalRoutes(_independentRib));
-  }
-
-  /**
-   * Merge intra/inter OSPF RIBs into a general OSPF RIB, then merge that into the independent RIB
-   */
-  void importOspfInternalRoutes() {
-    importRib(_ospfRib, _ospfIntraAreaRib);
-    importRib(_ospfRib, _ospfInterAreaRib);
-    importRib(_independentRib, _ospfRib);
-  }
-
-  /**
-   * Check if RIBs that contribute to the dataplane "dependent routes" computation have any routes
-   * that still need to be merged. I.e., if this method returns true, we cannot converge yet.
-   *
-   * @return true if there are any routes remaining, in need of merging in to the RIBs
-   */
-  boolean hasOutstandingRoutes() {
-    return !_ospfExternalDeltaBuilder.build().isEmpty()
-        || !_mainRibRouteDeltaBuilder.build().isEmpty()
-        || !_bgpDeltaBuilder.build().isEmpty();
-  }
-
-  /**
-   * Check if this router has processed all its incoming BGP messages (i.e., all router queues are
-   * empty)
-   *
-   * @return true if all queues are empty.
-   */
-  boolean hasProcessedAllMessages() {
-    return (_vrf.getBgpProcess() == null
-            || _bgpIncomingRoutes.values().stream().allMatch(Queue::isEmpty))
-        && (_vrf.getOspfProcess() == null
-            || _ospfExternalIncomingRoutes.values().stream().allMatch(Queue::isEmpty))
-        && (_vrf.getIsisProcess() == null
-            || _isisIncomingRoutes.values().stream().allMatch(Queue::isEmpty))
-        && _crossVrfIncomingRoutes.values().stream().allMatch(Queue::isEmpty);
+        .forEach(process -> process.importInternalRoutes(_independentRib, _name));
   }
 
   /**
@@ -2439,14 +1748,12 @@ public class VirtualRouter implements Serializable {
    * plane iterations.
    */
   void queueInitialBgpMessages(
-      final ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology,
-      final Map<String, Node> allNodes,
-      NetworkConfigurations nc) {
+      final BgpTopology bgpTopology, final Map<String, Node> allNodes, NetworkConfigurations nc) {
     if (_vrf.getBgpProcess() == null) {
       // nothing to do
       return;
     }
-    for (BgpEdgeId edge : _bgpIncomingRoutes.keySet()) {
+    for (EdgeId edge : _bgpIncomingRoutes.keySet()) {
       newBgpSessionEstablishedHook(edge, getBgpSessionProperties(bgpTopology, edge), allNodes, nc);
     }
   }
@@ -2459,19 +1766,19 @@ public class VirtualRouter implements Serializable {
    * @param routes a set of BGP routes that are being exchanged
    */
   private void enqueueBgpMessages(
-      @Nonnull BgpEdgeId edgeId, @Nonnull Set<RouteAdvertisement<BgpRoute>> routes) {
+      @Nonnull EdgeId edgeId, @Nonnull Set<RouteAdvertisement<Bgpv4Route>> routes) {
     _bgpIncomingRoutes.get(edgeId).addAll(routes);
   }
 
   /** Deal with a newly established BGP session. */
   private void newBgpSessionEstablishedHook(
-      @Nonnull BgpEdgeId edge,
+      @Nonnull EdgeId edge,
       @Nonnull BgpSessionProperties sessionProperties,
       @Nonnull Map<String, Node> allNodes,
       NetworkConfigurations nc) {
 
-    BgpPeerConfigId localConfigId = edge.dst();
-    BgpPeerConfigId remoteConfigId = edge.src();
+    BgpPeerConfigId localConfigId = edge.head();
+    BgpPeerConfigId remoteConfigId = edge.tail();
     BgpPeerConfig localConfig = nc.getBgpPeerConfig(localConfigId);
     BgpPeerConfig remoteConfig = nc.getBgpPeerConfig(remoteConfigId);
 
@@ -2481,13 +1788,13 @@ public class VirtualRouter implements Serializable {
     }
 
     // Note prefixes we tried to originate
-    _mainRib.getRoutes().forEach(r -> _prefixTracer.originated(r.getNetwork()));
+    _mainRib.getTypedRoutes().forEach(r -> _prefixTracer.originated(r.getNetwork()));
 
     /*
      * Export route advertisements by looking at main RIB
      */
-    Set<RouteAdvertisement<BgpRoute>> exportedRoutes =
-        _mainRib.getRoutes().stream()
+    Set<RouteAdvertisement<Bgpv4Route>> exportedRoutes =
+        _mainRib.getTypedRoutes().stream()
             // This performs transformations and filtering using the export policy
             .map(
                 r ->
@@ -2509,32 +1816,49 @@ public class VirtualRouter implements Serializable {
     /*
      * Export neighbor-specific generated routes, these routes skip global export policy
      */
-    Set<RouteAdvertisement<BgpRoute>> exportedNeighborSpecificRoutes =
+    Set<RouteAdvertisement<Bgpv4Route>> exportedNeighborSpecificRoutes =
         localConfig.getGeneratedRoutes().stream()
-            .map(this::processNeighborSpecificGeneratedRoute)
+            .map(
+                r -> {
+                  // Activate route and convert to BGP if activated
+                  Bgpv4Route bgpv4Route = processNeighborSpecificGeneratedRoute(r);
+                  if (bgpv4Route == null) {
+                    // Route was not activated
+                    return null;
+                  }
+                  // Run pre-export transform, export policy, & post-export transform
+                  return exportBgpRoute(
+                      bgpv4Route,
+                      localConfigId,
+                      remoteConfigId,
+                      localConfig,
+                      remoteConfig,
+                      allNodes,
+                      sessionProperties);
+                })
             .filter(Objects::nonNull)
             .map(RouteAdvertisement::new)
             .collect(ImmutableSet.toImmutableSet());
 
-    // Call this on the neighbor's VR, and reverse the egde!
+    // Call this on the neighbor's VR, and reverse the edge!
     remoteVr.enqueueBgpMessages(edge.reverse(), exportedNeighborSpecificRoutes);
   }
 
   /**
    * Check whether given {@link GeneratedRoute} should be sent to a BGP neighbor. This checks
-   * activation conditions for the generated route, and converts it to a {@link BgpRoute}. No export
-   * policy computation is performed.
+   * activation conditions for the generated route, and converts it to a {@link Bgpv4Route}. No
+   * export policy computation is performed.
    *
    * @param generatedRoute route to process
-   * @return a new {@link BgpRoute} if the {@code generatedRoute} was activated.
+   * @return a new {@link Bgpv4Route} if the {@code generatedRoute} was activated.
    */
   @Nullable
-  private BgpRoute processNeighborSpecificGeneratedRoute(@Nonnull GeneratedRoute generatedRoute) {
+  private Bgpv4Route processNeighborSpecificGeneratedRoute(@Nonnull GeneratedRoute generatedRoute) {
     String policyName = generatedRoute.getGenerationPolicy();
     RoutingPolicy policy = policyName != null ? _c.getRoutingPolicies().get(policyName) : null;
     GeneratedRoute.Builder builder =
         GeneratedRouteHelper.activateGeneratedRoute(
-            generatedRoute, policy, _mainRib.getRoutes(), _vrf.getName());
+            generatedRoute, policy, _mainRib.getTypedRoutes(), _vrf.getName());
     return builder != null
         ? BgpProtocolHelper.convertGeneratedRouteToBgp(
             builder.build(), _vrf.getBgpProcess().getRouterId(), false)
@@ -2561,7 +1885,7 @@ public class VirtualRouter implements Serializable {
     return _mainRibs;
   }
 
-  BgpRib getBgpRib() {
+  Bgpv4Rib getBgpRib() {
     return _bgpRib;
   }
 
@@ -2575,36 +1899,27 @@ public class VirtualRouter implements Serializable {
    * following data structures:
    *
    * <ul>
-   *   <li>"external" RIBs ({@link #_mainRib}, {@link #_ospfExternalType1Rib}, {@link
-   *       #_ospfExternalType2Rib}
-   *   <li>message queues ({@link #_bgpIncomingRoutes} and {@link #_ospfExternalIncomingRoutes})
+   *   <li>"external" RIBs ({@link #_mainRib}
+   *   <li>message queues ({@link #_bgpIncomingRoutes}
+   *   <li>Routing processes
    * </ul>
    *
    * @return integer hashcode
    */
   int computeIterationHashCode() {
-    return _mainRib.getRoutes().hashCode()
-        + _ospfExternalType1Rib.getRoutes().hashCode()
-        + _ospfExternalType2Rib.getRoutes().hashCode()
-        + _bgpIncomingRoutes.values().stream()
-            .flatMap(Queue::stream)
-            .mapToInt(RouteAdvertisement::hashCode)
-            .sum()
-        + _ospfExternalIncomingRoutes.values().stream()
-            .flatMap(Queue::stream)
-            .mapToInt(RouteAdvertisement::hashCode)
-            .sum()
-        + _isisIncomingRoutes.values().stream()
-            .flatMap(Queue::stream)
-            .mapToInt(RouteAdvertisement::hashCode)
-            .sum()
-        + _virtualEigrpProcesses.values().stream()
-            .mapToInt(VirtualEigrpProcess::computeIterationHashCode)
-            .sum()
-        + _crossVrfIncomingRoutes.values().stream()
-            .flatMap(Queue::stream)
-            .mapToInt(RouteAdvertisement::hashCode)
-            .sum();
+    return Streams.concat(
+            // RIB State
+            Stream.of(_mainRib.getTypedRoutes()),
+            // Message queues
+            Stream.of(_bgpIncomingRoutes, _isisIncomingRoutes, _crossVrfIncomingRoutes)
+                .flatMap(m -> m.values().stream())
+                .flatMap(Queue::stream),
+            // Processes
+            Stream.of(_ospfProcesses.values().stream().map(OspfRoutingProcess::iterationHashCode)),
+            Stream.of(_virtualEigrpProcesses)
+                .flatMap(m -> m.values().stream())
+                .map(VirtualEigrpProcess::computeIterationHashCode))
+        .collect(toOrderedHashCode());
   }
 
   PrefixTracer getPrefixTracer() {
@@ -2619,12 +1934,14 @@ public class VirtualRouter implements Serializable {
    * @param ourConfig {@link BgpPeerConfig} that sends the route
    * @param remoteConfig {@link BgpPeerConfig} that will be receiving the route
    * @param allNodes all nodes in the network
-   * @return The transformed route as a {@link BgpRoute}, or {@code null} if the route should not be
-   *     exported.
+   * @param sessionProperties {@link BgpSessionProperties} representing the <em>incoming</em> edge:
+   *     i.e. the edge from {@code remoteConfig} to {@code ourConfig}
+   * @return The transformed route as a {@link Bgpv4Route}, or {@code null} if the route should not
+   *     be exported.
    */
   @Nullable
-  private BgpRoute exportBgpRoute(
-      @Nonnull AbstractRoute exportCandidate,
+  private Bgpv4Route exportBgpRoute(
+      @Nonnull AbstractRouteDecorator exportCandidate,
       @Nonnull BgpPeerConfigId ourConfigId,
       @Nonnull BgpPeerConfigId remoteConfigId,
       @Nonnull BgpPeerConfig ourConfig,
@@ -2633,16 +1950,16 @@ public class VirtualRouter implements Serializable {
       @Nonnull BgpSessionProperties sessionProperties) {
 
     RoutingPolicy exportPolicy = _c.getRoutingPolicies().get(ourConfig.getExportPolicy());
-    BgpRoute.Builder transformedOutgoingRouteBuilder;
+    Bgpv4Route.Builder transformedOutgoingRouteBuilder;
     try {
       transformedOutgoingRouteBuilder =
-          BgpProtocolHelper.transformBgpRouteOnExport(
+          BgpProtocolHelper.transformBgpRoutePreExport(
               ourConfig,
               remoteConfig,
               sessionProperties,
               _vrf,
               requireNonNull(getRemoteBgpNeighborVR(remoteConfigId, allNodes))._vrf,
-              exportCandidate);
+              exportCandidate.getAbstractRoute());
     } catch (BgpRoutePropagationException e) {
       // TODO: Log a warning
       return null;
@@ -2652,12 +1969,15 @@ public class VirtualRouter implements Serializable {
       return null;
     }
 
+    // sessionProperties represents the incoming edge, so its tailIp is the remote peer's IP
+    Ip remoteIp = sessionProperties.getTailIp();
+
     // Process transformed outgoing route by the export policy
     boolean shouldExport =
         exportPolicy.process(
             exportCandidate,
             transformedOutgoingRouteBuilder,
-            remoteConfig.getLocalIp(),
+            remoteIp,
             ourConfigId.getRemotePeerPrefix(),
             ourConfigId.getVrfName(),
             Direction.OUT);
@@ -2668,19 +1988,23 @@ public class VirtualRouter implements Serializable {
       _prefixTracer.filtered(
           exportCandidate.getNetwork(),
           requireNonNull(remoteVr).getHostname(),
-          remoteConfig.getLocalIp(),
+          remoteIp,
           remoteConfigId.getVrfName(),
           ourConfig.getExportPolicy(),
           Direction.OUT);
       return null;
     }
 
+    // Apply final post-policy transformations before sending advertisement to neighbor
+    BgpProtocolHelper.transformBgpRoutePostExport(
+        transformedOutgoingRouteBuilder, ourConfig, sessionProperties);
+
     // Successfully exported route
-    BgpRoute transformedOutgoingRoute = transformedOutgoingRouteBuilder.build();
+    Bgpv4Route transformedOutgoingRoute = transformedOutgoingRouteBuilder.build();
     _prefixTracer.sentTo(
         transformedOutgoingRoute.getNetwork(),
         requireNonNull(remoteVr).getHostname(),
-        remoteConfig.getLocalIp(),
+        remoteIp,
         remoteConfigId.getVrfName(),
         ourConfig.getExportPolicy());
 
@@ -2696,38 +2020,45 @@ public class VirtualRouter implements Serializable {
 
   private void enqueueCrossVrfRoutes(
       @Nonnull CrossVrfEdgeId remoteVrfToOurRib,
-      @Nonnull Collection<RouteAdvertisement<AbstractRoute>> routes,
+      @Nonnull Stream<RouteAdvertisement<AnnotatedRoute<AbstractRoute>>> routeAdverts,
       @Nullable String policyName) {
     if (!_crossVrfIncomingRoutes.containsKey(remoteVrfToOurRib)) {
       // We either messed up royally or https://github.com/batfish/batfish/issues/3050
       return;
     }
 
-    Collection<RouteAdvertisement<AbstractRoute>> filteredRoutes = routes;
+    Stream<RouteAdvertisement<AnnotatedRoute<AbstractRoute>>> filteredRoutes = routeAdverts;
     if (policyName != null) {
       RoutingPolicy policy = _c.getRoutingPolicies().get(policyName);
       filteredRoutes =
-          routes.stream()
+          routeAdverts
               .map(
                   ra -> {
-                    AbstractRouteBuilder<?, ?> routeBuilder = ra.getRoute().toBuilder();
-                    if (policy.process(ra.getRoute(), routeBuilder, null, _name, IN)) {
-                      return ra.toBuilder().setRoute(routeBuilder.build()).build();
-                    } else {
-                      return null;
+                    AnnotatedRoute<AbstractRoute> annotatedRoute = ra.getRoute();
+                    AbstractRouteBuilder<?, ?> routeBuilder = annotatedRoute.getRoute().toBuilder();
+                    if (policy.process(annotatedRoute, routeBuilder, null, _name, IN)) {
+                      // Preserve original route's source VRF
+                      return ra.toBuilder()
+                          .setRoute(
+                              new AnnotatedRoute<>(
+                                  routeBuilder.build(), annotatedRoute.getSourceVrf()))
+                          .build();
                     }
+                    return null;
                   })
-              .filter(Objects::nonNull)
-              .collect(ImmutableList.toImmutableList());
+              .filter(Objects::nonNull);
     }
-    _crossVrfIncomingRoutes.get(remoteVrfToOurRib).addAll(filteredRoutes);
+
+    Queue<RouteAdvertisement<AnnotatedRoute<AbstractRoute>>> queue =
+        _crossVrfIncomingRoutes.get(remoteVrfToOurRib);
+    filteredRoutes.forEach(queue::add);
   }
 
   void processCrossVrfRoutes() {
     _crossVrfIncomingRoutes.forEach(
         (edgeId, queue) -> {
           while (queue.peek() != null) {
-            RouteAdvertisement<AbstractRoute> ra = queue.remove();
+            RouteAdvertisement<AnnotatedRoute<AbstractRoute>> ra = queue.remove();
             // TODO: handle non-default main RIBs based on RIB specified in edgeID
             // https://github.com/batfish/batfish/issues/3050
             if (ra.isWithdrawn()) {
@@ -2739,9 +2070,72 @@ public class VirtualRouter implements Serializable {
         });
   }
 
-  /** Queue OSPF external routes on this VR's incoming queues. */
-  private void enqueueOspfExternalRoutes(
-      OspfTopology.EdgeId ospfEdge, RibDelta<? extends OspfExternalRoute> ribDelta) {
-    queueDelta(_ospfExternalIncomingRoutes.get(ospfEdge), ribDelta);
+  /**
+   * Goes through VRFs that can leak routes into this routing instance, and enqueues all their new
+   * routes in {@link #_crossVrfIncomingRoutes}.
+   */
+  void queueCrossVrfImports() {
+    if (_vrf.getCrossVrfImportPolicy() == null || _vrf.getCrossVrfImportVrfs() == null) {
+      return;
+    }
+    for (String vrfToImport : _vrf.getCrossVrfImportVrfs()) {
+      VirtualRouter exportingVR = _node.getVirtualRouters().get(vrfToImport);
+      CrossVrfEdgeId otherVrfToOurRib = new CrossVrfEdgeId(vrfToImport, RibId.DEFAULT_RIB_NAME);
+      enqueueCrossVrfRoutes(
+          otherVrfToOurRib,
+          // TODO Will need to update once support is added for cross-VRF export policies
+          exportingVR._mainRibRouteDeltaBuilder.build().getActions(),
+          _vrf.getCrossVrfImportPolicy());
+    }
+  }
+
+  private <R extends AbstractRoute> AnnotatedRoute<R> annotateRoute(R route) {
+    return new AnnotatedRoute<>(route, _name);
+  }
+
+  public Map<String, OspfRoutingProcess> getOspfProcesses() {
+    return _ospfProcesses;
+  }
+
+  /** Check whether this virtual router has any remaining computation to do */
+  boolean isDirty() {
+    return
+    // Route Deltas
+    !_mainRibRouteDeltaBuilder.build().isEmpty()
+        || !_bgpDeltaBuilder.build().isEmpty()
+        // Message queues
+        || !_bgpIncomingRoutes.values().stream().allMatch(Queue::isEmpty)
+        || !_isisIncomingRoutes.values().stream().allMatch(Queue::isEmpty)
+        || !_crossVrfIncomingRoutes.values().stream().allMatch(Queue::isEmpty)
+        // Processes
+        || _ospfProcesses.values().stream().anyMatch(OspfRoutingProcess::isDirty);
+  }
+
+  /** Execute one OSPF iteration, for all processes */
+  void ospfIteration(Map<String, Node> allNodes) {
+    _ospfProcesses.values().forEach(p -> p.executeIteration(allNodes));
+  }
+
+  void redistribute() {
+    // TODO: expand to processes other than OSPF
+    _ospfProcesses
+        .values()
+        .forEach(
+            p ->
+                p.redistribute(
+                    // For the time being use all main RIB routes
+                    // TODO: later switch to just the delta (after iteration 1)
+                    RibDelta.<AnnotatedRoute<AbstractRoute>>builder()
+                        .add(_mainRib.getTypedRoutes())
+                        .build()));
+  }
+
+  void mergeOspfRoutesToMainRib() {
+    _ospfProcesses
+        .values()
+        .forEach(
+            p ->
+                _mainRibRouteDeltaBuilder.from(
+                    importRibDelta(_mainRib, p.getUpdatesForMainRib(), _name)));
   }
 }

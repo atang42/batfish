@@ -1,7 +1,7 @@
 package org.batfish.question.filterlinereachability;
 
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
-import static org.batfish.datamodel.answers.FilterLineReachabilityRows.createMetadata;
+import static org.batfish.question.filterlinereachability.FilterLineReachabilityRows.createMetadata;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -44,7 +44,6 @@ import org.batfish.datamodel.acl.PermittedByAcl;
 import org.batfish.datamodel.acl.TypeMatchExprsCollector;
 import org.batfish.datamodel.acl.UndefinedReferenceException;
 import org.batfish.datamodel.answers.AclSpecs;
-import org.batfish.datamodel.answers.FilterLineReachabilityRows;
 import org.batfish.datamodel.questions.Question;
 import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.specifier.FilterSpecifier;
@@ -345,7 +344,7 @@ public class FilterLineReachabilityAnswerer extends Answerer {
   static Map<String, Set<IpAccessList>> getSpecifiedFilters(
       FilterLineReachabilityQuestion question, SpecifierContext ctxt) {
     Set<String> specifiedNodes = question.nodeSpecifier().resolve(ctxt);
-    FilterSpecifier filterSpecifier = question.filterSpecifier();
+    FilterSpecifier filterSpecifier = question.getFilterSpecifier();
 
     return CommonUtil.toImmutableMap(
         specifiedNodes,
@@ -514,7 +513,7 @@ public class FilterLineReachabilityAnswerer extends Answerer {
 
       BDD blockedLineOverlap = prevLine.and(blockedLine);
       linesByWeight.add(new LineAndWeight(prevLineNum, blockedLineOverlap.satCount()));
-      restOfLine = restOfLine.and(restOfLineOverlap.not());
+      restOfLine = restOfLine.diff(restOfLineOverlap);
       diffAction = diffAction || actions.get(prevLineNum) != blockedLineAction;
     }
 
@@ -532,7 +531,7 @@ public class FilterLineReachabilityAnswerer extends Answerer {
 
       // The original line is still not blocked, or this is the first line with a different action.
       if (!restOfLine.isZero() || needDiffAction && curDiff) {
-        restOfLine = restOfLine.and(bdds.get(curLineNum).not());
+        restOfLine = restOfLine.diff(bdds.get(curLineNum));
         answerLines.add(curLineNum);
         needDiffAction = needDiffAction && !curDiff;
       }
@@ -582,7 +581,7 @@ public class FilterLineReachabilityAnswerer extends Answerer {
             findBlockingLinesForLine(lineNum, actions, ipLineToBDDMap);
         answerRows.addUnreachableLine(aclSpec, lineNum, false, blockingLines);
       }
-      unmatchedPackets = unmatchedPackets.and(lineBDD.not());
+      unmatchedPackets = unmatchedPackets.diff(lineBDD);
     }
   }
 

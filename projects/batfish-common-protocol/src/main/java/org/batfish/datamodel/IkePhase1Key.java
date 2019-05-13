@@ -5,7 +5,6 @@ import static org.batfish.datamodel.Interface.UNSET_LOCAL_INTERFACE;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import java.io.Serializable;
 import java.util.Objects;
 import javax.annotation.Nonnull;
@@ -15,13 +14,9 @@ import org.batfish.datamodel.visitors.IpSpaceRepresentative;
 /** Represents a key to be used with IKE phase 1 policy */
 public class IkePhase1Key implements Serializable {
   private static final long serialVersionUID = 1L;
-
   private static final String PROP_KEY_TYPE = "keyType";
-
   private static final String PROP_KEY_HASH = "keyHash";
-
   private static final String PROP_REMOTE_IDENTITY = "remoteIdentity";
-
   private static final String PROP_LOCAL_INTERFACE = "localInterface";
 
   private IkeKeyType _keyType;
@@ -38,25 +33,27 @@ public class IkePhase1Key implements Serializable {
     _localInterface = UNSET_LOCAL_INTERFACE;
   }
 
-  @JsonPropertyDescription("Type of key")
+  /** Type of key. */
   @JsonProperty(PROP_KEY_TYPE)
   public IkeKeyType getKeyType() {
     return _keyType;
   }
 
-  @JsonPropertyDescription("Identity of the remote peer which matches this key")
+  /** Identity of the remote peer which matches this key. */
   @JsonProperty(PROP_REMOTE_IDENTITY)
+  @Nonnull
   public IpSpace getRemoteIdentity() {
     return _remoteIdentity;
   }
 
-  @JsonPropertyDescription("Local interface on which this key can be used")
+  /** Local interface on which this key can be used. */
   @JsonProperty(PROP_LOCAL_INTERFACE)
+  @Nonnull
   public String getLocalInterface() {
     return _localInterface;
   }
 
-  @JsonPropertyDescription("Value of the key hash")
+  /** Value of the key hash. */
   @JsonProperty(PROP_KEY_HASH)
   public String getKeyHash() {
     return _keyHash;

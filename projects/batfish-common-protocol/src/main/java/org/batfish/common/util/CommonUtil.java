@@ -1,41 +1,25 @@
 package org.batfish.common.util;
 
-import static org.batfish.datamodel.transformation.TransformationUtil.hasSourceNat;
-import static org.batfish.datamodel.transformation.TransformationUtil.sourceNatPoolIps;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Comparators;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
-import com.google.common.collect.Ordering;
-import com.google.common.collect.SetMultimap;
 import com.google.common.hash.Hashing;
-import com.google.errorprone.annotations.MustBeClosed;
+import com.google.common.math.IntMath;
 import com.ibm.icu.text.CharsetDetector;
 import io.opentracing.contrib.jaxrs2.client.ClientTracingFeature;
 import io.opentracing.util.GlobalTracer;
-import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.net.MalformedURLException;
 import java.net.URI;
-import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryIteratorException;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.attribute.FileAttribute;
 import java.security.KeyStore;
 import java.security.cert.X509Certificate;
@@ -43,22 +27,19 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collector;
-import java.util.stream.Stream;
+import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.net.ssl.HostnameVerifier;
@@ -70,29 +51,21 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 import javax.ws.rs.client.ClientBuilder;
-import org.apache.commons.configuration2.builder.fluent.Configurations;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.batfish.common.BatfishException;
 import org.batfish.common.BfConsts;
-import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.EmptyIpSpace;
-import org.batfish.datamodel.Interface;
-import org.batfish.datamodel.InterfaceAddress;
-import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.IpWildcard;
 import org.batfish.datamodel.IpWildcardIpSpace;
 import org.batfish.datamodel.IpWildcardSetIpSpace;
-import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.UniverseIpSpace;
 import org.glassfish.grizzly.http.server.HttpServer;
 import org.glassfish.grizzly.ssl.SSLContextConfigurator;
 import org.glassfish.grizzly.ssl.SSLEngineConfigurator;
 import org.glassfish.jersey.grizzly2.httpserver.GrizzlyHttpServerFactory;
 import org.glassfish.jersey.server.ResourceConfig;
-import org.skyscreamer.jsonassert.JSONAssert;
 
 public class CommonUtil {
 
@@ -128,14 +101,6 @@ public class CommonUtil {
     }
   }
 
-  public static <M extends Map<?, ?>> M nullIfEmpty(M map) {
-    return map == null ? null : map.isEmpty() ? null : map;
-  }
-
-  public static <C extends Collection<?>> C nullIfEmpty(C collection) {
-    return collection == null ? null : collection.isEmpty() ? null : collection;
-  }
-
   private static class TrustAllHostNameVerifier implements HostnameVerifier {
     @Override
     public boolean verify(String hostname, SSLSession session) {
@@ -144,17 +109,6 @@ public class CommonUtil {
   }
 
   private static String SALT;
-
-  private static final int STREAMED_FILE_BUFFER_SIZE = 1024;
-
-  public static String applyPrefix(String prefix, String msg) {
-    String[] lines = msg.split("\n", -1);
-    StringBuilder sb = new StringBuilder();
-    for (String line : lines) {
-      sb.append(prefix + line + "\n");
-    }
-    return sb.toString();
-  }
 
   public static <T extends Throwable> boolean causedBy(Throwable e, Class<T> causeClass) {
     Set<Throwable> seenCauses = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -199,88 +153,6 @@ public class CommonUtil {
       } else {
         return false;
       }
-    }
-  }
-
-  public static boolean checkJsonEqual(Object a, Object b) {
-    try {
-      String aString = BatfishObjectMapper.writePrettyString(a);
-      String bString = BatfishObjectMapper.writePrettyString(b);
-      JSONAssert.assertEquals(aString, bString, false);
-      return true;
-    } catch (Exception e) {
-      throw new BatfishException("JSON equality check failed", e);
-    } catch (AssertionError err) {
-      return false;
-    }
-  }
-
-  /**
-   * Convert a BGP community string to its numeric representation. Only 16-bit AS numbers and
-   * community values are supported.
-   *
-   * @throws IllegalArgumentException if the AS number or community value is over 16 bits.
-   */
-  public static long communityStringToLong(@Nonnull String str) {
-    String[] parts = str.split(":");
-    long high = Long.parseLong(parts[0]);
-    // Bug: this function is called on both regular and extended communities.
-    // Do not perform checking of as "validity"
-    // https://github.com/batfish/batfish/issues/2103
-    //    checkLongWithin16Bit(high);
-    long low = Long.parseLong(parts[1]);
-    //    checkLongWithin16Bit(low);
-    return low + (high << 16);
-  }
-
-  public static <C extends Comparable<? super C>> int compareIterable(
-      Iterable<C> lhs, Iterable<C> rhs) {
-    return Comparators.lexicographical(Ordering.<C>natural()).compare(lhs, rhs);
-  }
-
-  public static <T extends Comparable<T>> int compareCollection(
-      Collection<T> lhs, Collection<T> rhs) {
-    Iterator<T> l = lhs.iterator();
-    Iterator<T> r = rhs.iterator();
-    while (l.hasNext()) {
-      if (!r.hasNext()) {
-        return 1;
-      }
-      T lVal = l.next();
-      T rVal = r.next();
-      int ret = lVal.compareTo(rVal);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-    if (r.hasNext()) {
-      return -1;
-    }
-    return 0;
-  }
-
-  public static void copy(Path srcPath, Path dstPath) {
-    if (Files.isDirectory(srcPath)) {
-      copyDirectory(srcPath, dstPath);
-    } else {
-      copyFile(srcPath, dstPath);
-    }
-  }
-
-  public static void copyDirectory(Path srcPath, Path dstPath) {
-    try {
-      FileUtils.copyDirectory(srcPath.toFile(), dstPath.toFile());
-    } catch (IOException e) {
-      throw new BatfishException(
-          "Failed to copy directory: '" + srcPath + "' to: '" + dstPath + "'", e);
-    }
-  }
-
-  public static void copyFile(Path srcPath, Path dstPath) {
-    try {
-      FileUtils.copyFile(srcPath.toFile(), dstPath.toFile());
-    } catch (IOException e) {
-      throw new BatfishException("Failed to copy file: '" + srcPath + "' to: '" + dstPath + "'", e);
     }
   }
 
@@ -436,96 +308,6 @@ public class CommonUtil {
     }
   }
 
-  /**
-   * Returns an active interface with the specified name for configuration.
-   *
-   * @param name The name to check
-   * @param c The configuration object in which to check
-   * @return Any Interface that matches the condition
-   */
-  public static Optional<Interface> getActiveInterfaceWithName(String name, Configuration c) {
-    return c.getAllInterfaces().values().stream()
-        .filter(iface -> iface.getActive() && iface.getName().equals(name))
-        .findAny();
-  }
-
-  /**
-   * Returns an active interface with the specified IP address for configuration.
-   *
-   * @param ipAddress The IP address to check
-   * @param c The configuration object in which to check
-   * @return Any Interface that matches the condition
-   */
-  public static Optional<Interface> getActiveInterfaceWithIp(Ip ipAddress, Configuration c) {
-    return c.getAllInterfaces().values().stream()
-        .filter(
-            iface ->
-                iface.getActive()
-                    && iface.getAllAddresses().stream()
-                        .anyMatch(ifAddr -> Objects.equals(ifAddr.getIp(), ipAddress)))
-        .findAny();
-  }
-
-  public static Path getCanonicalPath(Path path) {
-    try {
-      return Paths.get(path.toFile().getCanonicalPath());
-    } catch (IOException e) {
-      throw new BatfishException("Could not get canonical path from: '" + path + "'", e);
-    }
-  }
-
-  public static org.apache.commons.configuration2.Configuration getConfig(
-      String overridePropertyName,
-      String defaultPropertyFilename,
-      Class<?> defaultPropertyLocatorClass) {
-    String overriddenPath = System.getProperty(overridePropertyName);
-    URL propertiesUrl;
-    if (overriddenPath != null) {
-      // The user provided an override, so look up that configuration instead.
-      try {
-        propertiesUrl = new URL(new URL("file://"), overriddenPath);
-      } catch (MalformedURLException e) {
-        throw new BatfishException(
-            "Error treating " + overriddenPath + " as a path to a properties file", e);
-      }
-    } else {
-      // Find the default properties file.
-      propertiesUrl =
-          defaultPropertyLocatorClass.getClassLoader().getResource(defaultPropertyFilename);
-    }
-    try {
-      return new Configurations().properties(propertiesUrl);
-    } catch (Exception e) {
-      throw new BatfishException("Error loading configuration from " + overriddenPath, e);
-    }
-  }
-
-  public static SortedSet<Path> getEntries(Path directory) {
-    SortedSet<Path> entries = new TreeSet<>();
-    try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
-      for (Path entry : stream) {
-        entries.add(entry);
-      }
-    } catch (IOException | DirectoryIteratorException e) {
-      throw new BatfishException("Error listing directory '" + directory + "'", e);
-    }
-    return entries;
-  }
-
-  public static String getIndentedString(String str, int indentLevel) {
-    String indent = getIndentString(indentLevel);
-    StringBuilder sb = new StringBuilder();
-    String[] lines = str.split("\n", -1);
-    for (String line : lines) {
-      sb.append(indent + line + "\n");
-    }
-    return sb.toString();
-  }
-
-  public static String getIndentString(int indentLevel) {
-    return StringUtils.repeat("  ", indentLevel);
-  }
-
   @Nullable
   public static Integer getInterfaceVlanNumber(String ifaceName) {
     String prefix = "vlan";
@@ -540,123 +322,12 @@ public class CommonUtil {
     return null;
   }
 
-  public static SortedSet<Path> getSubdirectories(Path directory) {
-    SortedSet<Path> subdirectories = new TreeSet<>();
-    try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
-      for (Path entry : stream) {
-        if (Files.isDirectory(entry)) {
-          subdirectories.add(entry);
-        }
-      }
-    } catch (IOException | DirectoryIteratorException e) {
-      throw new BatfishException("Error listing directory '" + directory + "'", e);
-    }
-    return subdirectories;
-  }
-
-  public static String getTime(long millis) {
-    long cs = (millis / 10) % 100;
-    long s = (millis / 1000) % 60;
-    long m = (millis / (1000 * 60)) % 60;
-    long h = (millis / (1000 * 60 * 60)) % 24;
-    String time = String.format("%02d:%02d:%02d.%02d", h, m, s, cs);
-    return time;
-  }
-
-  @VisibleForTesting
-  static SetMultimap<Ip, IpWildcardSetIpSpace> initPrivateIpsByPublicIp(
-      Map<String, Configuration> configurations) {
-    /*
-     * Very hacky mapping from public IP to set of spaces of possible natted private IPs.
-     * Does not currently support source-nat acl.
-     *
-     * The current implementation just considers every IP in every prefix on a non-masquerading
-     * interface (except the local address in each such prefix) to be a possible private IP
-     * match for every public IP referred to by every source-nat pool on a masquerading interface.
-     */
-    ImmutableSetMultimap.Builder<Ip, IpWildcardSetIpSpace> builder = ImmutableSetMultimap.builder();
-    for (Configuration c : configurations.values()) {
-      Collection<Interface> interfaces = c.getAllInterfaces().values();
-      Set<InterfaceAddress> nonNattedInterfaceAddresses =
-          interfaces.stream()
-              .filter(i -> !hasSourceNat(i.getOutgoingTransformation()))
-              .flatMap(i -> i.getAllAddresses().stream())
-              .collect(ImmutableSet.toImmutableSet());
-      Set<IpWildcard> blacklist =
-          nonNattedInterfaceAddresses.stream()
-              .map(address -> new IpWildcard(address.getIp(), Ip.ZERO))
-              .collect(ImmutableSet.toImmutableSet());
-      Set<IpWildcard> whitelist =
-          nonNattedInterfaceAddresses.stream()
-              .map(address -> new IpWildcard(address.getPrefix()))
-              .collect(ImmutableSet.toImmutableSet());
-      IpWildcardSetIpSpace ipSpace =
-          IpWildcardSetIpSpace.builder().including(whitelist).excluding(blacklist).build();
-      interfaces.stream()
-          .flatMap(i -> sourceNatPoolIps(i.getOutgoingTransformation()))
-          .forEach(currentPoolIp -> builder.put(currentPoolIp, ipSpace));
-    }
-    return builder.build();
-  }
-
   public static <S extends Set<T>, T> S intersection(
       Set<T> set1, Collection<T> set2, Supplier<S> setConstructor) {
     S intersectionSet = setConstructor.get();
     intersectionSet.addAll(set1);
     intersectionSet.retainAll(set2);
     return intersectionSet;
-  }
-
-  public static boolean isNullInterface(String ifaceName) {
-    String lcIfaceName = ifaceName.toLowerCase();
-    return lcIfaceName.startsWith("null");
-  }
-
-  public static boolean isNullOrEmpty(@Nullable Collection<?> collection) {
-    return collection == null || collection.isEmpty();
-  }
-
-  @MustBeClosed
-  public static Stream<Path> list(Path configsPath) {
-    try {
-      return Files.list(configsPath);
-    } catch (IOException e) {
-      throw new BatfishException("Could not list files in '" + configsPath + "'", e);
-    }
-  }
-
-  /** Convert a given long to a string BGP community representation. */
-  @Nonnull
-  public static String longToCommunity(long l) {
-    long upper = l >> 16;
-    long lower = l & 0xFFFF;
-    return upper + ":" + lower;
-  }
-
-  public static void moveByCopy(Path srcPath, Path dstPath) {
-    if (Files.isDirectory(srcPath)) {
-      copyDirectory(srcPath, dstPath);
-      deleteDirectory(srcPath);
-    } else {
-      copyFile(srcPath, dstPath);
-      delete(srcPath);
-    }
-  }
-
-  public static void outputFileLines(Path downloadedFile, Consumer<String> outputFunction) {
-    try (BufferedReader br = Files.newBufferedReader(downloadedFile, StandardCharsets.UTF_8)) {
-      String line = null;
-      while ((line = br.readLine()) != null) {
-        outputFunction.accept(line + "\n");
-      }
-    } catch (IOException e) {
-      throw new BatfishException(
-          "Failed to read and output lines of file: '" + downloadedFile + "'", e);
-    }
-  }
-
-  public static boolean rangesContain(Collection<SubRange> ranges, int num) {
-    return ranges.stream().anyMatch(sr -> sr.includes(num));
   }
 
   @Nonnull
@@ -784,12 +455,38 @@ public class CommonUtil {
                 Comparator.naturalOrder(), keyFunction, valueFunction));
   }
 
-  public static <S extends Set<T>, T> S union(
-      Set<T> set1, Set<T> set2, Supplier<S> setConstructor) {
-    S unionSet = setConstructor.get();
-    unionSet.addAll(set1);
-    unionSet.addAll(set2);
-    return unionSet;
+  /**
+   * A collector that returns a hashcode of all the objects in a stream (order-dependent).
+   *
+   * <p>Equivalent to to collecting elements into a list and calling {@link List#hashCode()}
+   */
+  public static <T> Collector<T, ?, Integer> toOrderedHashCode() {
+    // See https://stackoverflow.com/a/39396614 for mode detail
+    return Collector.of(
+        // Initial state: [0] - current hashcode, [1] - number of elements encountered
+        () -> new int[2],
+        // accumulator: single element added to hashcode
+        (a, o) -> {
+          a[0] = a[0] * 31 + Objects.hashCode(o);
+          a[1]++;
+        },
+        // combiner: merge two hashcodes
+        (a1, a2) -> {
+          a1[0] = a1[0] * IntMath.pow(31, a2[1]) + a2[0];
+          a1[1] += a2[1];
+          return a1;
+        },
+        // finisher: collapse the state to a single int
+        a -> IntMath.pow(31, a[1]) + a[0]);
+  }
+
+  /**
+   * A collector that returns a hashcode of all the objects in a stream (order-independent).
+   *
+   * <p>Equivalent to collecting elements into a set and calling {@link Set#hashCode()}
+   */
+  public static <T> Collector<T, ?, Integer> toUnorderedHashCode() {
+    return Collectors.summingInt(Objects::hashCode);
   }
 
   public static void writeFile(Path outputPath, String output) {
@@ -800,19 +497,6 @@ public class CommonUtil {
       throw new BatfishException("Failed to write file (file not found): " + outputPath, e);
     } catch (IOException e) {
       throw new BatfishException("Failed to write file: " + outputPath, e);
-    }
-  }
-
-  public static void writeStreamToFile(InputStream inputStream, Path outputFile) {
-    try (OutputStream fileOutputStream = new FileOutputStream(outputFile.toFile())) {
-      int read = 0;
-      final byte[] bytes = new byte[STREAMED_FILE_BUFFER_SIZE];
-      while ((read = inputStream.read(bytes)) != -1) {
-        fileOutputStream.write(bytes, 0, read);
-      }
-    } catch (IOException e) {
-      throw new BatfishException(
-          "Failed to write input stream to output file: '" + outputFile + "'", e);
     }
   }
 }

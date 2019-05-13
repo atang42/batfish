@@ -4,22 +4,18 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableSet;
-import com.kjetland.jackson.jsonSchema.annotations.JsonSchemaDescription;
 import java.io.Serializable;
+import java.util.Objects;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.SortedSet;
 import java.util.TreeMap;
-import java.util.TreeSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.batfish.datamodel.NetworkFactory.NetworkFactoryBuilder;
 
 /** Represents a bgp process on a router */
-@JsonSchemaDescription("A BGP routing process")
 public class BgpProcess implements Serializable {
 
   public static class Builder extends NetworkFactoryBuilder<BgpProcess> {
@@ -61,46 +57,32 @@ public class BgpProcess implements Serializable {
     public Set<Long> get() {
       return _activeNeighbors.values().stream()
           .map(BgpPeerConfig::getClusterId)
+          .filter(Objects::nonNull)
           .collect(ImmutableSet.toImmutableSet());
     }
   }
 
+  private static final String PROP_INTERFACE_NEIGHBORS = "interfaceNeighbors";
   private static final String PROP_PASSIVE_NEIGHBORS = "dynamicNeighbors";
-
-  private static final String PROP_GENERATED_ROUTES = "generatedRoutes";
-
   private static final String PROP_MULTIPATH_EBGP = "multipathEbgp";
-
   private static final String PROP_MULTIPATH_EQUIVALENT_AS_PATH_MATCH_MODE =
       "multipathEquivalentAsPathMatchMode";
-
   private static final String PROP_MULTIPATH_IBGP = "multipathIbgp";
-
   private static final String PROP_ACTIVE_NEIGHBORS = "neighbors";
-
   private static final String PROP_ROUTER_ID = "routerId";
-
   private static final String PROP_TIE_BREAKER = "tieBreaker";
 
   private static final long serialVersionUID = 1L;
 
   private Supplier<Set<Long>> _clusterIds;
-
-  /**
-   * The set of <i>neighbor-independent</i> generated routes that may be advertised by this process
-   * if permitted by their respective generation policies
-   */
-  private SortedSet<GeneratedRoute> _generatedRoutes;
-
+  @Nonnull private SortedMap<String, BgpUnnumberedPeerConfig> _interfaceNeighbors;
   private boolean _multipathEbgp;
-
   private MultipathEquivalentAsPathMatchMode _multipathEquivalentAsPathMatchMode;
-
   private boolean _multipathIbgp;
 
   /**
    * A map of all non-dynamic bgp neighbors with which the router owning this process is configured
-   * to peer, keyed unique ID.
+   * to peer, keyed by unique ID.
    */
   @Nonnull private SortedMap<Prefix, BgpActivePeerConfig> _activeNeighbors;
 
@@ -120,11 +102,10 @@ public class BgpProcess implements Serializable {
   /** Constructs a BgpProcess */
   public BgpProcess() {
     _activeNeighbors = new TreeMap<>();
-    _generatedRoutes = new TreeSet<>();
+    _interfaceNeighbors = new TreeMap<>();
     _tieBreaker = BgpTieBreaker.ARRIVAL_ORDER;
     _clusterIds = new ClusterIdsSupplier();
     _originationSpace = new PrefixSpace();
-    _activeNeighbors = new TreeMap<>();
     _passiveNeighbors = new TreeMap<>();
   }
 
@@ -138,6 +119,15 @@ public class BgpProcess implements Serializable {
   }
 
   /**
+   * Expand the origination space for this prefix
+   *
+   * @param prefix {@link Prefix} to add
+   */
+  public void addToOriginationSpace(Prefix prefix) {
+    _originationSpace.addPrefix(prefix);
+  }
+
+  /**
    * Returns set of all cluster IDs for all neighbors. The result is memoized, so this should only
    * be called after the neighbors are finalized.
    */
@@ -146,20 +136,18 @@ public class BgpProcess implements Serializable {
     return _clusterIds.get();
   }
 
-  /** @return {@link #_activeNeighbors} */
+  /** Neighbor relationships configured for this BGP process. */
   @JsonProperty(PROP_ACTIVE_NEIGHBORS)
-  @JsonPropertyDescription("Neighbor relationships configured for this BGP process")
   @Nonnull
   public SortedMap<Prefix, BgpActivePeerConfig> getActiveNeighbors() {
     return _activeNeighbors;
   }
 
-  /** @return {@link #_generatedRoutes} */
-  @JsonProperty(PROP_GENERATED_ROUTES)
-  @JsonPropertyDescription(
-      "IPV4 routes generated in the BGP RIB that are not imported into the main RIB for this VRF")
-  public SortedSet<GeneratedRoute> getGeneratedRoutes() {
-    return _generatedRoutes;
+  /** Returns BGP unnumbered peer configurations keyed by peer-interface */
+  @JsonProperty(PROP_INTERFACE_NEIGHBORS)
+  @Nonnull
+  public SortedMap<String, BgpUnnumberedPeerConfig> getInterfaceNeighbors() {
+    return _interfaceNeighbors;
   }
 
   @JsonProperty(PROP_MULTIPATH_EBGP)
@@ -177,9 +165,8 @@ public class BgpProcess implements Serializable {
     return _multipathIbgp;
   }
 
-  /** @return {@link #_passiveNeighbors} */
+  /** Neighbor relationships configured for this BGP process. */
   @JsonProperty(PROP_PASSIVE_NEIGHBORS)
-  @JsonPropertyDescription("Neighbor relationships configured for this BGP process")
   @Nonnull
   public SortedMap<Prefix, BgpPassivePeerConfig> getPassiveNeighbors() {
     return _passiveNeighbors;
@@ -190,10 +177,11 @@ public class BgpProcess implements Serializable {
     return _originationSpace;
   }
 
+  /**
+   * The configured router ID for this BGP process. Note that it can be overridden for individual
+   * neighbors.
+   */
   @JsonProperty(PROP_ROUTER_ID)
-  @JsonPropertyDescription(
-      "The configured router ID for this BGP process. Note that it can be overridden for "
-          + "individual neighbors.")
   public Ip getRouterId() {
     return _routerId;
   }
@@ -203,9 +191,10 @@ public class BgpProcess implements Serializable {
     return _tieBreaker;
   }
 
-  @JsonProperty(PROP_GENERATED_ROUTES)
-  public void setGeneratedRoutes(SortedSet<GeneratedRoute> generatedRoutes) {
-    _generatedRoutes = generatedRoutes;
+  @JsonProperty(PROP_INTERFACE_NEIGHBORS)
+  public void setInterfaceNeighbors(
+      @Nonnull SortedMap<String, BgpUnnumberedPeerConfig> interfaceNeighbors) {
+    _interfaceNeighbors = interfaceNeighbors;
   }
 
   @JsonProperty(PROP_MULTIPATH_EBGP)

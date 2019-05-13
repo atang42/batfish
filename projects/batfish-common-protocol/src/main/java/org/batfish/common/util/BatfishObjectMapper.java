@@ -14,6 +14,7 @@ import com.fasterxml.jackson.datatype.guava.GuavaModule;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.IOException;
+import org.batfish.common.util.serialization.BatfishThirdPartySerializationModule;
 
 public final class BatfishObjectMapper {
   private static final ObjectMapper MAPPER = baseMapper();
@@ -29,9 +30,7 @@ public final class BatfishObjectMapper {
       baseMapper().enable(SerializationFeature.INDENT_OUTPUT).writer(PRETTY_PRINTER);
 
   private static final ObjectMapper VERBOSE_MAPPER =
-      baseMapper()
-          .enable(SerializationFeature.INDENT_OUTPUT)
-          .setSerializationInclusion(Include.ALWAYS);
+      baseMapper().setSerializationInclusion(Include.ALWAYS);
 
   private static final ObjectWriter VERBOSE_WRITER = VERBOSE_MAPPER.writer(PRETTY_PRINTER);
 
@@ -73,7 +72,7 @@ public final class BatfishObjectMapper {
 
   /**
    * Returns a {@link ObjectMapper} configured to Batfish JSON standards. Relative to {@link
-   * #mapper()}, it indents the JSON and includes null values and empty lists.
+   * #mapper()}, it includes null values and empty lists.
    */
   public static ObjectMapper verboseMapper() {
     return VERBOSE_MAPPER;
@@ -81,7 +80,7 @@ public final class BatfishObjectMapper {
 
   /**
    * Returns a {@link ObjectWriter} configured to Batfish JSON standards. The JSON produced is
-   * verbosely pretty-printed; all fields are included.
+   * verbosely but not pretty printed (including all fields).
    *
    * @see BatfishObjectMapper#writer()
    * @see BatfishObjectMapper#prettyWriter()
@@ -115,10 +114,10 @@ public final class BatfishObjectMapper {
   }
 
   /** Returns a pretty JSON string representation of the given object. */
-  public static String writePrettyStringRuntimeError(Object o) throws JsonProcessingException {
+  public static String writePrettyStringRuntimeError(Object o) {
     try {
       return writePrettyString(o);
-    } catch (JsonProcessingException e) {
+    } catch (Exception e) {
       throw new IllegalArgumentException(e);
     }
   }
@@ -128,7 +127,6 @@ public final class BatfishObjectMapper {
    * which is better suited towards complex, highly-nested objects.
    */
   private static class PrettyPrinter extends DefaultPrettyPrinter {
-    /** */
     private static final long serialVersionUID = 1L;
 
     public PrettyPrinter() {
@@ -154,6 +152,9 @@ public final class BatfishObjectMapper {
         JsonInclude.Value.construct(Include.NON_EMPTY, Include.ALWAYS));
     // This line makes Guava collections work with jackson
     mapper.registerModule(new GuavaModule());
+
+    // Custom (de)serialization for 3rd-party classes
+    mapper.registerModule(new BatfishThirdPartySerializationModule());
 
     return mapper;
   }

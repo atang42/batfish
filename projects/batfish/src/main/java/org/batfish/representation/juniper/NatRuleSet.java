@@ -12,12 +12,13 @@ import java.util.Optional;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
+import org.batfish.common.BatfishException;
+import org.batfish.common.Warnings;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.acl.AclLineMatchExpr;
-import org.batfish.datamodel.flow.TransformationStep.TransformationType;
-import org.batfish.datamodel.transformation.IpField;
 import org.batfish.datamodel.transformation.Transformation;
 import org.batfish.datamodel.transformation.Transformation.Builder;
+import org.batfish.representation.juniper.Nat.Type;
 
 /** Represents a Juniper nat rule set */
 @ParametersAreNonnullByDefault
@@ -84,32 +85,44 @@ public final class NatRuleSet implements Serializable, Comparable<NatRuleSet> {
    * transformation is installed on the egress interface, so we need to encode constraints on the
    * ingress interface using {@link AclLineMatchExpr ACL line match expressions}.
    *
+   * @param interfaceIp The {@link Ip} address of the interface.
    * @param matchFromLocationExprs The {@link AclLineMatchExpr} to match traffic from each {@link
    *     NatPacketLocation}.
-   * @param interfaceIp The {@link Ip} address of the interface.
    * @param andThen The next {@link Transformation} to apply after any {@link NatRule} matches.
    * @param orElse The next {@link Transformation} to apply if no {@link NatRule} matches.
    */
   public Optional<Transformation> toOutgoingTransformation(
-      TransformationType type,
-      IpField ipField,
-      Map<String, NatPool> pools,
+      Nat nat,
+      Map<String, AddressBookEntry> addressBookEntryMap,
       Ip interfaceIp,
       Map<NatPacketLocation, AclLineMatchExpr> matchFromLocationExprs,
       @Nullable Transformation andThen,
-      @Nullable Transformation orElse) {
+      @Nullable Transformation orElse,
+      Warnings warnings) {
 
-    AclLineMatchExpr matchFromLocation = matchFromLocationExprs.get(_fromLocation);
+    if (nat.getType() == Type.SOURCE) {
+      AclLineMatchExpr matchFromLocation = matchFromLocationExprs.get(_fromLocation);
 
-    if (matchFromLocation == null) {
-      // non-existent NatPacketLocation
-      return Optional.empty();
+      if (matchFromLocation == null) {
+        // non-existent NatPacketLocation
+        return Optional.empty();
+      }
+
+      return rulesTransformation(nat, addressBookEntryMap, interfaceIp, andThen, orElse, warnings)
+          .map(
+              rulesTransformation ->
+                  when(matchFromLocation)
+                      .setAndThen(rulesTransformation)
+                      .setOrElse(orElse)
+                      .build());
     }
 
-    return rulesTransformation(type, ipField, pools, interfaceIp, andThen, orElse)
-        .map(
-            rulesTransformation ->
-                when(matchFromLocation).setAndThen(rulesTransformation).setOrElse(orElse).build());
+    if (nat.getType() == Type.STATIC) {
+      return rulesTransformation(nat, addressBookEntryMap, interfaceIp, andThen, orElse, warnings);
+    }
+
+    throw new BatfishException(
+        "Not supported nat types for outgoing transformation: " + nat.getType());
   }
 
   /**
@@ -118,26 +131,26 @@ public final class NatRuleSet implements Serializable, Comparable<NatRuleSet> {
    * AclLineMatchExpr} to match it.
    */
   public Optional<Transformation> toIncomingTransformation(
-      TransformationType type,
-      IpField ipField,
-      Map<String, NatPool> pools,
+      Nat nat,
+      @Nullable Map<String, AddressBookEntry> addressBookEntryMap,
       Ip interfaceIp,
       @Nullable Transformation andThen,
-      @Nullable Transformation orElse) {
-    return rulesTransformation(type, ipField, pools, interfaceIp, andThen, orElse);
+      @Nullable Transformation orElse,
+      Warnings warnings) {
+    return rulesTransformation(nat, addressBookEntryMap, interfaceIp, andThen, orElse, warnings);
   }
 
   private Optional<Transformation> rulesTransformation(
-      TransformationType type,
-      IpField ipField,
-      Map<String, NatPool> pools,
+      Nat nat,
+      @Nullable Map<String, AddressBookEntry> addressBookEntryMap,
       Ip interfaceIp,
       @Nullable Transformation andThen,
-      @Nullable Transformation orElse) {
+      @Nullable Transformation orElse,
+      Warnings warnings) {
     Transformation transformation = orElse;
     for (NatRule rule : Lists.reverse(_rules)) {
       Optional<Builder> optionalBuilder =
-          rule.toTransformationBuilder(type, ipField, pools, interfaceIp);
+          rule.toTransformationBuilder(nat, addressBookEntryMap, interfaceIp, warnings);
       if (optionalBuilder.isPresent()) {
         transformation =
             optionalBuilder.get().setAndThen(andThen).setOrElse(transformation).build();

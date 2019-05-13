@@ -6,7 +6,13 @@ public interface TransformationStepVisitor<T> {
     return step.accept(this);
   }
 
+  T visitApplyAll(ApplyAll applyAll);
+
+  T visitApplyAny(ApplyAny applyAny);
+
   T visitAssignIpAddressFromPool(AssignIpAddressFromPool assignIpAddressFromPool);
+
+  T visitAssignPortFromPool(AssignPortFromPool assignPortFromPool);
 
   T visitNoop(Noop noop);
 

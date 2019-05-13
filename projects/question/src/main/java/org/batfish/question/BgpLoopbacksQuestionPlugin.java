@@ -17,7 +17,7 @@ import org.batfish.common.plugin.IBatfish;
 import org.batfish.common.plugin.Plugin;
 import org.batfish.datamodel.BgpPeerConfig;
 import org.batfish.datamodel.BgpProcess;
-import org.batfish.datamodel.BgpRoute;
+import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConnectedRoute;
 import org.batfish.datamodel.Interface;
@@ -116,7 +116,7 @@ public class BgpLoopbacksQuestionPlugin extends QuestionPlugin {
         }
         Configuration c = e.getValue();
         for (Vrf vrf : c.getVrfs().values()) {
-          if (vrf.getOspfProcess() != null
+          if (!vrf.getOspfProcesses().isEmpty()
               || vrf.getIsisProcess() != null
               || vrf.getBgpProcess() == null) {
             continue;
@@ -148,7 +148,7 @@ public class BgpLoopbacksQuestionPlugin extends QuestionPlugin {
                         Prefix.create(address.getIp(), address.getNetworkBits()), interfaceName);
                 for (RoutingPolicy exportPolicy : exportPolicies) {
                   if (exportPolicy.process(
-                      route, new BgpRoute.Builder(), null, vrf.getName(), Direction.OUT)) {
+                      route, new Bgpv4Route.Builder(), null, vrf.getName(), Direction.OUT)) {
                     exported = true;
                     break outerloop;
                   }
@@ -168,22 +168,13 @@ public class BgpLoopbacksQuestionPlugin extends QuestionPlugin {
     }
   }
 
-  // <question_page_comment>
-
-  /*
+  /**
    * Lists which loopback interfaces are being announced into BGP.
    *
    * <p>When running BGP without an IGP, one may wish to announce loopback interface IPs into BGP.
    * This question produces the list of nodes for which such announcements are not happening.
-   *
-   * @type BgpLoopbacks onefile
-   * @param nodeRegex Regular expression for names of nodes to include. Default value is '.*' (all
-   *     nodes).
-   * @example bf_answer("BgpLoopbacks", nodeRegex='as2.*') Answers the question only for nodes whose
-   *     names start with 'as2'.
    */
   public static class BgpLoopbacksQuestion extends Question {
-
     private static final String PROP_NODE_REGEX = "nodeRegex";
 
     private NodesSpecifier _nodeRegex;

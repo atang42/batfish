@@ -52,7 +52,11 @@ public class AaaAuthenticationLoginAnswerer extends Answerer {
         ImmutableList.of(
             new ColumnMetadata(COLUMN_NODE, Schema.NODE, "Node", true, false),
             new ColumnMetadata(
-                COLUMN_LINE_NAMES, Schema.list(Schema.STRING), "Line names", false, true));
+                COLUMN_LINE_NAMES,
+                Schema.list(Schema.STRING),
+                "Names of virtual terminal lines",
+                false,
+                true));
     String textDesc = TEXT_DESC;
     DisplayHints dhints = question.getDisplayHints();
     if (dhints != null) {
@@ -69,7 +73,7 @@ public class AaaAuthenticationLoginAnswerer extends Answerer {
 
     TableAnswerElement answerElement = create(question);
 
-    Set<String> specifiedNodes = question.getNodes().getMatchingNodes(_batfish);
+    Set<String> specifiedNodes = question.getNodeSpecifier().resolve(_batfish.specifierContext());
 
     SortedMap<String, Configuration> configs = _batfish.loadConfigurations();
     configs.forEach(

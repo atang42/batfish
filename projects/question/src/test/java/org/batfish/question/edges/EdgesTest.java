@@ -17,12 +17,14 @@ import static org.junit.Assert.assertThat;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
+import java.util.Optional;
 import java.util.SortedMap;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfishTestAdapter;
 import org.batfish.common.topology.Layer1Edge;
 import org.batfish.common.topology.Layer1Node;
 import org.batfish.common.topology.Layer1Topology;
+import org.batfish.common.topology.TopologyProvider;
 import org.batfish.datamodel.BumTransportMethod;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
@@ -35,7 +37,6 @@ import org.batfish.datamodel.VniSettings;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.pojo.Node;
-import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.identifiers.NetworkId;
@@ -103,7 +104,7 @@ public final class EdgesTest {
     TableAnswerElement answer =
         (TableAnswerElement)
             new EdgesAnswerer(
-                    new EdgesQuestion(NodesSpecifier.ALL, NodesSpecifier.ALL, EdgeType.LAYER1),
+                    new EdgesQuestion(null, null, EdgeType.LAYER1),
                     new IBatfishTestAdapter() {
                       @Override
                       public SortedMap<String, Configuration> loadConfigurations(
@@ -112,23 +113,30 @@ public final class EdgesTest {
                       }
 
                       @Override
-                      public Layer1Topology getLayer1Topology() {
-                        return layer1PhysicalTopology;
-                      }
-
-                      @Override
                       public SortedMap<String, Configuration> loadConfigurations() {
                         return configurations;
                       }
 
                       @Override
-                      public Topology getEnvironmentTopology() {
-                        return new Topology(ImmutableSortedSet.of());
+                      public NetworkSnapshot getNetworkSnapshot() {
+                        return new NetworkSnapshot(new NetworkId("a"), new SnapshotId("b"));
                       }
 
                       @Override
-                      public NetworkSnapshot getNetworkSnapshot() {
-                        return new NetworkSnapshot(new NetworkId("a"), new SnapshotId("b"));
+                      public TopologyProvider getTopologyProvider() {
+                        return new TopologyProviderTestAdapter(this) {
+                          @Override
+                          public Optional<Layer1Topology> getLayer1PhysicalTopology(
+                              NetworkSnapshot networkSnapshot) {
+                            return Optional.of(layer1PhysicalTopology);
+                          }
+
+                          @Override
+                          public Topology getInitialLayer3Topology(
+                              NetworkSnapshot networkSnapshot) {
+                            return new Topology(ImmutableSortedSet.of());
+                          }
+                        };
                       }
                     })
                 .answer();
@@ -181,7 +189,7 @@ public final class EdgesTest {
     TableAnswerElement answer =
         (TableAnswerElement)
             new EdgesAnswerer(
-                    new EdgesQuestion(NodesSpecifier.ALL, NodesSpecifier.ALL, EdgeType.VXLAN),
+                    new EdgesQuestion(null, null, EdgeType.VXLAN),
                     new IBatfishTestAdapter() {
                       @Override
                       public SortedMap<String, Configuration> loadConfigurations(
@@ -195,8 +203,14 @@ public final class EdgesTest {
                       }
 
                       @Override
-                      public Topology getEnvironmentTopology() {
-                        return new Topology(ImmutableSortedSet.of());
+                      public TopologyProvider getTopologyProvider() {
+                        return new TopologyProviderTestAdapter(this) {
+                          @Override
+                          public Topology getInitialLayer3Topology(
+                              NetworkSnapshot networkSnapshot) {
+                            return new Topology(ImmutableSortedSet.of());
+                          }
+                        };
                       }
 
                       @Override

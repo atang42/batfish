@@ -5,6 +5,7 @@ import static java.util.Objects.requireNonNull;
 import com.google.common.collect.ImmutableMap;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -41,14 +42,33 @@ public final class NetworkConfigurations {
     return Optional.ofNullable(_configurations.get(hostname));
   }
 
+  /**
+   * Returns a {@link BgpPeerConfig} matching the given {@code id} if one exists, otherwise {@code
+   * null}.
+   */
   @Nullable
   public BgpPeerConfig getBgpPeerConfig(BgpPeerConfigId id) {
-    BgpPeerConfig c = getBgpPointToPointPeerConfig(id);
-    return c == null ? getBgpDynamicPeerConfig(id) : c;
+    switch (id.getType()) {
+      case ACTIVE:
+        return getBgpPointToPointPeerConfig(id);
+      case DYNAMIC:
+        return getBgpDynamicPeerConfig(id);
+      case UNNUMBERED:
+        return getBgpUnnumberedPeerConfig(id);
+      default:
+        throw new IllegalArgumentException(String.format("Unrecognized peer type: %s", id));
+    }
   }
 
+  /**
+   * Returns a {@link BgpPassivePeerConfig} matching the given {@code id} if one exists, otherwise
+   * {@code null}.
+   */
   @Nullable
   public BgpPassivePeerConfig getBgpDynamicPeerConfig(BgpPeerConfigId id) {
+    if (id.getRemotePeerPrefix() == null) {
+      return null;
+    }
     return getVrf(id.getHostname(), id.getVrfName())
         .map(Vrf::getBgpProcess)
         .map(BgpProcess::getPassiveNeighbors)
@@ -56,12 +76,34 @@ public final class NetworkConfigurations {
         .orElse(null);
   }
 
+  /**
+   * Returns a {@link BgpActivePeerConfig} matching the given {@code id} if one exists, otherwise
+   * {@code null}.
+   */
   @Nullable
   public BgpActivePeerConfig getBgpPointToPointPeerConfig(BgpPeerConfigId id) {
+    if (id.getRemotePeerPrefix() == null) {
+      return null;
+    }
     return getVrf(id.getHostname(), id.getVrfName())
         .map(Vrf::getBgpProcess)
         .map(BgpProcess::getActiveNeighbors)
         .map(m -> m.get(id.getRemotePeerPrefix()))
+        .orElse(null);
+  }
+
+  /**
+   * Returns a {@link BgpUnnumberedPeerConfig} matching the given {@code id} if one exists,
+   * otherwise {@code null}.
+   */
+  @Nullable
+  public BgpUnnumberedPeerConfig getBgpUnnumberedPeerConfig(BgpPeerConfigId id) {
+    if (id.getPeerInterface() == null) {
+      return null;
+    }
+    return getVrf(id.getHostname(), id.getVrfName())
+        .map(Vrf::getBgpProcess)
+        .map(proc -> proc.getInterfaceNeighbors().get(id.getPeerInterface()))
         .orElse(null);
   }
 
@@ -87,9 +129,25 @@ public final class NetworkConfigurations {
 
   public Optional<OspfNeighborConfig> getOspfNeighborConfig(OspfNeighborConfigId ospfConfigId) {
     return getVrf(ospfConfigId.getHostname(), ospfConfigId.getVrfName())
-        .map(Vrf::getOspfProcess)
+        .map(vrf -> vrf.getOspfProcesses().get(ospfConfigId.getProcName()))
         .map(OspfProcess::getOspfNeighborConfigs)
         .map(oc -> oc.get(ospfConfigId.getInterfaceName()));
+  }
+
+  /** Return {@link VniSettings} identificated by {@code hostname} and {@code vni} number. */
+  @Nonnull
+  public Optional<VniSettings> getVniSettings(String hostname, int vni) {
+    // implementation assumes a given VNI can be present in at most one VRF.
+    return get(hostname)
+        .map(Configuration::getVrfs)
+        .map(
+            vrfs ->
+                vrfs.values().stream()
+                    .map(Vrf::getVniSettings)
+                    .map(vniSettingsMap -> vniSettingsMap.get(vni))
+                    .filter(Objects::nonNull)
+                    .findAny()
+                    .orElse(null));
   }
 
   /** Return a VRF identified by hostname and VRF name */

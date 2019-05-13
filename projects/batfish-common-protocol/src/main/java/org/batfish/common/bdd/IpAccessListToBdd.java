@@ -4,6 +4,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import java.util.ArrayList;
 import com.google.common.collect.Lists;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,18 +43,42 @@ import org.batfish.datamodel.acl.TrueExpr;
 @ParametersAreNonnullByDefault
 public abstract class IpAccessListToBdd {
 
+  /**
+   * Converts the given {@link IpAccessList} to a {@link BDD} using the given context.
+   *
+   * <p>Note that if converting multiple {@link IpAccessList ACLs} with the same context,
+   * considerable work can be saved by creating a single {@link IpAccessListToBdd} and reusing it.
+   */
+  public static BDD toBDD(
+      BDDPacket pkt,
+      IpAccessList acl,
+      Map<String, IpAccessList> aclEnv,
+      Map<String, IpSpace> ipSpaceEnv,
+      BDDSourceManager bddSrcManager) {
+    return new IpAccessListToBddImpl(pkt, bddSrcManager, aclEnv, ipSpaceEnv).toBdd(acl);
+  }
+
+  /**
+   * Converts the given {@link IpAccessList} to a {@link BDD}.
+   *
+   * <p>The {@link IpAccessList} must be self-contained, with no references to source {@link
+   * org.batfish.datamodel.Interface}, named {@link IpAccessList ACLs} or {@link IpSpace IP spaces}.
+   *
+   * <p>Note that if converting multiple {@link IpAccessList ACLs} with the same context,
+   * considerable work can be saved by creating a single {@link IpAccessListToBdd} and reusing it.
+   *
+   * @see #toBDD(BDDPacket, IpAccessList, Map, Map, BDDSourceManager)
+   */
+  public static BDD toBDD(BDDPacket pkt, IpAccessList acl) {
+    return toBDD(pkt, acl, ImmutableMap.of(), ImmutableMap.of(), BDDSourceManager.empty(pkt));
+  }
+
   @Nonnull private final Map<String, Supplier<BDD>> _aclEnv;
-
   @Nonnull private final BDDFactory _factory;
-
   @Nonnull private final BDDPacket _pkt;
-
   @Nonnull private final BDDOps _bddOps;
-
   @Nonnull private final BDDSourceManager _bddSrcManager;
-
   @Nonnull private final HeaderSpaceToBDD _headerSpaceToBDD;
-
   @Nonnull private final Visitor _visitor;
 
   protected IpAccessListToBdd(
@@ -107,14 +133,14 @@ public abstract class IpAccessListToBdd {
    */
   @Nonnull
   public final BDD toBdd(IpAccessList acl) {
-    BDDFactory bddFactory = _pkt.getFactory();
-    BDD result = bddFactory.zero();
-    for (IpAccessListLine line : Lists.reverse(acl.getLines())) {
-      BDD lineBDD = toBdd(line.getMatchCondition());
-      BDD actionBDD = line.getAction() == LineAction.PERMIT ? bddFactory.one() : bddFactory.zero();
-      result = lineBDD.ite(actionBDD, result);
+    int size = acl.getLines().size();
+    List<BDD> lineBdds = new ArrayList<>(size);
+    List<LineAction> lineActions = new ArrayList<>(size);
+    for (IpAccessListLine line : acl.getLines()) {
+      lineActions.add(line.getAction());
+      lineBdds.add(toBdd(line.getMatchCondition()));
     }
-    return result;
+    return _bddOps.bddAclLines(lineBdds, lineActions);
   }
 
   /**
@@ -162,7 +188,7 @@ public abstract class IpAccessListToBdd {
     for (IpAccessListLine line : acl.getLines()) {
       BDD match = visit(line.getMatchCondition());
       bdds.add(reach.and(match));
-      reach = reach.and(match.not());
+      reach = reach.diff(match);
     }
     bdds.add(reach);
     return bdds.build();
@@ -211,10 +237,10 @@ public abstract class IpAccessListToBdd {
 
     @Override
     public final BDD visitOrMatchExpr(OrMatchExpr orMatchExpr) {
-      return _bddOps.or(
+      return _bddOps.orAll(
           orMatchExpr.getDisjuncts().stream()
               .map(IpAccessListToBdd.this::toBdd)
-              .collect(ImmutableList.toImmutableList()));
+              .toArray(BDD[]::new));
     }
 
     @Override

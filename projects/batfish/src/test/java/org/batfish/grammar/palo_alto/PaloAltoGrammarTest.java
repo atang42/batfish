@@ -1,10 +1,10 @@
 package org.batfish.grammar.palo_alto;
 
-import static org.batfish.datamodel.matchers.AbstractRouteMatchers.hasAdministrativeCost;
-import static org.batfish.datamodel.matchers.AbstractRouteMatchers.hasMetric;
-import static org.batfish.datamodel.matchers.AbstractRouteMatchers.hasNextHopInterface;
-import static org.batfish.datamodel.matchers.AbstractRouteMatchers.hasNextHopIp;
-import static org.batfish.datamodel.matchers.AbstractRouteMatchers.hasPrefix;
+import static org.batfish.datamodel.matchers.AbstractRouteDecoratorMatchers.hasAdministrativeCost;
+import static org.batfish.datamodel.matchers.AbstractRouteDecoratorMatchers.hasMetric;
+import static org.batfish.datamodel.matchers.AbstractRouteDecoratorMatchers.hasNextHopInterface;
+import static org.batfish.datamodel.matchers.AbstractRouteDecoratorMatchers.hasNextHopIp;
+import static org.batfish.datamodel.matchers.AbstractRouteDecoratorMatchers.hasPrefix;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasHostname;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasInterface;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasIpAccessList;
@@ -138,7 +138,7 @@ public class PaloAltoGrammarTest {
   }
 
   private static Flow createFlow(IpProtocol protocol, int sourcePort, int destinationPort) {
-    Flow.Builder fb = new Flow.Builder();
+    Flow.Builder fb = Flow.builder();
     fb.setIngressNode("node");
     fb.setIpProtocol(protocol);
     fb.setDstPort(destinationPort);
@@ -157,7 +157,7 @@ public class PaloAltoGrammarTest {
       IpProtocol protocol,
       int sourcePort,
       int destinationPort) {
-    Flow.Builder fb = new Flow.Builder();
+    Flow.Builder fb = Flow.builder();
     fb.setIngressNode("node");
     fb.setSrcIp(Ip.parse(sourceAddress));
     fb.setDstIp(Ip.parse(destinationAddress));

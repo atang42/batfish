@@ -117,6 +117,11 @@
 
     <dependency>
       <groupId>org.batfish</groupId>
+      <artifactId>minesweeper</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.batfish</groupId>
       <artifactId>question</artifactId>
     </dependency>
 
@@ -165,6 +170,13 @@
     </dependency>
 
     <dependency>
+      <groupId>org.batfish</groupId>
+      <artifactId>minesweeper</artifactId>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <scope>test</scope>
@@ -172,7 +184,7 @@
 
     <dependency>
       <groupId>org.hamcrest</groupId>
-      <artifactId>java-hamcrest</artifactId>
+      <artifactId>hamcrest</artifactId>
       <scope>test</scope>
     </dependency>
 

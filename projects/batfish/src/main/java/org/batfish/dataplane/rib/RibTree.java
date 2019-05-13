@@ -2,21 +2,15 @@ package org.batfish.dataplane.rib;
 
 import static org.batfish.dataplane.rib.RouteAdvertisement.Reason.REPLACE;
 
-import com.google.common.base.Predicates;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
 import java.io.Serializable;
-import java.util.Map;
 import java.util.Set;
-import java.util.SortedSet;
 import javax.annotation.Nonnull;
-import org.batfish.datamodel.AbstractRoute;
-import org.batfish.datamodel.GenericRib;
+import javax.annotation.Nullable;
+import javax.annotation.ParametersAreNonnullByDefault;
+import org.batfish.datamodel.AbstractRouteDecorator;
 import org.batfish.datamodel.Ip;
-import org.batfish.datamodel.IpSpace;
-import org.batfish.datamodel.IpWildcard;
-import org.batfish.datamodel.IpWildcardSetIpSpace;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixTrieMultiMap;
 import org.batfish.dataplane.rib.RibDelta.Builder;
@@ -29,12 +23,13 @@ import org.batfish.dataplane.rib.RouteAdvertisement.Reason;
  * where the wildcard symbols can appear only after (to-the-right-of) non wildcard symbols in the
  * bit vector. E.g., 101010**, but not 1*001***
  */
-final class RibTree<R extends AbstractRoute> implements Serializable {
+@ParametersAreNonnullByDefault
+final class RibTree<R extends AbstractRouteDecorator> implements Serializable {
 
   private static final long serialVersionUID = 1L;
 
-  private PrefixTrieMultiMap<R> _root;
-  private AbstractRib<R> _owner;
+  @Nonnull private final PrefixTrieMultiMap<R> _root;
+  @Nonnull private final AbstractRib<R> _owner;
 
   RibTree(AbstractRib<R> owner) {
     _root = new PrefixTrieMultiMap<>(Prefix.ZERO);
@@ -57,16 +52,21 @@ final class RibTree<R extends AbstractRoute> implements Serializable {
     Builder<R> b = RibDelta.builder();
     b.remove(route, reason);
     if (_root.get(route.getNetwork()).isEmpty() && _owner._backupRoutes != null) {
-      SortedSet<? extends R> backups =
+      Set<? extends R> backups =
           _owner._backupRoutes.getOrDefault(route.getNetwork(), ImmutableSortedSet.of());
       if (backups.isEmpty()) {
         return b.build();
       }
-      _root.put(route.getNetwork(), backups.first());
-      b.add(backups.first());
+      // re-merge any backups we have
+      backups.forEach(r -> b.from(mergeRoute(r)));
     }
     // Return new delta
     return b.build();
+  }
+
+  /** Remove all routes from the tree */
+  public void clear() {
+    _root.clear();
   }
 
   /**
@@ -80,7 +80,7 @@ final class RibTree<R extends AbstractRoute> implements Serializable {
   }
 
   private boolean hasForwardingRoute(Set<R> routes) {
-    return routes.stream().anyMatch(Predicates.not(AbstractRoute::getNonForwarding));
+    return routes.stream().anyMatch(r -> !r.getAbstractRoute().getNonForwarding());
   }
 
   /**
@@ -95,7 +95,7 @@ final class RibTree<R extends AbstractRoute> implements Serializable {
       Set<R> routes = _root.longestPrefixMatch(address, pl);
       if (hasForwardingRoute(routes)) {
         return routes.stream()
-            .filter(r -> !r.getNonForwarding())
+            .filter(r -> !r.getAbstractRoute().getNonForwarding())
             .collect(ImmutableSet.toImmutableSet());
       }
     }
@@ -168,42 +168,7 @@ final class RibTree<R extends AbstractRoute> implements Serializable {
   }
 
   @Override
-  public boolean equals(Object obj) {
+  public boolean equals(@Nullable Object obj) {
     return (obj == this) || (obj instanceof RibTree && this._root.equals(((RibTree<?>) obj)._root));
-  }
-
-  /** See {@link GenericRib#getMatchingIps()} */
-  public Map<Prefix, IpSpace> getMatchingIps() {
-    ImmutableMap.Builder<Prefix, IpSpace> builder = ImmutableMap.builder();
-
-    /* We traverse the tree in post-order, so when we visit each intermediate node the blacklist
-     * will contain all prefixes from each of its children. However, when we are visiting the right
-     * subtree of a node, the blacklist will already contain all the prefixes of the left subtree.
-     * This is wasteful, as the blacklist can include potentially many redundant prefixes. Consider
-     * rewriting to avoid this (e.g. use a fold).
-     */
-    ImmutableSortedSet.Builder<IpWildcard> blacklist = ImmutableSortedSet.naturalOrder();
-    _root.traverseEntries(
-        (prefix, elems) -> {
-          if (hasForwardingRoute(elems)) {
-            IpWildcard wc = new IpWildcard(prefix);
-            builder.put(
-                prefix, new IpWildcardSetIpSpace(blacklist.build(), ImmutableSortedSet.of(wc)));
-            blacklist.add(wc);
-          }
-        });
-    return builder.build();
-  }
-
-  /** See {@link GenericRib#getRoutableIps()} */
-  IpSpace getRoutableIps() {
-    IpWildcardSetIpSpace.Builder builder = IpWildcardSetIpSpace.builder();
-    _root.traverseEntries(
-        (prefix, elems) -> {
-          if (hasForwardingRoute(elems)) {
-            builder.including(new IpWildcard(prefix));
-          }
-        });
-    return builder.build();
   }
 }

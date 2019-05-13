@@ -3,6 +3,7 @@ package org.batfish.datamodel.transformation;
 import static org.batfish.datamodel.FlowDiff.flowDiff;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDst;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrc;
+import static org.batfish.datamodel.flow.StepAction.PERMITTED;
 import static org.batfish.datamodel.flow.StepAction.TRANSFORMED;
 import static org.batfish.datamodel.flow.TransformationStep.TransformationType.DEST_NAT;
 import static org.batfish.datamodel.flow.TransformationStep.TransformationType.SOURCE_NAT;
@@ -11,7 +12,9 @@ import static org.batfish.datamodel.transformation.IpField.SOURCE;
 import static org.batfish.datamodel.transformation.Transformation.always;
 import static org.batfish.datamodel.transformation.Transformation.when;
 import static org.batfish.datamodel.transformation.TransformationStep.assignDestinationIp;
+import static org.batfish.datamodel.transformation.TransformationStep.assignDestinationPort;
 import static org.batfish.datamodel.transformation.TransformationStep.assignSourceIp;
+import static org.batfish.datamodel.transformation.TransformationStep.assignSourcePort;
 import static org.batfish.datamodel.transformation.TransformationStep.shiftDestinationIp;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
@@ -27,6 +30,7 @@ import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.flow.Step;
 import org.batfish.datamodel.flow.StepAction;
+import org.batfish.datamodel.flow.TransformationStep;
 import org.batfish.datamodel.flow.TransformationStep.TransformationStepDetail;
 import org.batfish.datamodel.transformation.TransformationEvaluator.TransformationResult;
 import org.junit.Before;
@@ -258,5 +262,76 @@ public class TransformationEvaluatorTest {
                 new TransformationStepDetail(
                     DEST_NAT, ImmutableSortedSet.of(flowDiff(IpField.DESTINATION, ip2, ip3))),
                 TRANSFORMED)));
+  }
+
+  @Test
+  public void testAssignPortFromPoolDst() {
+    Ip srcIp = Ip.parse("1.1.1.1");
+    int dstPort = 3000;
+    int poolPort = 2000;
+    Transformation transformation =
+        when(matchSrc(srcIp)).apply(assignDestinationPort(poolPort, poolPort)).build();
+
+    _flowBuilder.setSrcIp(srcIp).setDstPort(dstPort);
+
+    // the flow is transformed
+    Flow origFlow = _flowBuilder.build();
+    TransformationResult result = evalResult(transformation, origFlow);
+    assertThat(result.getOutputFlow(), equalTo(origFlow.toBuilder().setDstPort(poolPort).build()));
+
+    List<Step<?>> traceSteps = result.getTraceSteps();
+    TransformationStep step =
+        new TransformationStep(
+            new TransformationStepDetail(
+                DEST_NAT,
+                ImmutableSortedSet.of(flowDiff(PortField.DESTINATION, dstPort, poolPort))),
+            TRANSFORMED);
+    assertThat(traceSteps, contains(step));
+
+    // the flow is not transformed
+    origFlow = _flowBuilder.setDstPort(poolPort).build();
+    result = evalResult(transformation, origFlow);
+    assertThat(result.getOutputFlow(), equalTo(origFlow.toBuilder().setDstPort(poolPort).build()));
+
+    traceSteps = result.getTraceSteps();
+    step =
+        new TransformationStep(
+            new TransformationStepDetail(DEST_NAT, ImmutableSortedSet.of()), PERMITTED);
+    assertThat(traceSteps, contains(step));
+  }
+
+  @Test
+  public void testAssignPortFromPoolSrc() {
+    Ip srcIp = Ip.parse("1.1.1.1");
+    int srcPort = 3000;
+    int poolPort = 2000;
+    Transformation transformation =
+        when(matchSrc(srcIp)).apply(assignSourcePort(poolPort, poolPort)).build();
+
+    _flowBuilder.setSrcIp(srcIp).setSrcPort(srcPort);
+
+    // the flow is transformed
+    Flow origFlow = _flowBuilder.build();
+    TransformationResult result = evalResult(transformation, origFlow);
+    assertThat(result.getOutputFlow(), equalTo(origFlow.toBuilder().setSrcPort(poolPort).build()));
+
+    List<Step<?>> traceSteps = result.getTraceSteps();
+    TransformationStep step =
+        new TransformationStep(
+            new TransformationStepDetail(
+                SOURCE_NAT, ImmutableSortedSet.of(flowDiff(PortField.SOURCE, srcPort, poolPort))),
+            TRANSFORMED);
+    assertThat(traceSteps, contains(step));
+
+    // the flow is not transformed
+    origFlow = _flowBuilder.setSrcPort(poolPort).build();
+    result = evalResult(transformation, origFlow);
+    assertThat(result.getOutputFlow(), equalTo(origFlow.toBuilder().setSrcPort(poolPort).build()));
+
+    traceSteps = result.getTraceSteps();
+    step =
+        new TransformationStep(
+            new TransformationStepDetail(SOURCE_NAT, ImmutableSortedSet.of()), PERMITTED);
+    assertThat(traceSteps, contains(step));
   }
 }

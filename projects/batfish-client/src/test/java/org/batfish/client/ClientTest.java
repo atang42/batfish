@@ -1,46 +1,30 @@
 package org.batfish.client;
 
-import static org.batfish.client.Command.ADD_ANALYSIS_QUESTIONS;
 import static org.batfish.client.Command.ADD_BATFISH_OPTION;
 import static org.batfish.client.Command.ANSWER;
 import static org.batfish.client.Command.ANSWER_REFERENCE;
-import static org.batfish.client.Command.CAT;
 import static org.batfish.client.Command.CHECK_API_KEY;
-import static org.batfish.client.Command.CLEAR_SCREEN;
-import static org.batfish.client.Command.DEL_ANALYSIS;
-import static org.batfish.client.Command.DEL_ANALYSIS_QUESTIONS;
 import static org.batfish.client.Command.DEL_BATFISH_OPTION;
 import static org.batfish.client.Command.DEL_NETWORK;
 import static org.batfish.client.Command.DEL_QUESTION;
 import static org.batfish.client.Command.DEL_SNAPSHOT;
-import static org.batfish.client.Command.DIR;
 import static org.batfish.client.Command.EXIT;
 import static org.batfish.client.Command.GEN_DP;
 import static org.batfish.client.Command.GEN_REFERENCE_DP;
 import static org.batfish.client.Command.GET;
-import static org.batfish.client.Command.GET_ANALYSIS_ANSWERS;
-import static org.batfish.client.Command.GET_ANALYSIS_ANSWERS_DIFFERENTIAL;
-import static org.batfish.client.Command.GET_ANALYSIS_ANSWERS_REFERENCE;
 import static org.batfish.client.Command.GET_ANSWER;
 import static org.batfish.client.Command.GET_ANSWER_DIFFERENTIAL;
 import static org.batfish.client.Command.GET_ANSWER_REFERENCE;
 import static org.batfish.client.Command.GET_CONFIGURATION;
 import static org.batfish.client.Command.GET_REFERENCE;
 import static org.batfish.client.Command.HELP;
-import static org.batfish.client.Command.INIT_ANALYSIS;
 import static org.batfish.client.Command.INIT_NETWORK;
 import static org.batfish.client.Command.INIT_REFERENCE_SNAPSHOT;
 import static org.batfish.client.Command.INIT_SNAPSHOT;
-import static org.batfish.client.Command.LIST_ANALYSES;
 import static org.batfish.client.Command.LIST_NETWORKS;
 import static org.batfish.client.Command.LIST_QUESTIONS;
 import static org.batfish.client.Command.LIST_SNAPSHOTS;
 import static org.batfish.client.Command.LOAD_QUESTIONS;
-import static org.batfish.client.Command.PROMPT;
-import static org.batfish.client.Command.PWD;
-import static org.batfish.client.Command.RUN_ANALYSIS;
-import static org.batfish.client.Command.RUN_ANALYSIS_DIFFERENTIAL;
-import static org.batfish.client.Command.RUN_ANALYSIS_REFERENCE;
 import static org.batfish.client.Command.SET_BATFISH_LOGLEVEL;
 import static org.batfish.client.Command.SET_LOGLEVEL;
 import static org.batfish.client.Command.SET_NETWORK;
@@ -58,7 +42,8 @@ import static org.batfish.client.Command.SHOW_SNAPSHOT;
 import static org.batfish.client.Command.TEST;
 import static org.batfish.client.Command.UPLOAD_CUSTOM_OBJECT;
 import static org.batfish.common.CoordConsts.DEFAULT_API_KEY;
-import static org.batfish.datamodel.questions.Variable.Type.ADDRESS_GROUP_AND_BOOK;
+import static org.batfish.datamodel.questions.Variable.Type.ADDRESS_GROUP_NAME;
+import static org.batfish.datamodel.questions.Variable.Type.APPLICATION_SPEC;
 import static org.batfish.datamodel.questions.Variable.Type.BGP_SESSION_STATUS;
 import static org.batfish.datamodel.questions.Variable.Type.BGP_SESSION_TYPE;
 import static org.batfish.datamodel.questions.Variable.Type.BOOLEAN;
@@ -66,11 +51,15 @@ import static org.batfish.datamodel.questions.Variable.Type.COMPARATOR;
 import static org.batfish.datamodel.questions.Variable.Type.DISPOSITION_SPEC;
 import static org.batfish.datamodel.questions.Variable.Type.DOUBLE;
 import static org.batfish.datamodel.questions.Variable.Type.FILTER;
+import static org.batfish.datamodel.questions.Variable.Type.FILTER_SPEC;
 import static org.batfish.datamodel.questions.Variable.Type.FLOAT;
 import static org.batfish.datamodel.questions.Variable.Type.FLOW_STATE;
 import static org.batfish.datamodel.questions.Variable.Type.INTEGER;
 import static org.batfish.datamodel.questions.Variable.Type.INTERFACE;
 import static org.batfish.datamodel.questions.Variable.Type.INTERFACES_SPEC;
+import static org.batfish.datamodel.questions.Variable.Type.INTERFACE_GROUP_NAME;
+import static org.batfish.datamodel.questions.Variable.Type.INTERFACE_NAME;
+import static org.batfish.datamodel.questions.Variable.Type.INTERFACE_TYPE;
 import static org.batfish.datamodel.questions.Variable.Type.IP;
 import static org.batfish.datamodel.questions.Variable.Type.IPSEC_SESSION_STATUS;
 import static org.batfish.datamodel.questions.Variable.Type.IP_PROTOCOL;
@@ -79,8 +68,9 @@ import static org.batfish.datamodel.questions.Variable.Type.IP_WILDCARD;
 import static org.batfish.datamodel.questions.Variable.Type.JAVA_REGEX;
 import static org.batfish.datamodel.questions.Variable.Type.JSON_PATH;
 import static org.batfish.datamodel.questions.Variable.Type.JSON_PATH_REGEX;
+import static org.batfish.datamodel.questions.Variable.Type.LOCATION_SPEC;
 import static org.batfish.datamodel.questions.Variable.Type.LONG;
-import static org.batfish.datamodel.questions.Variable.Type.NODE_ROLE_DIMENSION;
+import static org.batfish.datamodel.questions.Variable.Type.NODE_ROLE_DIMENSION_NAME;
 import static org.batfish.datamodel.questions.Variable.Type.PREFIX;
 import static org.batfish.datamodel.questions.Variable.Type.PREFIX_RANGE;
 import static org.batfish.datamodel.questions.Variable.Type.PROTOCOL;
@@ -119,6 +109,7 @@ import org.batfish.common.BfConsts;
 import org.batfish.common.Pair;
 import org.batfish.common.util.BatfishObjectMapper;
 import org.batfish.common.util.CommonUtil;
+import org.batfish.datamodel.InterfaceType;
 import org.batfish.datamodel.Protocol;
 import org.batfish.datamodel.answers.Answer;
 import org.batfish.datamodel.questions.AllowedValue;
@@ -146,7 +137,7 @@ public final class ClientTest {
 
   private void checkProcessCommandErrorMessage(
       Command command, String[] parameters, String expected) throws Exception {
-    Client client = new Client(new String[] {"-runmode", "gendatamodel"});
+    Client client = new Client(new String[] {"-runmode", "interactive"});
     File tempFile = _folder.newFile("writer");
     FileWriter writer = new FileWriter(tempFile);
     client._logger = new BatfishLogger("output", false);
@@ -160,11 +151,6 @@ public final class ClientTest {
   public void checkTestInvalidParas() throws Exception {
     String[] parameters = new String[] {"parameter1"};
     testInvalidInput(TEST, new String[] {}, parameters);
-  }
-
-  @Test
-  public void testAddAnalysisQuestionInvalidParas() throws Exception {
-    testInvalidInput(ADD_ANALYSIS_QUESTIONS, new String[] {}, new String[] {});
   }
 
   @Test
@@ -201,39 +187,14 @@ public final class ClientTest {
   }
 
   @Test
-  public void testCatInvalidParas() throws Exception {
-    Command command = CAT;
-    String[] args = new String[] {command.commandName()};
-    Pair<String, String> usage = Command.getUsageMap().get(command);
-    String expected =
-        String.format(
-            "Invalid arguments: %s\n%s %s\n\t%s\n\n",
-            Arrays.toString(args), command.commandName(), usage.getFirst(), usage.getSecond());
-    checkProcessCommandErrorMessage(command, new String[] {}, expected);
-  }
-
-  @Test
-  public void testCatValidParas() throws Exception {
-    Path tempFilePath = _folder.newFile("temp").toPath();
-    String[] parameters = new String[] {tempFilePath.toString()};
-    testProcessCommandWithValidInput(CAT, parameters, "");
-  }
-
-  @Test
   public void testCheckApiKeyInvalidParas() throws Exception {
     String[] parameters = new String[] {"parameter1"};
     testInvalidInput(CHECK_API_KEY, new String[] {}, parameters);
   }
 
   @Test
-  public void testClearScreenInvalidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    testInvalidInput(CLEAR_SCREEN, new String[] {}, parameters);
-  }
-
-  @Test
   public void testDefaultCase() throws Exception {
-    Client client = new Client(new String[] {"-runmode", "gendatamodel"});
+    Client client = new Client(new String[] {"-runmode", "interactive"});
     File tempFile = _folder.newFile("writer");
     FileWriter writer = new FileWriter(tempFile);
     client._logger = new BatfishLogger("output", false);
@@ -241,28 +202,6 @@ public final class ClientTest {
     String expected = "Command failed: Not a valid command: \"non-exist command\"\n";
     assertFalse(client.processCommand(args, writer));
     assertThat(client.getLogger().getHistory().toString(500), equalTo(expected));
-  }
-
-  @Test
-  public void testDelAnalysisInvalidParas() throws Exception {
-    testInvalidInput(DEL_ANALYSIS, new String[] {}, new String[] {});
-  }
-
-  @Test
-  public void testDelAnalysisQuestionInvalidParas() throws Exception {
-    testInvalidInput(DEL_ANALYSIS_QUESTIONS, new String[] {}, new String[] {});
-  }
-
-  @Test
-  public void testDelAnalysisQuestionValidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1", "parameter2"};
-    checkProcessCommandErrorMessage(DEL_ANALYSIS_QUESTIONS, parameters, NETWORK_NOT_SET);
-  }
-
-  @Test
-  public void testDelAnalysisValidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    checkProcessCommandErrorMessage(DEL_ANALYSIS, parameters, NETWORK_NOT_SET);
   }
 
   @Test
@@ -302,19 +241,6 @@ public final class ClientTest {
   public void testDelSnapshotValidParas() throws Exception {
     String[] parameters = new String[] {"parameter1"};
     checkProcessCommandErrorMessage(DEL_SNAPSHOT, parameters, NETWORK_NOT_SET);
-  }
-
-  @Test
-  public void testDirInvalidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1", "parameter2"};
-    testInvalidInput(DIR, new String[] {}, parameters);
-  }
-
-  @Test
-  public void testDirValidParas() throws Exception {
-    Path tempFilePath = _folder.newFolder("temp").toPath();
-    String[] parameters = new String[] {tempFilePath.toString()};
-    testProcessCommandWithValidInput(DIR, parameters, "");
   }
 
   @Test
@@ -367,30 +293,6 @@ public final class ClientTest {
   @Test
   public void testGenerateDataplaneValidParas() throws Exception {
     checkProcessCommandErrorMessage(GEN_DP, new String[] {}, SNAPSHOT_NOT_SET);
-  }
-
-  @Test
-  public void testGetAnalysisAnswersReferenceValidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    checkProcessCommandErrorMessage(GET_ANALYSIS_ANSWERS_REFERENCE, parameters, SNAPSHOT_NOT_SET);
-  }
-
-  @Test
-  public void testGetAnalysisAnswersDifferentialValidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    checkProcessCommandErrorMessage(
-        GET_ANALYSIS_ANSWERS_DIFFERENTIAL, parameters, SNAPSHOT_NOT_SET);
-  }
-
-  @Test
-  public void testGetAnalysisAnswersInvalidParas() throws Exception {
-    testInvalidInput(GET_ANALYSIS_ANSWERS, new String[] {}, new String[] {});
-  }
-
-  @Test
-  public void testGetAnalysisAnswersValidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    checkProcessCommandErrorMessage(GET_ANALYSIS_ANSWERS, parameters, SNAPSHOT_NOT_SET);
   }
 
   @Test
@@ -497,11 +399,6 @@ public final class ClientTest {
   }
 
   @Test
-  public void testInitAnalysisQuestionInvalidParas() throws Exception {
-    testInvalidInput(INIT_ANALYSIS, new String[] {}, new String[] {});
-  }
-
-  @Test
   public void testInitNetworkEmptyParasWithOption() throws Exception {
     Command command = INIT_NETWORK;
     String[] args = new String[] {"-setname"};
@@ -547,13 +444,22 @@ public final class ClientTest {
   }
 
   @Test
-  public void testInvalidAddressGroupAndBook() throws IOException {
+  public void testInvalidAddressGroupName() throws IOException {
     String input = "\"addressGroup\""; // no book name
-    Type expectedType = ADDRESS_GROUP_AND_BOOK;
+    Type expectedType = ADDRESS_GROUP_NAME;
     String expectedMessage =
         String.format(
             "A Batfish %s must be a JSON string with two comma-separated values",
             expectedType.getName());
+    validateTypeWithInvalidInput(input, expectedMessage, expectedType);
+  }
+
+  @Test
+  public void testInvalidApplicationSpecifierValue() throws IOException {
+    String input = "5";
+    Type expectedType = APPLICATION_SPEC;
+    String expectedMessage =
+        String.format("It is not a valid JSON %s value", APPLICATION_SPEC.getName());
     validateTypeWithInvalidInput(input, expectedMessage, expectedType);
   }
 
@@ -619,6 +525,15 @@ public final class ClientTest {
   }
 
   @Test
+  public void testInvalidFilterSpecValue() throws IOException {
+    String input = "5";
+    Type expectedType = FILTER_SPEC;
+    String expectedMessage =
+        String.format("A Batfish %s must be a JSON string", expectedType.getName());
+    validateTypeWithInvalidInput(input, expectedMessage, expectedType);
+  }
+
+  @Test
   public void testInvalidFloatValue() throws IOException {
     String input = "\"string\"";
     Type expectedType = FLOAT;
@@ -658,12 +573,51 @@ public final class ClientTest {
   }
 
   @Test
+  public void testInvalidInterfaceName() throws IOException {
+    String input = "\"interfaceGroup\""; // no book name
+    Type expectedType = INTERFACE_GROUP_NAME;
+    String expectedMessage =
+        String.format(
+            "A Batfish %s must be a JSON string with two comma-separated values",
+            expectedType.getName());
+    validateTypeWithInvalidInput(input, expectedMessage, expectedType);
+  }
+
+  @Test
+  public void testInvalidInterfaceNameValue() throws IOException {
+    String input = "5";
+    Type expectedType = INTERFACE_NAME;
+    String expectedMessage =
+        String.format("A Batfish %s must be a JSON string", expectedType.getName());
+    validateTypeWithInvalidInput(input, expectedMessage, expectedType);
+  }
+
+  @Test
   public void testInvalidInterfaceValue() throws IOException {
     String input = "5";
     Type expectedType = INTERFACE;
     String expectedMessage =
         String.format("A Batfish %s must be a JSON string", expectedType.getName());
     validateTypeWithInvalidInput(input, expectedMessage, expectedType);
+  }
+
+  @Test
+  public void testInvalidInterfaceTypeValueNonSting() throws IOException {
+    String input = "5";
+    Type expectedType = INTERFACE_TYPE;
+    String expectedMessage =
+        String.format("A Batfish %s must be a JSON string", expectedType.getName());
+    validateTypeWithInvalidInput(input, expectedMessage, expectedType);
+  }
+
+  @Test
+  public void testInvalidInterfaceTypeValueBadEnum() throws IOException {
+    String input = "\"XOXO\"";
+    Type expectedType = INTERFACE_TYPE;
+    String expectedMessage =
+        String.format("No enum constant %s.XOXO", InterfaceType.class.getName());
+    validateTypeWithInvalidInput(
+        input, IllegalArgumentException.class, expectedMessage, expectedType);
   }
 
   @Test
@@ -763,6 +717,15 @@ public final class ClientTest {
   }
 
   @Test
+  public void testInvalidLocationSpec() throws IOException {
+    String input = "5";
+    Type expectedType = LOCATION_SPEC;
+    String expectedMessage =
+        String.format("A Batfish %s must be a JSON string", expectedType.getName());
+    validateTypeWithInvalidInput(input, expectedMessage, expectedType);
+  }
+
+  @Test
   public void testInvalidLongValue() throws IOException {
     String input = "\"string\"";
     Type expectedType = LONG;
@@ -773,7 +736,7 @@ public final class ClientTest {
   @Test
   public void testInvalidNodeRoleDimensionValue() throws IOException {
     String input = "5";
-    Type expectedType = NODE_ROLE_DIMENSION;
+    Type expectedType = NODE_ROLE_DIMENSION_NAME;
     String expectedMessage =
         String.format("A Batfish %s must be a JSON string", expectedType.getName());
     validateTypeWithInvalidInput(input, expectedMessage, expectedType);
@@ -790,7 +753,7 @@ public final class ClientTest {
   public void testInvalidPrefixValue() throws IOException {
     String input = "\"10.168.5.5/30/20\"";
     String expectedMessage = String.format("Invalid prefix string: %s", input);
-    validateTypeWithInvalidInput(input, expectedMessage, PREFIX);
+    validateTypeWithInvalidInput(input, IllegalArgumentException.class, expectedMessage, PREFIX);
   }
 
   @Test
@@ -863,18 +826,6 @@ public final class ClientTest {
         equalTo(
             String.format("'suffix' element of %s must be a JSON boolean", JSON_PATH.getName())));
     Client.validateJsonPath(_mapper.readTree(invalidJsonPath));
-  }
-
-  @Test
-  public void testListAnalysisInvalidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    testInvalidInput(LIST_ANALYSES, new String[] {}, parameters);
-  }
-
-  @Test
-  public void testListAnalysisValidParas() throws Exception {
-    String[] parameters = new String[] {};
-    checkProcessCommandErrorMessage(LIST_ANALYSES, parameters, NETWORK_NOT_SET);
   }
 
   @Test
@@ -974,8 +925,7 @@ public final class ClientTest {
 
   @Test
   public void testLoadQuestionsNames() throws Exception {
-    Client client =
-        new Client(new String[] {"-runmode", "gendatamodel", "-prettyanswers", "false"});
+    Client client = new Client(new String[] {"-runmode", "interactive", "-prettyanswers", "false"});
     JSONObject testQuestion = new JSONObject();
     testQuestion.put(
         "instance",
@@ -1010,7 +960,7 @@ public final class ClientTest {
     Path questionJsonPath = _folder.newFile("testquestion.json").toPath();
     CommonUtil.writeFile(questionJsonPath, testQuestion.toString());
     Multimap<String, String> loadedQuestions =
-        Client.loadQuestionsFromDir(questionJsonPath.toString());
+        Client.loadQuestionsFromDir(questionJsonPath.toString(), null);
     Multimap<String, String> expectedMap = HashMultimap.create();
     expectedMap.put("testQuestionName", testQuestion.toString());
 
@@ -1228,7 +1178,7 @@ public final class ClientTest {
 
   private void testProcessCommandWithValidInput(
       Command command, String[] parameters, String expected) throws Exception {
-    Client client = new Client(new String[] {"-runmode", "gendatamodel"});
+    Client client = new Client(new String[] {"-runmode", "interactive"});
     File tempFile = _folder.newFile("writer");
     FileWriter writer = new FileWriter(tempFile);
     String[] args = ArrayUtils.addAll(new String[] {command.commandName()}, parameters);
@@ -1236,17 +1186,6 @@ public final class ClientTest {
     assertTrue(client.processCommand(args, writer));
     assertThat(client.getLogger().getHistory().toString(500), equalTo(expected));
     writer.close();
-  }
-
-  @Test
-  public void testPromptInvalidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    testInvalidInput(PROMPT, new String[] {}, parameters);
-  }
-
-  @Test
-  public void testPromptValidParas() throws Exception {
-    testProcessCommandWithValidInput(PROMPT, new String[] {}, "");
   }
 
   @Test
@@ -1266,43 +1205,6 @@ public final class ClientTest {
     integerVariable.setValue(_mapper.readTree("3"));
     variables.put("integer", integerVariable);
     Client.checkVariableState(variables);
-  }
-
-  @Test
-  public void testPwdInvalidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    testInvalidInput(PWD, new String[] {}, parameters);
-  }
-
-  @Test
-  public void testPwdValidParas() throws Exception {
-    testProcessCommandWithValidInput(
-        PWD,
-        new String[] {},
-        String.format("working directory = %s\n", System.getProperty("user.dir")));
-  }
-
-  @Test
-  public void testRunAnalysisReferenceValidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    checkProcessCommandErrorMessage(RUN_ANALYSIS_REFERENCE, parameters, NETWORK_NOT_SET);
-  }
-
-  @Test
-  public void testRunAnalysisDifferentialValidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    checkProcessCommandErrorMessage(RUN_ANALYSIS_DIFFERENTIAL, parameters, NETWORK_NOT_SET);
-  }
-
-  @Test
-  public void testRunAnalysisInvalidParas() throws Exception {
-    testInvalidInput(RUN_ANALYSIS, new String[] {}, new String[] {});
-  }
-
-  @Test
-  public void testRunAnalysisValidParas() throws Exception {
-    String[] parameters = new String[] {"parameter1"};
-    checkProcessCommandErrorMessage(RUN_ANALYSIS, parameters, NETWORK_NOT_SET);
   }
 
   @Test
@@ -1639,11 +1541,19 @@ public final class ClientTest {
   }
 
   @Test
-  public void testValidAddressGroupAndBook() throws IOException {
+  public void testValidAddressGroupName() throws IOException {
     JsonNode addressGroupNode = _mapper.readTree("\"addressGroup, referenceBook\"");
     Variable variable = new Variable();
-    variable.setType(ADDRESS_GROUP_AND_BOOK);
+    variable.setType(ADDRESS_GROUP_NAME);
     Client.validateType(addressGroupNode, variable);
+  }
+
+  @Test
+  public void testValidApplicationSpecifierValue() throws IOException {
+    JsonNode specNode = _mapper.readTree("\"ssh\"");
+    Variable variable = new Variable();
+    variable.setType(APPLICATION_SPEC);
+    Client.validateType(specNode, variable);
   }
 
   @Test
@@ -1703,6 +1613,14 @@ public final class ClientTest {
   }
 
   @Test
+  public void testValidFilterSpecValue() throws IOException {
+    JsonNode filterNode = _mapper.readTree("\"@in(eth0)\"");
+    Variable variable = new Variable();
+    variable.setType(FILTER_SPEC);
+    Client.validateType(filterNode, variable);
+  }
+
+  @Test
   public void testValidFloatValue() {
     Float floatValue = 15.0f;
     JsonNode floatNode = _mapper.valueToTree(floatValue);
@@ -1728,11 +1646,35 @@ public final class ClientTest {
   }
 
   @Test
+  public void testValidInterfaceGroupName() throws IOException {
+    JsonNode interfaceGroupNode = _mapper.readTree("\"interfaceGroup, referenceBook\"");
+    Variable variable = new Variable();
+    variable.setType(INTERFACE_GROUP_NAME);
+    Client.validateType(interfaceGroupNode, variable);
+  }
+
+  @Test
+  public void testValidInterfaceNameValue() throws IOException {
+    JsonNode interfaceNode = _mapper.readTree("\"interfaceName\"");
+    Variable variable = new Variable();
+    variable.setType(INTERFACE);
+    Client.validateType(interfaceNode, variable);
+  }
+
+  @Test
   public void testValidInterfaceValue() throws IOException {
     JsonNode interfaceNode = _mapper.readTree("\"interfaceName\"");
     Variable variable = new Variable();
     variable.setType(INTERFACE);
     Client.validateType(interfaceNode, variable);
+  }
+
+  @Test
+  public void testValidInterfaceTypeValue() throws IOException {
+    JsonNode interfaceTypeNode = _mapper.readTree("\"physical\"");
+    Variable variable = new Variable();
+    variable.setType(INTERFACE_TYPE);
+    Client.validateType(interfaceTypeNode, variable);
   }
 
   @Test
@@ -1814,6 +1756,14 @@ public final class ClientTest {
   }
 
   @Test
+  public void testValidLocationSpecValue() throws IOException {
+    JsonNode location = _mapper.readTree("\"as1border1\"");
+    Variable variable = new Variable();
+    variable.setType(LOCATION_SPEC);
+    Client.validateType(location, variable);
+  }
+
+  @Test
   public void testValidLongValue() {
     Long longValue = 15L;
     JsonNode floatNode = _mapper.valueToTree(longValue);
@@ -1826,7 +1776,7 @@ public final class ClientTest {
   public void testValidNodeRoleDimensionValue() throws IOException {
     JsonNode nodeRoleDimensionNode = _mapper.readTree("\"roleDimension\"");
     Variable variable = new Variable();
-    variable.setType(NODE_ROLE_DIMENSION);
+    variable.setType(NODE_ROLE_DIMENSION_NAME);
     Client.validateType(nodeRoleDimensionNode, variable);
   }
 

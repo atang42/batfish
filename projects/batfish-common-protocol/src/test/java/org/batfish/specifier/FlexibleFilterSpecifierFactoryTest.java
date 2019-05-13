@@ -4,16 +4,17 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
-import org.batfish.datamodel.questions.FiltersSpecifier;
+import java.util.regex.Pattern;
 import org.batfish.specifier.InterfaceSpecifierFilterSpecifier.Type;
 import org.junit.Test;
 
+/** Tests for {@link FlexibleFilterSpecifierFactory}. */
 public class FlexibleFilterSpecifierFactoryTest {
   @Test
   public void testShorthandFilterSpecifier() {
     assertThat(
-        new FlexibleFilterSpecifierFactory().buildFilterSpecifier("ipv4:.*"),
-        equalTo(new ShorthandFilterSpecifier(new FiltersSpecifier("ipv4:.*"))));
+        new FlexibleFilterSpecifierFactory().buildFilterSpecifier(".*"),
+        equalTo(new NameRegexFilterSpecifier(Pattern.compile(".*", Pattern.CASE_INSENSITIVE))));
   }
 
   @Test
@@ -31,13 +32,6 @@ public class FlexibleFilterSpecifierFactoryTest {
     assertTrue(
         FilterSpecifierFactory.load(FlexibleFilterSpecifierFactory.NAME)
             instanceof FlexibleFilterSpecifierFactory);
-  }
-
-  @Test
-  public void testNull() {
-    assertThat(
-        new FlexibleFilterSpecifierFactory().buildFilterSpecifier(null),
-        equalTo(new ShorthandFilterSpecifierFactory().buildFilterSpecifier(null)));
   }
 
   @Test

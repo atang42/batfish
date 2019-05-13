@@ -1,14 +1,16 @@
 package org.batfish.dataplane.rib;
 
+import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.RipInternalRoute;
 
 /** Rib that stores internal RIP routes */
+@ParametersAreNonnullByDefault
 public class RipInternalRib extends AbstractRib<RipInternalRoute> {
 
   private static final long serialVersionUID = 1L;
 
   public RipInternalRib() {
-    super(null);
+    super();
   }
 
   @Override

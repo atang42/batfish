@@ -7,12 +7,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Set;
 import java.util.SortedSet;
 import javax.annotation.Nonnull;
+import org.batfish.datamodel.bgp.community.Community;
 import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.visitors.CommunitySetExprVisitor;
 import org.batfish.datamodel.visitors.VoidCommunitySetExprVisitor;
 
 public class NamedCommunitySet extends CommunitySetExpr {
-
   private static final String PROP_NAME = "name";
 
   private static final long serialVersionUID = 1L;
@@ -38,8 +38,9 @@ public class NamedCommunitySet extends CommunitySetExpr {
     visitor.visitNamedCommunitySet(this);
   }
 
+  @Nonnull
   @Override
-  public SortedSet<Long> asLiteralCommunities(Environment environment) {
+  public SortedSet<Community> asLiteralCommunities(@Nonnull Environment environment) {
     return resolve(environment).asLiteralCommunities(environment);
   }
 
@@ -70,27 +71,23 @@ public class NamedCommunitySet extends CommunitySetExpr {
   }
 
   @Override
-  public boolean matchAnyCommunity(Environment environment, Set<Long> communityCandidates) {
+  public boolean matchAnyCommunity(Environment environment, Set<Community> communityCandidates) {
     return resolve(environment).matchAnyCommunity(environment, communityCandidates);
   }
 
   @Override
-  public boolean matchCommunities(Environment environment, Set<Long> communitySetCandidate) {
+  public boolean matchCommunities(Environment environment, Set<Community> communitySetCandidate) {
     return resolve(environment).matchCommunities(environment, communitySetCandidate);
   }
 
   @Override
-  public boolean matchCommunity(Environment environment, long community) {
-    return environment
-        .getConfiguration()
-        .getCommunityLists()
-        .get(_name)
-        .matchCommunity(environment, community);
+  public boolean matchCommunity(Environment environment, Community community) {
+    return environment.getCommunityLists().get(_name).matchCommunity(environment, community);
   }
 
   @Override
-  public SortedSet<Long> matchedCommunities(
-      Environment environment, Set<Long> communityCandidates) {
+  public SortedSet<Community> matchedCommunities(
+      Environment environment, Set<Community> communityCandidates) {
     return resolve(environment).matchedCommunities(environment, communityCandidates);
   }
 
@@ -100,6 +97,6 @@ public class NamedCommunitySet extends CommunitySetExpr {
   }
 
   private @Nonnull CommunitySetExpr resolve(@Nonnull Environment environment) {
-    return requireNonNull(environment.getConfiguration().getCommunityLists().get(_name));
+    return requireNonNull(environment.getCommunityLists().get(_name));
   }
 }

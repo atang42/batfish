@@ -9,7 +9,7 @@ import org.parboiled.errors.InvalidInputError;
 import org.parboiled.parserunners.ReportingParseRunner;
 import org.parboiled.support.ParsingResult;
 
-/** An IpSpaceSpecifierFactory whose grammar is encoded in {@link Parser#IpSpaceExpression()} */
+/** An IpSpaceSpecifierFactory whose grammar is encoded in {@link Parser#IpSpaceSpec()} */
 @AutoService(IpSpaceSpecifierFactory.class)
 public class ParboiledIpSpaceSpecifierFactory implements IpSpaceSpecifierFactory {
 
@@ -21,17 +21,16 @@ public class ParboiledIpSpaceSpecifierFactory implements IpSpaceSpecifierFactory
 
     ParsingResult<AstNode> result =
         new ReportingParseRunner<AstNode>(
-                Parser.INSTANCE.input(Parser.INSTANCE.IpSpaceExpression()))
+                Parser.instance().getInputRule(Grammar.IP_SPACE_SPECIFIER))
             .run((String) input);
 
     if (!result.parseErrors.isEmpty()) {
-      String error =
+      throw new IllegalArgumentException(
           ParserUtils.getErrorString(
               (String) input,
-              "IpSpace",
+              Grammar.IP_SPACE_SPECIFIER,
               (InvalidInputError) result.parseErrors.get(0),
-              Parser.ANCHORS);
-      throw new IllegalArgumentException(error);
+              Parser.ANCHORS));
     }
 
     AstNode ast = ParserUtils.getAst(result);

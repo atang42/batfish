@@ -5,9 +5,7 @@ import static java.util.Objects.requireNonNull;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.google.common.collect.ImmutableSet;
-import com.kjetland.jackson.jsonSchema.annotations.JsonSchemaDescription;
 import java.io.Serializable;
 import java.util.Objects;
 import java.util.Set;
@@ -17,7 +15,7 @@ import org.batfish.datamodel.GeneratedRoute;
 import org.batfish.datamodel.IsoAddress;
 import org.batfish.datamodel.Vrf;
 
-@JsonSchemaDescription("An IS-IS routing process")
+/** An IS-IS routing process */
 public class IsisProcess implements Serializable {
 
   public static class Builder {
@@ -100,17 +98,11 @@ public class IsisProcess implements Serializable {
   }
 
   private static final String PROP_EXPORT_POLICY = "exportPolicy";
-
   private static final String PROP_GENERATED_ROUTES = "generatedRoutes";
-
   private static final String PROP_LEVEL1 = "level1";
-
   private static final String PROP_LEVEL2 = "level2";
-
   private static final String PROP_NET_ADDRESS = "netAddress";
-
   private static final String PROP_OVERLOAD = "overload";
-
   private static final String PROP_REFERENCE_BANDWIDTH = "referenceBandwidth";
 
   private static final long serialVersionUID = 1L;
@@ -192,9 +184,10 @@ public class IsisProcess implements Serializable {
     return _exportPolicy;
   }
 
-  @JsonPropertyDescription(
-      "Generated IPV4 routes for the purpose of export into IS-IS. These routes are not imported "
-          + "into the main RIB.")
+  /**
+   * Generated IPV4 routes for the purpose of export into IS-IS. These routes are not imported into
+   * the main RIB.
+   */
   @JsonProperty(PROP_GENERATED_ROUTES)
   @Nonnull
   public Set<GeneratedRoute> getGeneratedRoutes() {
@@ -213,7 +206,7 @@ public class IsisProcess implements Serializable {
     return _level2;
   }
 
-  @JsonPropertyDescription("The net address is an ISO address representing the IS-IS router ID.")
+  /** The net address is an ISO address representing the IS-IS router ID. */
   @JsonProperty(PROP_NET_ADDRESS)
   @Nonnull
   public IsoAddress getNetAddress() {

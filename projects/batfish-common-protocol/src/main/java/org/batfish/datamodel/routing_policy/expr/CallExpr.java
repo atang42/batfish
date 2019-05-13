@@ -15,7 +15,6 @@ import org.batfish.datamodel.routing_policy.RoutingPolicy;
 
 /** Boolean expression that calls a given {@link RoutingPolicy} on an {@link Environment}. */
 public final class CallExpr extends BooleanExpr {
-
   private static final String PROP_CALLED_POLICY_NAME = "calledPolicyName";
 
   private static final long serialVersionUID = 1L;
@@ -53,8 +52,7 @@ public final class CallExpr extends BooleanExpr {
 
   @Override
   public Result evaluate(Environment environment) {
-    RoutingPolicy policy =
-        environment.getConfiguration().getRoutingPolicies().get(_calledPolicyName);
+    RoutingPolicy policy = environment.getRoutingPolicies().get(_calledPolicyName);
     if (policy == null) {
       environment.setError(true);
       return new Result(false);

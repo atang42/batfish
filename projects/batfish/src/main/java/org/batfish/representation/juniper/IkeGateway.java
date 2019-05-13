@@ -5,12 +5,11 @@ import org.batfish.datamodel.Ip;
 
 public class IkeGateway implements Serializable {
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   private Ip _address;
 
-  private Interface _externalInterface;
+  private String _externalInterface;
 
   private String _ikePolicy;
 
@@ -26,7 +25,7 @@ public class IkeGateway implements Serializable {
     return _address;
   }
 
-  public Interface getExternalInterface() {
+  public String getExternalInterface() {
     return _externalInterface;
   }
 
@@ -46,7 +45,7 @@ public class IkeGateway implements Serializable {
     _address = address;
   }
 
-  public void setExternalInterface(Interface externalInterface) {
+  public void setExternalInterface(String externalInterface) {
     _externalInterface = externalInterface;
   }
 

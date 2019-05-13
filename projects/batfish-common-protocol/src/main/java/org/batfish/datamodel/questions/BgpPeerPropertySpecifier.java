@@ -17,9 +17,9 @@ import javax.annotation.Nullable;
 import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.BgpPassivePeerConfig;
 import org.batfish.datamodel.BgpPeerConfig;
+import org.batfish.datamodel.BgpUnnumberedPeerConfig;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.answers.Schema;
-import org.batfish.datamodel.answers.SelfDescribingObject;
 
 /**
  * Enables specification a set of BGP peer properties.
@@ -28,7 +28,7 @@ import org.batfish.datamodel.answers.SelfDescribingObject;
  *
  * <ul>
  *   <li>multipath-ebgp —&gt; gets the process's corresponding value
- *   <li>multipath-.* --&gt; gets all properties that start with 'max-metric-'
+ *   <li>max-metric-.* -&gt; gets all properties that start with 'max-metric-'
  * </ul>
  */
 public class BgpPeerPropertySpecifier extends PropertySpecifier {
@@ -47,11 +47,9 @@ public class BgpPeerPropertySpecifier extends PropertySpecifier {
   public static final Map<String, PropertyDescriptor<BgpPeerConfig>> JAVA_MAP =
       new ImmutableMap.Builder<String, PropertyDescriptor<BgpPeerConfig>>()
           .put(LOCAL_AS, new PropertyDescriptor<>(BgpPeerConfig::getLocalAs, Schema.LONG))
-          .put(LOCAL_IP, new PropertyDescriptor<>(BgpPeerConfig::getLocalIp, Schema.IP))
+          .put(LOCAL_IP, new PropertyDescriptor<>(BgpPeerPropertySpecifier::getLocalIp, Schema.IP))
           .put(IS_PASSIVE, new PropertyDescriptor<>((peer) -> getIsPassive(peer), Schema.BOOLEAN))
-          .put(
-              REMOTE_AS,
-              new PropertyDescriptor<>((peer) -> getRemoteAs(peer), Schema.SELF_DESCRIBING))
+          .put(REMOTE_AS, new PropertyDescriptor<>(BgpPeerConfig::getRemoteAsns, Schema.STRING))
           .put(
               ROUTE_REFLECTOR_CLIENT,
               new PropertyDescriptor<>(BgpPeerConfig::getRouteReflectorClient, Schema.BOOLEAN))
@@ -105,29 +103,20 @@ public class BgpPeerPropertySpecifier extends PropertySpecifier {
         .collect(ImmutableList.toImmutableList());
   }
 
+  private static Ip getLocalIp(@Nonnull BgpPeerConfig peer) {
+    // Do not expose local IP of unnumbered peers
+    return peer instanceof BgpUnnumberedPeerConfig ? null : peer.getLocalIp();
+  }
+
   @VisibleForTesting
   static boolean getIsPassive(@Nonnull BgpPeerConfig peer) {
-    if (peer instanceof BgpActivePeerConfig) {
+    if (peer instanceof BgpActivePeerConfig || peer instanceof BgpUnnumberedPeerConfig) {
       return false;
     }
     if (peer instanceof BgpPassivePeerConfig) {
       return true;
     }
-    throw new IllegalArgumentException(
-        String.format("Peer is neither Active nor Passive: %s", peer));
-  }
-
-  @VisibleForTesting
-  static SelfDescribingObject getRemoteAs(@Nonnull BgpPeerConfig peer) {
-    if (peer instanceof BgpActivePeerConfig) {
-      return new SelfDescribingObject(Schema.LONG, ((BgpActivePeerConfig) peer).getRemoteAs());
-    }
-    if (peer instanceof BgpPassivePeerConfig) {
-      return new SelfDescribingObject(
-          Schema.list(Schema.LONG), ((BgpPassivePeerConfig) peer).getRemoteAs());
-    }
-    throw new IllegalArgumentException(
-        String.format("Peer is neither Active nor Passive: %s", peer));
+    throw new IllegalArgumentException(String.format("Unrecognized peer type: %s", peer));
   }
 
   @Override

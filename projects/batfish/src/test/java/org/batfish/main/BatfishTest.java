@@ -216,7 +216,10 @@ public class BatfishTest {
         BatfishTestUtils.getBatfishFromTestrigText(testrigTextBuilder.build(), _folder);
 
     assertThat(
-        batfish.getTopologyProvider().getRawLayer3Topology(batfish.getNetworkSnapshot()).getEdges(),
+        batfish
+            .getTopologyProvider()
+            .getInitialRawLayer3Topology(batfish.getNetworkSnapshot())
+            .getEdges(),
         containsInAnyOrder(Edge.of("c1", "i1", "c2", "i2"), Edge.of("c2", "i2", "c1", "i1")));
   }
 
@@ -245,7 +248,11 @@ public class BatfishTest {
         TestrigText.builder().setLayer1TopologyText("org/batfish/common/topology/testrigs/layer1");
     Batfish batfish =
         BatfishTestUtils.getBatfishFromTestrigText(testrigTextBuilder.build(), _folder);
-    Layer1Topology layer1Topology = batfish.getLayer1Topology();
+    Layer1Topology layer1Topology =
+        batfish
+            .getTopologyProvider()
+            .getRawLayer1PhysicalTopology(batfish.getNetworkSnapshot())
+            .orElse(null);
 
     Layer1Node c1i1 = new Layer1Node("c1", "i1");
     Layer1Node c2i2 = new Layer1Node("c2", "i2");

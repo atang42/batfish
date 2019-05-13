@@ -5,27 +5,24 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.SortedSet;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
-import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.apache.commons.configuration2.ImmutableConfiguration;
 import org.batfish.common.Answerer;
 import org.batfish.common.BatfishLogger;
 import org.batfish.common.NetworkSnapshot;
+import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.topology.IpOwners;
 import org.batfish.common.topology.Layer1Topology;
 import org.batfish.common.topology.Layer2Topology;
 import org.batfish.common.topology.TopologyProvider;
 import org.batfish.common.topology.TopologyUtil;
-import org.batfish.datamodel.AbstractRoute;
 import org.batfish.datamodel.BgpAdvertisement;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.DataPlane;
-import org.batfish.datamodel.Edge;
 import org.batfish.datamodel.Flow;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Topology;
@@ -37,21 +34,20 @@ import org.batfish.datamodel.answers.MajorIssueConfig;
 import org.batfish.datamodel.answers.ParseEnvironmentBgpTablesAnswerElement;
 import org.batfish.datamodel.answers.ParseEnvironmentRoutingTablesAnswerElement;
 import org.batfish.datamodel.answers.ParseVendorConfigurationAnswerElement;
+import org.batfish.datamodel.bgp.BgpTopology;
 import org.batfish.datamodel.collections.BgpAdvertisementsByVrf;
-import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.collections.RoutesByVrf;
 import org.batfish.datamodel.flow.Trace;
 import org.batfish.datamodel.ospf.OspfTopology;
 import org.batfish.datamodel.pojo.Environment;
 import org.batfish.datamodel.questions.Question;
-import org.batfish.datamodel.questions.smt.HeaderLocationQuestion;
-import org.batfish.datamodel.questions.smt.HeaderQuestion;
-import org.batfish.datamodel.questions.smt.RoleQuestion;
 import org.batfish.datamodel.vxlan.VxlanTopology;
+import org.batfish.datamodel.vxlan.VxlanTopologyUtils;
 import org.batfish.grammar.BgpTableFormat;
 import org.batfish.identifiers.NetworkId;
 import org.batfish.identifiers.SnapshotId;
 import org.batfish.question.ReachabilityParameters;
+import org.batfish.question.bidirectionalreachability.BidirectionalReachabilityResult;
 import org.batfish.question.differentialreachability.DifferentialReachabilityParameters;
 import org.batfish.question.differentialreachability.DifferentialReachabilityResult;
 import org.batfish.question.multipath.MultipathConsistencyParameters;
@@ -66,6 +62,86 @@ import org.batfish.specifier.SpecifierContextImpl;
  * minimal methods needed.
  */
 public class IBatfishTestAdapter implements IBatfish {
+
+  public static class TopologyProviderTestAdapter implements TopologyProvider {
+
+    protected final IBatfish _batfish;
+
+    public TopologyProviderTestAdapter(IBatfish batfish) {
+      _batfish = batfish;
+    }
+
+    @Nonnull
+    @Override
+    public IpOwners getIpOwners(NetworkSnapshot snapshot) {
+      return new IpOwners(_batfish.loadConfigurations(snapshot));
+    }
+
+    @Override
+    public Optional<Layer1Topology> getLayer1LogicalTopology(NetworkSnapshot networkSnapshot) {
+      return getLayer1PhysicalTopology(networkSnapshot)
+          .map(
+              l1PhysicalTopology ->
+                  TopologyUtil.computeLayer1LogicalTopology(
+                      l1PhysicalTopology, _batfish.loadConfigurations()));
+    }
+
+    @Override
+    public VxlanTopology getVxlanTopology(NetworkSnapshot snapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Optional<Layer1Topology> getLayer1PhysicalTopology(NetworkSnapshot networkSnapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Optional<Layer2Topology> getLayer2Topology(NetworkSnapshot networkSnapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Topology getLayer3Topology(NetworkSnapshot networkSnapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Nonnull
+    @Override
+    public OspfTopology getInitialOspfTopology(@Nonnull NetworkSnapshot networkSnapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Optional<Layer1Topology> getRawLayer1PhysicalTopology(NetworkSnapshot networkSnapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Topology getInitialRawLayer3Topology(NetworkSnapshot networkSnapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public BgpTopology getBgpTopology(NetworkSnapshot snapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Optional<Layer2Topology> getInitialLayer2Topology(NetworkSnapshot networkSnapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Topology getInitialLayer3Topology(NetworkSnapshot networkSnapshot) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public VxlanTopology getInitialVxlanTopology(NetworkSnapshot snapshot) {
+      return VxlanTopologyUtils.initialVxlanTopology(_batfish.loadConfigurations(snapshot));
+    }
+  }
 
   @Override
   public DifferentialReachabilityResult bddDifferentialReachability(
@@ -89,24 +165,12 @@ public class IBatfishTestAdapter implements IBatfish {
   }
 
   @Override
-  @Deprecated
-  public DataPlaneAnswerElement computeDataPlane(boolean differentialContext) {
-    return computeDataPlane();
-  }
-
-  @Override
   public boolean debugFlagEnabled(String flag) {
     throw new UnsupportedOperationException();
   }
 
   @Override
   public ReferenceLibrary getReferenceLibraryData() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Deprecated
-  @Override
-  public Map<String, BiFunction<Question, IBatfish, Answerer>> getAnswererCreators() {
     throw new UnsupportedOperationException();
   }
 
@@ -131,11 +195,6 @@ public class IBatfishTestAdapter implements IBatfish {
   }
 
   @Override
-  public Topology getEnvironmentTopology() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public String getFlowTag() {
     throw new UnsupportedOperationException();
   }
@@ -143,16 +202,6 @@ public class IBatfishTestAdapter implements IBatfish {
   @Override
   public MajorIssueConfig getMajorIssueConfig(String majorIssue) {
     throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Layer1Topology getLayer1Topology() {
-    throw new UnsupportedOperationException("no implementation for generated method");
-  }
-
-  @Override
-  public Layer2Topology getLayer2Topology() {
-    throw new UnsupportedOperationException("no implementation for generated method");
   }
 
   @Override
@@ -176,12 +225,6 @@ public class IBatfishTestAdapter implements IBatfish {
   }
 
   @Override
-  public SortedMap<String, SortedMap<String, SortedSet<AbstractRoute>>> getRoutes(
-      boolean useCompression) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public ImmutableConfiguration getSettingsConfiguration() {
     throw new UnsupportedOperationException();
   }
@@ -199,56 +242,7 @@ public class IBatfishTestAdapter implements IBatfish {
   @Nonnull
   @Override
   public TopologyProvider getTopologyProvider() {
-    return new TopologyProvider() {
-      @Nonnull
-      @Override
-      public IpOwners getIpOwners(NetworkSnapshot snapshot) {
-        return new IpOwners(loadConfigurations(snapshot));
-      }
-
-      @Override
-      public Optional<Layer1Topology> getLayer1LogicalTopology(NetworkSnapshot networkSnapshot) {
-        return Optional.of(
-            TopologyUtil.computeLayer1LogicalTopology(getLayer1Topology(), loadConfigurations()));
-      }
-
-      @Override
-      public VxlanTopology getVxlanTopology(NetworkSnapshot snapshot) {
-        return new VxlanTopology(loadConfigurations(snapshot));
-      }
-
-      @Override
-      public Optional<Layer1Topology> getLayer1PhysicalTopology(NetworkSnapshot networkSnapshot) {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public Optional<Layer2Topology> getLayer2Topology(NetworkSnapshot networkSnapshot) {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public Topology getLayer3Topology(NetworkSnapshot networkSnapshot) {
-        throw new UnsupportedOperationException();
-      }
-
-      @Nonnull
-      @Override
-      public OspfTopology getOspfTopology(@Nonnull NetworkSnapshot networkSnapshot) {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public Optional<Layer1Topology> getRawLayer1PhysicalTopology(
-          NetworkSnapshot networkSnapshot) {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public Topology getRawLayer3Topology(NetworkSnapshot networkSnapshot) {
-        throw new UnsupportedOperationException();
-      }
-    };
+    return new TopologyProviderTestAdapter(this);
   }
 
   @Override
@@ -380,63 +374,8 @@ public class IBatfishTestAdapter implements IBatfish {
   }
 
   @Override
-  public AnswerElement smtBlackhole(HeaderQuestion q) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtBoundedLength(HeaderLocationQuestion q, Integer bound) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtDeterminism(HeaderQuestion q) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtEqualLength(HeaderLocationQuestion q) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtForwarding(HeaderQuestion q) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtLoadBalance(HeaderLocationQuestion q, int threshold) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtLocalConsistency(Pattern routerRegex, boolean strict, boolean fullModel) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtMultipathConsistency(HeaderLocationQuestion q) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtReachability(HeaderLocationQuestion q) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtRoles(RoleQuestion q) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public AnswerElement smtRoutingLoop(HeaderQuestion q) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public SpecifierContext specifierContext() {
-    return new SpecifierContextImpl(this, networkSnapshot());
+    return new SpecifierContextImpl(this, getNetworkSnapshot());
   }
 
   @Override
@@ -469,34 +408,16 @@ public class IBatfishTestAdapter implements IBatfish {
     throw new UnsupportedOperationException();
   }
 
-  public NetworkSnapshot networkSnapshot() {
+  @Override
+  public NetworkSnapshot getNetworkSnapshot() {
     return new NetworkSnapshot(
         new NetworkId(UUID.randomUUID().toString()), new SnapshotId(UUID.randomUUID().toString()));
   }
 
+  @Nonnull
   @Override
-  public NetworkSnapshot getNetworkSnapshot() {
-    throw new UnsupportedOperationException(
-        "no implementation for generated method"); // TODO Auto-generated method stub
-  }
-
-  @Override
-  public Layer1Topology loadRawLayer1PhysicalTopology(NetworkSnapshot networkSnapshot) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public SortedSet<Edge> getEdgeBlacklist(NetworkSnapshot networkSnapshot) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public SortedSet<NodeInterfacePair> getInterfaceBlacklist(NetworkSnapshot networkSnapshot) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public SortedSet<String> getNodeBlacklist(NetworkSnapshot networkSnapshot) {
+  public BidirectionalReachabilityResult bidirectionalReachability(
+      BDDPacket bddPacket, ReachabilityParameters parameters) {
     throw new UnsupportedOperationException();
   }
 }

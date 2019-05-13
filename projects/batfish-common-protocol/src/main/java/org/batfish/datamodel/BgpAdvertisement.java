@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.SortedSet;
 import javax.annotation.Nonnull;
 import org.batfish.common.BatfishException;
+import org.batfish.datamodel.bgp.community.Community;
 
 /**
  * Instances of this class represent hypothetical BGP advertisements used for testing, or where the
@@ -62,7 +63,7 @@ public class BgpAdvertisement implements Comparable<BgpAdvertisement>, Serializa
 
     private SortedSet<Long> _clusterList;
 
-    private SortedSet<Long> _communities;
+    private SortedSet<Community> _communities;
 
     private Ip _dstIp;
 
@@ -126,7 +127,7 @@ public class BgpAdvertisement implements Comparable<BgpAdvertisement>, Serializa
       return this;
     }
 
-    public Builder setCommunities(SortedSet<Long> communities) {
+    public Builder setCommunities(SortedSet<Community> communities) {
       _communities = communities;
       return this;
     }
@@ -208,42 +209,24 @@ public class BgpAdvertisement implements Comparable<BgpAdvertisement>, Serializa
   }
 
   private static final String PROP_AS_PATH = "asPath";
-
   private static final String PROP_CLUSTER_LIST = "clusterList";
-
   private static final String PROP_COMMUNITIES = "communities";
-
   private static final String PROP_DST_IP = "dstIp";
-
   private static final String PROP_DST_NODE = "dstNode";
-
   private static final String PROP_DST_VRF = "dstVrf";
-
   private static final String PROP_LOCAL_PREFERENCE = "localPreference";
-
   private static final String PROP_MED = "med";
-
   private static final String PROP_NETWORK = "network";
-
   private static final String PROP_NEXT_HOP_IP = "nextHopIp";
-
   private static final String PROP_ORIGIN_TYPE = "originType";
-
   private static final String PROP_ORIGINATOR_IP = "originatorIp";
-
   private static final String PROP_SRC_IP = "srcIp";
-
   private static final String PROP_SRC_NODE = "srcNode";
-
   private static final String PROP_SRC_PROTOCOL = "srcProtocol";
-
   private static final String PROP_SRC_VRF = "srcVrf";
-
   private static final String PROP_TYPE = "type";
-
   private static final String PROP_WEIGHT = "weight";
 
-  /** */
   private static final long serialVersionUID = 1L;
 
   public static final int UNSET_LOCAL_PREFERENCE = 0;
@@ -256,7 +239,7 @@ public class BgpAdvertisement implements Comparable<BgpAdvertisement>, Serializa
 
   private final SortedSet<Long> _clusterList;
 
-  private final SortedSet<Long> _communities;
+  private final SortedSet<Community> _communities;
 
   private final Ip _dstIp;
 
@@ -305,7 +288,7 @@ public class BgpAdvertisement implements Comparable<BgpAdvertisement>, Serializa
       @JsonProperty(PROP_MED) long med,
       @JsonProperty(PROP_ORIGINATOR_IP) Ip originatorIp,
       @JsonProperty(PROP_AS_PATH) @Nonnull AsPath asPath,
-      @JsonProperty(PROP_COMMUNITIES) SortedSet<Long> communities,
+      @JsonProperty(PROP_COMMUNITIES) SortedSet<Community> communities,
       @JsonProperty(PROP_CLUSTER_LIST) SortedSet<Long> clusterList,
       @JsonProperty(PROP_WEIGHT) int weight) {
     _type = type;
@@ -498,7 +481,7 @@ public class BgpAdvertisement implements Comparable<BgpAdvertisement>, Serializa
   }
 
   @JsonProperty(PROP_COMMUNITIES)
-  public SortedSet<Long> getCommunities() {
+  public SortedSet<Community> getCommunities() {
     return _communities;
   }
 

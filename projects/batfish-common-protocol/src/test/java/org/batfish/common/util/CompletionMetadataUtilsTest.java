@@ -5,6 +5,7 @@ import static org.batfish.common.util.CompletionMetadataUtils.getInterfaces;
 import static org.batfish.common.util.CompletionMetadataUtils.getIps;
 import static org.batfish.common.util.CompletionMetadataUtils.getNodes;
 import static org.batfish.common.util.CompletionMetadataUtils.getPrefixes;
+import static org.batfish.common.util.CompletionMetadataUtils.getRoutingPolicyNames;
 import static org.batfish.common.util.CompletionMetadataUtils.getStructureNames;
 import static org.batfish.common.util.CompletionMetadataUtils.getVrfs;
 import static org.batfish.common.util.CompletionMetadataUtils.getZones;
@@ -15,6 +16,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.ImmutableSortedSet;
 import java.util.HashMap;
 import java.util.Map;
 import org.batfish.datamodel.AsPathAccessList;
@@ -38,6 +40,8 @@ import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.Zone;
 import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.referencelibrary.AddressGroup;
+import org.batfish.referencelibrary.ReferenceBook;
 import org.junit.Test;
 
 public final class CompletionMetadataUtilsTest {
@@ -122,6 +126,36 @@ public final class CompletionMetadataUtilsTest {
   }
 
   @Test
+  public void testGetIpsGeneratedReferenceBooks() {
+    ReferenceBook book1 =
+        ReferenceBook.builder("book1")
+            .setAddressGroups(
+                ImmutableList.of(
+                    new AddressGroup(ImmutableSortedSet.of("1.1.1.1", "2.2.2.2"), "ag1"),
+                    new AddressGroup(
+                        ImmutableSortedSet.of("3.3.3.3", "1.1.1.1/24", "1.1.1.1:0.0.0.8"), "ag2")))
+            .build();
+
+    ReferenceBook book2 =
+        ReferenceBook.builder("book2")
+            .setAddressGroups(
+                ImmutableList.of(
+                    new AddressGroup(ImmutableSortedSet.of("3.3.3.3", "4.4.4.4"), "ag1")))
+            .build();
+
+    Map<String, Configuration> configs = new HashMap<>();
+    Configuration config = createTestConfiguration("node", ConfigurationFormat.HOST);
+
+    config.getGeneratedReferenceBooks().put(book1.getName(), book1);
+    config.getGeneratedReferenceBooks().put(book2.getName(), book2);
+
+    configs.put("node", config);
+
+    assertThat(
+        getIps(configs), equalTo(ImmutableSet.of("1.1.1.1", "2.2.2.2", "3.3.3.3", "4.4.4.4")));
+  }
+
+  @Test
   public void testGetNodes() {
     String node1 = "node1";
     String node2 = "node2";
@@ -173,6 +207,52 @@ public final class CompletionMetadataUtilsTest {
   }
 
   @Test
+  public void testGetPrefixesGeneratedReferenceBooks() {
+    ReferenceBook book1 =
+        ReferenceBook.builder("book1")
+            .setAddressGroups(
+                ImmutableList.of(
+                    new AddressGroup(ImmutableSortedSet.of("1.1.1.1/1", "2.2.2.2/2"), "ag1"),
+                    new AddressGroup(ImmutableSortedSet.of("3.3.3.3", "1.1.1.1:0.0.0.8"), "ag2")))
+            .build();
+
+    ReferenceBook book2 =
+        ReferenceBook.builder("book2")
+            .setAddressGroups(
+                ImmutableList.of(
+                    new AddressGroup(ImmutableSortedSet.of("3.3.3.3/3", "4.4.4.4"), "ag1")))
+            .build();
+
+    Map<String, Configuration> configs = new HashMap<>();
+    Configuration config = createTestConfiguration("node", ConfigurationFormat.HOST);
+
+    config.getGeneratedReferenceBooks().put(book1.getName(), book1);
+    config.getGeneratedReferenceBooks().put(book2.getName(), book2);
+
+    configs.put("node", config);
+
+    assertThat(
+        getPrefixes(configs), equalTo(ImmutableSet.of("1.1.1.1/1", "2.2.2.2/2", "3.3.3.3/3")));
+  }
+
+  @Test
+  public void testGetRoutingPolicyNames() {
+    String policy1 = "policy1";
+    String policy2 = "policy2";
+
+    RoutingPolicy routingPolicy1 = RoutingPolicy.builder().setName(policy1).build();
+    RoutingPolicy routingPolicy2 = RoutingPolicy.builder().setName(policy2).build();
+
+    Map<String, Configuration> configs = new HashMap<>();
+    Configuration config = createTestConfiguration("config1", ConfigurationFormat.HOST);
+    config.setRoutingPolicies(
+        ImmutableSortedMap.of(policy1, routingPolicy1, policy2, routingPolicy2));
+    configs.put("config1", config);
+
+    assertThat(getRoutingPolicyNames(configs), equalTo(ImmutableSet.of(policy1, policy2)));
+  }
+
+  @Test
   public void testGetStructureNames() {
     String nodeName = "nodeName";
 
@@ -211,7 +291,8 @@ public final class CompletionMetadataUtilsTest {
     config.setIkePhase1Proposals(
         ImmutableSortedMap.of(ikePhase1ProposalName, new IkePhase1Proposal(ikePhase1ProposalName)));
     config.setIpAccessLists(
-        ImmutableSortedMap.of(ipAccessListName, new IpAccessList(ipAccessListName)));
+        ImmutableSortedMap.of(
+            ipAccessListName, IpAccessList.builder().setName(ipAccessListName).build()));
     config.setIp6AccessLists(
         ImmutableSortedMap.of(ip6AccessListName, new Ip6AccessList(ip6AccessListName)));
     config.setIpsecPhase2Policies(

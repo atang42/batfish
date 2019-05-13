@@ -2,10 +2,12 @@ package org.batfish.specifier;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
 
+import com.google.common.base.MoreObjects;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 import org.batfish.datamodel.AclIpSpace;
 import org.batfish.datamodel.EmptyIpSpace;
 import org.batfish.datamodel.IpSpace;
@@ -49,26 +51,32 @@ public final class ReferenceAddressGroupIpSpaceSpecifier implements IpSpaceSpeci
     return IpSpaceAssignment.builder().assign(locations, ipSpace).build();
   }
 
-  /* Returns the IpSpace in the address group. Returns the empty space if the addressgroup is empty */
+  /**
+   * Computes the IpSpace in the address group. Returns {@link EmptyIpSpace} if the addressgroup is
+   * empty.
+   *
+   * @throws NoSuchElementException if {@code bookName} does not exist or if {@code
+   *     addressGroupName} or one of its descendants do not exist in the Reference Book.
+   */
+  @Nonnull
   public static IpSpace computeIpSpace(
       String addressGroupName, String bookName, SpecifierContext ctxt) {
-    AddressGroup addressGroup =
-        ctxt.getReferenceBook(bookName)
-            .orElseThrow(
-                () -> new NoSuchElementException("ReferenceBook '" + bookName + "' not found"))
-            .getAddressGroup(addressGroupName)
-            .orElseThrow(
-                () ->
-                    new NoSuchElementException(
-                        String.format(
-                            "AddressGroup '%s' not found in ReferenceBook '%s'",
-                            addressGroupName, bookName)));
-
     return firstNonNull(
         AclIpSpace.union(
-            addressGroup.getAddresses().stream()
-                .map(add -> new IpWildcard(add).toIpSpace())
+            ctxt.getReferenceBook(bookName)
+                .orElseThrow(
+                    () -> new NoSuchElementException("ReferenceBook '" + bookName + "' not found"))
+                .getAddressesRecursive(addressGroupName).stream()
+                .map(IpWildcard::toIpSpace)
                 .collect(Collectors.toList())),
         EmptyIpSpace.INSTANCE);
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(getClass())
+        .add("addressGroup", _addressGroupName)
+        .add("referenceBook", _bookName)
+        .toString();
   }
 }

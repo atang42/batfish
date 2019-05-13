@@ -1,6 +1,7 @@
 package org.batfish.grammar.cisco;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
+import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Comparator.naturalOrder;
 import static java.util.stream.Collectors.toCollection;
 import static org.batfish.datamodel.ConfigurationFormat.ARISTA;
@@ -87,6 +88,10 @@ import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_INHERITED
 import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_INHERITED_PEER_POLICY;
 import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_INHERITED_SESSION;
 import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_LISTEN_RANGE_PEER_GROUP;
+import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS6_LIST_IN;
+import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS6_LIST_OUT;
+import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS_LIST_IN;
+import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS_LIST_OUT;
 import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_NEIGHBOR_FILTER_AS_PATH_ACCESS_LIST;
 import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_NEIGHBOR_PEER_GROUP;
 import static org.batfish.representation.cisco.CiscoStructureUsage.BGP_NEIGHBOR_REMOTE_AS_ROUTE_MAP;
@@ -210,6 +215,8 @@ import static org.batfish.representation.cisco.CiscoStructureUsage.OBJECT_NAT_MA
 import static org.batfish.representation.cisco.CiscoStructureUsage.OBJECT_NAT_MAPPED_SOURCE_NETWORK_OBJECT_GROUP;
 import static org.batfish.representation.cisco.CiscoStructureUsage.OBJECT_NAT_REAL_INTERFACE;
 import static org.batfish.representation.cisco.CiscoStructureUsage.OBJECT_NAT_REAL_SOURCE_NETWORK_OBJECT;
+import static org.batfish.representation.cisco.CiscoStructureUsage.OSPF6_DISTRIBUTE_LIST_PREFIX_LIST_IN;
+import static org.batfish.representation.cisco.CiscoStructureUsage.OSPF6_DISTRIBUTE_LIST_PREFIX_LIST_OUT;
 import static org.batfish.representation.cisco.CiscoStructureUsage.OSPF_AREA_FILTER_LIST;
 import static org.batfish.representation.cisco.CiscoStructureUsage.OSPF_AREA_INTERFACE;
 import static org.batfish.representation.cisco.CiscoStructureUsage.OSPF_DEFAULT_ORIGINATE_ROUTE_MAP;
@@ -305,6 +312,7 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
@@ -340,6 +348,7 @@ import org.batfish.datamodel.IcmpType;
 import org.batfish.datamodel.IkeAuthenticationMethod;
 import org.batfish.datamodel.IkeHashingAlgorithm;
 import org.batfish.datamodel.IntegerSpace;
+import org.batfish.datamodel.IntegerSpace.Builder;
 import org.batfish.datamodel.InterfaceAddress;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Ip6;
@@ -373,6 +382,7 @@ import org.batfish.datamodel.SwitchportEncapsulationType;
 import org.batfish.datamodel.SwitchportMode;
 import org.batfish.datamodel.TcpFlags;
 import org.batfish.datamodel.TcpFlagsMatchConditions;
+import org.batfish.datamodel.bgp.community.StandardCommunity;
 import org.batfish.datamodel.eigrp.EigrpMetric;
 import org.batfish.datamodel.eigrp.EigrpProcessMode;
 import org.batfish.datamodel.isis.IsisInterfaceMode;
@@ -488,6 +498,7 @@ import org.batfish.grammar.cisco.CiscoParser.Bgp_advertise_inactive_rb_stanzaCon
 import org.batfish.grammar.cisco.CiscoParser.Bgp_asnContext;
 import org.batfish.grammar.cisco.CiscoParser.Bgp_confederation_rb_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Bgp_listen_range_rb_stanzaContext;
+import org.batfish.grammar.cisco.CiscoParser.Bgp_redistribute_internal_rb_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Boolean_and_rp_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Boolean_apply_rp_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Boolean_as_path_in_rp_stanzaContext;
@@ -620,6 +631,7 @@ import org.batfish.grammar.cisco.CiscoParser.Filter_list_bgp_tailContext;
 import org.batfish.grammar.cisco.CiscoParser.Flan_interfaceContext;
 import org.batfish.grammar.cisco.CiscoParser.Flan_unitContext;
 import org.batfish.grammar.cisco.CiscoParser.Hash_commentContext;
+import org.batfish.grammar.cisco.CiscoParser.Icmp_inline_object_typeContext;
 import org.batfish.grammar.cisco.CiscoParser.Icmp_object_typeContext;
 import org.batfish.grammar.cisco.CiscoParser.If_autostateContext;
 import org.batfish.grammar.cisco.CiscoParser.If_bandwidthContext;
@@ -676,6 +688,7 @@ import org.batfish.grammar.cisco.CiscoParser.If_switchport_trunk_allowedContext;
 import org.batfish.grammar.cisco.CiscoParser.If_switchport_trunk_encapsulationContext;
 import org.batfish.grammar.cisco.CiscoParser.If_switchport_trunk_group_eosContext;
 import org.batfish.grammar.cisco.CiscoParser.If_switchport_trunk_nativeContext;
+import org.batfish.grammar.cisco.CiscoParser.If_vlanContext;
 import org.batfish.grammar.cisco.CiscoParser.If_vrf_memberContext;
 import org.batfish.grammar.cisco.CiscoParser.If_vrrpContext;
 import org.batfish.grammar.cisco.CiscoParser.If_zone_memberContext;
@@ -924,6 +937,7 @@ import org.batfish.grammar.cisco.CiscoParser.Reaf_interfaceContext;
 import org.batfish.grammar.cisco.CiscoParser.Reaf_interface_defaultContext;
 import org.batfish.grammar.cisco.CiscoParser.Reafi_passive_interfaceContext;
 import org.batfish.grammar.cisco.CiscoParser.Rec_address_familyContext;
+import org.batfish.grammar.cisco.CiscoParser.Rec_metric_weightsContext;
 import org.batfish.grammar.cisco.CiscoParser.Redistribute_aggregate_bgp_tailContext;
 import org.batfish.grammar.cisco.CiscoParser.Redistribute_connected_bgp_tailContext;
 import org.batfish.grammar.cisco.CiscoParser.Redistribute_connected_is_stanzaContext;
@@ -935,6 +949,8 @@ import org.batfish.grammar.cisco.CiscoParser.Redistribute_static_is_stanzaContex
 import org.batfish.grammar.cisco.CiscoParser.Remote_as_bgp_tailContext;
 import org.batfish.grammar.cisco.CiscoParser.Remove_private_as_bgp_tailContext;
 import org.batfish.grammar.cisco.CiscoParser.Ren_address_familyContext;
+import org.batfish.grammar.cisco.CiscoParser.Ren_metric_weightsContext;
+import org.batfish.grammar.cisco.CiscoParser.Ro6_distribute_listContext;
 import org.batfish.grammar.cisco.CiscoParser.Ro_areaContext;
 import org.batfish.grammar.cisco.CiscoParser.Ro_area_filterlistContext;
 import org.batfish.grammar.cisco.CiscoParser.Ro_area_nssaContext;
@@ -948,7 +964,8 @@ import org.batfish.grammar.cisco.CiscoParser.Ro_maximum_pathsContext;
 import org.batfish.grammar.cisco.CiscoParser.Ro_networkContext;
 import org.batfish.grammar.cisco.CiscoParser.Ro_passive_interfaceContext;
 import org.batfish.grammar.cisco.CiscoParser.Ro_passive_interface_defaultContext;
-import org.batfish.grammar.cisco.CiscoParser.Ro_redistribute_bgpContext;
+import org.batfish.grammar.cisco.CiscoParser.Ro_redistribute_bgp_aristaContext;
+import org.batfish.grammar.cisco.CiscoParser.Ro_redistribute_bgp_ciscoContext;
 import org.batfish.grammar.cisco.CiscoParser.Ro_redistribute_connectedContext;
 import org.batfish.grammar.cisco.CiscoParser.Ro_redistribute_eigrpContext;
 import org.batfish.grammar.cisco.CiscoParser.Ro_redistribute_ripContext;
@@ -1069,6 +1086,7 @@ import org.batfish.grammar.cisco.CiscoParser.Set_origin_rm_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Set_origin_rp_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Set_rp_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Set_tag_rp_stanzaContext;
+import org.batfish.grammar.cisco.CiscoParser.Set_weight_rm_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Set_weight_rp_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Shutdown_bgp_tailContext;
 import org.batfish.grammar.cisco.CiscoParser.Sntp_serverContext;
@@ -1112,6 +1130,7 @@ import org.batfish.grammar.cisco.CiscoParser.Track_interfaceContext;
 import org.batfish.grammar.cisco.CiscoParser.Ts_hostContext;
 import org.batfish.grammar.cisco.CiscoParser.U_passwordContext;
 import org.batfish.grammar.cisco.CiscoParser.U_roleContext;
+import org.batfish.grammar.cisco.CiscoParser.Uint32Context;
 import org.batfish.grammar.cisco.CiscoParser.Unsuppress_map_bgp_tailContext;
 import org.batfish.grammar.cisco.CiscoParser.Update_source_bgp_tailContext;
 import org.batfish.grammar.cisco.CiscoParser.Use_af_group_bgp_tailContext;
@@ -1125,6 +1144,7 @@ import org.batfish.grammar.cisco.CiscoParser.Viaf_vrrpContext;
 import org.batfish.grammar.cisco.CiscoParser.Viafv_addressContext;
 import org.batfish.grammar.cisco.CiscoParser.Viafv_preemptContext;
 import org.batfish.grammar.cisco.CiscoParser.Viafv_priorityContext;
+import org.batfish.grammar.cisco.CiscoParser.Vlan_idContext;
 import org.batfish.grammar.cisco.CiscoParser.Vrf_block_rb_stanzaContext;
 import org.batfish.grammar.cisco.CiscoParser.Vrfd_descriptionContext;
 import org.batfish.grammar.cisco.CiscoParser.Vrrp_interfaceContext;
@@ -1155,6 +1175,8 @@ import org.batfish.representation.cisco.CommunitySetElemHalves;
 import org.batfish.representation.cisco.CommunitySetElemIosRegex;
 import org.batfish.representation.cisco.CryptoMapEntry;
 import org.batfish.representation.cisco.CryptoMapSet;
+import org.batfish.representation.cisco.DistributeList;
+import org.batfish.representation.cisco.DistributeList.DistributeListFilterType;
 import org.batfish.representation.cisco.DynamicIpBgpPeerGroup;
 import org.batfish.representation.cisco.DynamicIpv6BgpPeerGroup;
 import org.batfish.representation.cisco.EigrpProcess;
@@ -1243,6 +1265,7 @@ import org.batfish.representation.cisco.RouteMapSetMetricLine;
 import org.batfish.representation.cisco.RouteMapSetNextHopLine;
 import org.batfish.representation.cisco.RouteMapSetNextHopPeerAddress;
 import org.batfish.representation.cisco.RouteMapSetOriginTypeLine;
+import org.batfish.representation.cisco.RouteMapSetWeightLine;
 import org.batfish.representation.cisco.RoutePolicy;
 import org.batfish.representation.cisco.RoutePolicyApplyStatement;
 import org.batfish.representation.cisco.RoutePolicyBoolean;
@@ -1387,6 +1410,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     return Integer.parseInt(t.getText());
   }
 
+  private static int toInteger(Vlan_idContext ctx) {
+    return Integer.parseInt(ctx.getText(), 10);
+  }
+
   private static String toInterfaceName(Interface_nameContext ctx) {
     StringBuilder name =
         new StringBuilder(
@@ -1419,11 +1446,11 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   }
 
   private static Ip6 toIp6(TerminalNode t) {
-    return new Ip6(t.getText());
+    return Ip6.parse(t.getText());
   }
 
   private static Ip6 toIp6(Token t) {
-    return new Ip6(t.getText());
+    return Ip6.parse(t.getText());
   }
 
   private static long toLong(TerminalNode t) {
@@ -1636,6 +1663,11 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   private String _currentTrackingGroup;
 
   private AristaEosVxlan _eosVxlan;
+
+  /* Set this when moving to different stanzas (e.g., ro_vrf) inside "router ospf" stanza
+   * to correctly retrieve the OSPF process that was being configured prior to switching stanzas
+   */
+  private String _lastKnownOspfProcess;
 
   public CiscoControlPlaneExtractor(
       String text, CiscoCombinedParser parser, ConfigurationFormat format, Warnings warnings) {
@@ -1859,7 +1891,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     } else {
       pushPeer(_currentPeerGroup);
     }
-    if (af.IPV6() != null) {
+    if (af.IPV6() != null || af.VPNV6() != null) {
       _inIpv6BgpPeer = true;
     }
   }
@@ -2149,6 +2181,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
                     n,
                     ctx.community_set_elem_list().elems.stream()
                         .map(this::toCommunitySetElemExpr)
+                        .filter(Objects::nonNull)
                         .collect(ImmutableList.toImmutableList())));
   }
 
@@ -2672,6 +2705,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
 
   @Override
   public void enterNeighbor_flat_rb_stanza(Neighbor_flat_rb_stanzaContext ctx) {
+    if (ctx.ip6 != null) {
+      // Remember we are in IPv6 context so that structure references are identified accordingly
+      _inIpv6BgpPeer = true;
+    }
     // do no further processing for unsupported address families / containers
     if (_currentPeerGroup == _dummyPeerGroup) {
       pushPeer(_dummyPeerGroup);
@@ -3908,14 +3945,18 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   @Override
   public void enterRo_vrf(Ro_vrfContext ctx) {
     Ip routerId = _currentOspfProcess.getRouterId();
+    _lastKnownOspfProcess = _currentOspfProcess.getName();
     _currentVrf = ctx.name.getText();
-    OspfProcess proc = currentVrf().getOspfProcess();
-    if (proc == null) {
-      proc = new OspfProcess(_currentOspfProcess.getName(), _format);
-      currentVrf().setOspfProcess(proc);
-      proc.setRouterId(routerId);
-    }
-    _currentOspfProcess = proc;
+    _currentOspfProcess =
+        currentVrf()
+            .getOspfProcesses()
+            .computeIfAbsent(
+                _currentOspfProcess.getName(),
+                (procName) -> {
+                  OspfProcess p = new OspfProcess(procName, _format);
+                  p.setRouterId(routerId);
+                  return p;
+                });
   }
 
   @Override
@@ -4300,9 +4341,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     if (ctx.vrf != null) {
       _currentVrf = ctx.vrf.getText();
     }
-    OspfProcess proc = new OspfProcess(procName, _format);
-    currentVrf().setOspfProcess(proc);
-    _currentOspfProcess = proc;
+    _currentOspfProcess =
+        currentVrf()
+            .getOspfProcesses()
+            .computeIfAbsent(procName, (pName) -> new OspfProcess(pName, _format));
   }
 
   @Override
@@ -4662,10 +4704,12 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   @Override
   public void exitAdvertise_map_bgp_tail(Advertise_map_bgp_tailContext ctx) {
     // TODO: https://github.com/batfish/batfish/issues/1836
+    todo(ctx, "BGP advertise-map is not currently supported");
     String advertiseMapName = ctx.am_name.getText();
     _configuration.referenceStructure(
         ROUTE_MAP, advertiseMapName, BGP_ROUTE_MAP_ADVERTISE, ctx.am_name.getStart().getLine());
     if (ctx.em_name != null) {
+      todo(ctx, "BGP exist-map is not currently supported");
       String existMapName = ctx.em_name.getText();
       _configuration.referenceStructure(
           ROUTE_MAP, existMapName, BGP_ADVERTISE_MAP_EXIST_MAP, ctx.em_name.getStart().getLine());
@@ -4818,6 +4862,12 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
         pg.setRemoteAs(remoteAs);
       }
     }
+  }
+
+  @Override
+  public void exitBgp_redistribute_internal_rb_stanza(
+      Bgp_redistribute_internal_rb_stanzaContext ctx) {
+    todo(ctx); // TODO(https://github.com/batfish/batfish/issues/3230)
   }
 
   @Override
@@ -5242,7 +5292,33 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
 
   @Override
   public void exitDistribute_list_bgp_tail(Distribute_list_bgp_tailContext ctx) {
-    todo(ctx);
+    // Note: Mutually exclusive with Prefix_list_bgp_tail
+    // https://www.cisco.com/c/en/us/support/docs/ip/border-gateway-protocol-bgp/5816-bgpfaq-5816.html
+    String name = ctx.list_name.getText();
+    int line = ctx.list_name.getStart().getLine();
+    CiscoStructureUsage usage;
+    if (_inIpv6BgpPeer) {
+      // TODO Support IPv6 access lists in BGP distribute-lists
+      if (ctx.IN() != null) {
+        usage = BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS6_LIST_IN;
+      } else if (ctx.OUT() != null) {
+        usage = BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS6_LIST_OUT;
+      } else {
+        throw new BatfishException("Invalid direction for BGP distribute-list");
+      }
+    } else {
+      if (ctx.IN() != null) {
+        _currentPeerGroup.setInboundIpAccessList(name);
+        usage = BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS_LIST_IN;
+      } else if (ctx.OUT() != null) {
+        _currentPeerGroup.setOutboundIpAccessList(name);
+        usage = BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS_LIST_OUT;
+      } else {
+        throw new BatfishException("Invalid direction for BGP distribute-list");
+      }
+    }
+    CiscoStructureType type = _inIpv6BgpPeer ? IPV6_ACCESS_LIST : IPV4_ACCESS_LIST;
+    _configuration.referenceStructure(type, name, usage, line);
   }
 
   @Override
@@ -5592,6 +5668,17 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       _configuration.referenceStructure(
           SERVICE_OBJECT, name, EXTENDED_ACCESS_LIST_SERVICE_OBJECT, line);
       return new ServiceObjectServiceSpecifier(name);
+    } else if (ctx.inline_obj != null) {
+      // ASA inline service object for a particular protocol
+      return SimpleExtendedAccessListServiceSpecifier.builder()
+          .setProtocol(toIpProtocol(ctx.inline_obj))
+          .build();
+    } else if (ctx.inline_obj_icmp != null) {
+      // ASA inline service object for a particular ICMP type
+      return SimpleExtendedAccessListServiceSpecifier.builder()
+          .setProtocol(IpProtocol.ICMP)
+          .setIcmpType(toIcmpType(ctx.inline_obj_icmp))
+          .build();
     } else {
       return convProblem(
           AccessListServiceSpecifier.class, ctx, UnimplementedAccessListServiceSpecifier.INSTANCE);
@@ -5821,6 +5908,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
         BGP_NEIGHBOR_FILTER_AS_PATH_ACCESS_LIST,
         ctx.getStart().getLine());
     // TODO: Handle filter-list in batfish
+    todo(ctx);
   }
 
   @Override
@@ -5985,6 +6073,12 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
         currentInterface.setStandbyAddress(standbyAddress);
       }
     }
+    if (ctx.ROUTE_PREFERENCE() != null) {
+      todo(ctx, "Unsupported: route-preference declared in interface IP address");
+    }
+    if (ctx.TAG() != null) {
+      todo(ctx, "Unsupported: tag declared in interface IP address");
+    }
   }
 
   @Override
@@ -6091,8 +6185,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   @Override
   public void exitIf_ip_ospf_area(If_ip_ospf_areaContext ctx) {
     long area = toInteger(ctx.area);
+    String ospfProcessName = ctx.procname.getText();
     for (Interface iface : _currentInterfaces) {
       iface.setOspfArea(area);
+      iface.setOspfProcess(ospfProcessName);
     }
   }
 
@@ -6147,9 +6243,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   @Override
   public void exitIf_ip_policy(If_ip_policyContext ctx) {
     String policyName = ctx.name.getText();
-    for (Interface currentInterface : _currentInterfaces) {
-      currentInterface.setRoutingPolicy(policyName);
-    }
+    todo(ctx, "PBR is not supported");
+    //    for (Interface currentInterface : _currentInterfaces) {
+    //      currentInterface.setRoutingPolicy(policyName);
+    //    }
     _configuration.referenceStructure(
         ROUTE_MAP, policyName, INTERFACE_POLICY_ROUTING_MAP, ctx.name.getLine());
   }
@@ -6172,8 +6269,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   @Override
   public void exitIf_ip_router_ospf_area(If_ip_router_ospf_areaContext ctx) {
     long area = toIp(ctx.area).asLong();
+    String ospfProcessName = ctx.procname.getText();
     for (Interface iface : _currentInterfaces) {
       iface.setOspfArea(area);
+      iface.setOspfProcess(ospfProcessName);
     }
   }
 
@@ -6450,7 +6549,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   @Override
   public void exitIf_switchport_trunk_allowed(If_switchport_trunk_allowedContext ctx) {
     List<SubRange> ranges = toRange(ctx.r);
-    IntegerSpace allowed = IntegerSpace.builder().includingAll(ranges).build();
+    IntegerSpace allowed = IntegerSpace.builder().includingAllSubRanges(ranges).build();
     for (Interface currentInterface : _currentInterfaces) {
       if (ctx.ADD() != null) {
         IntegerSpace current = firstNonNull(currentInterface.getAllowedVlans(), IntegerSpace.EMPTY);
@@ -6485,6 +6584,12 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     for (Interface currentInterface : _currentInterfaces) {
       currentInterface.setNativeVlan(vlan);
     }
+  }
+
+  @Override
+  public void exitIf_vlan(If_vlanContext ctx) {
+    int vlan = toInteger(ctx.vlan);
+    _currentInterfaces.forEach(iface -> iface.setEncapsulationVlan(vlan));
   }
 
   @Override
@@ -6748,7 +6853,14 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     LineAction action = toLineAction(ctx.ala);
     List<Long> communities = new ArrayList<>();
     for (CommunityContext communityCtx : ctx.communities) {
-      long community = toLong(communityCtx);
+      Long community = toLong(communityCtx);
+      if (community == null) {
+        _w.redFlag(
+            String.format(
+                "Invalid standard community: '%s' in: '%s'",
+                communityCtx.getText(), getFullText(ctx)));
+        return;
+      }
       communities.add(community);
     }
     StandardCommunityListLine line = new StandardCommunityListLine(action, communities);
@@ -7577,6 +7689,9 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     // In process context
     Ip address = toIp(ctx.address);
     Ip mask = (ctx.mask != null) ? toIp(ctx.mask) : address.getClassMask().inverted();
+    if (_format == CISCO_ASA) {
+      mask = mask.inverted();
+    }
     _currentEigrpProcess.getWildcardNetworks().add(new IpWildcard(address, mask));
   }
 
@@ -7588,7 +7703,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       return;
     }
     boolean passive = (ctx.NO() == null);
-    String interfaceName = getCanonicalInterfaceName(ctx.i.getText());
+    String interfaceName = ctx.i.getText(); // Note: Interface alias is not canonicalized for ASA
+    if (_format != CISCO_ASA) {
+      interfaceName = getCanonicalInterfaceName(interfaceName);
+    }
     _currentEigrpProcess.getInterfacePassiveStatus().put(interfaceName, passive);
     _configuration.referenceStructure(
         INTERFACE, interfaceName, EIGRP_PASSIVE_INTERFACE, ctx.i.getStart().getLine());
@@ -7815,8 +7933,20 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   }
 
   @Override
+  public void exitRec_metric_weights(Rec_metric_weightsContext ctx) {
+    // See https://github.com/batfish/batfish/issues/1946
+    todo(ctx);
+  }
+
+  @Override
   public void exitRen_address_family(Ren_address_familyContext ctx) {
     exitEigrpProcess(ctx);
+  }
+
+  @Override
+  public void exitRen_metric_weights(Ren_metric_weightsContext ctx) {
+    // See https://github.com/batfish/batfish/issues/1946
+    todo(ctx);
   }
 
   @Override
@@ -8204,17 +8334,28 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   public void exitPrefix_list_bgp_tail(Prefix_list_bgp_tailContext ctx) {
     String listName = ctx.list_name.getText();
     int line = ctx.list_name.getLine();
-    CiscoStructureType type = _inIpv6BgpPeer ? PREFIX6_LIST : PREFIX_LIST;
     CiscoStructureUsage usage;
-    if (ctx.IN() != null) {
-      _currentPeerGroup.setInboundPrefixList(listName);
-      usage = _inIpv6BgpPeer ? BGP_INBOUND_PREFIX6_LIST : BGP_INBOUND_PREFIX_LIST;
-    } else if (ctx.OUT() != null) {
-      _currentPeerGroup.setOutboundPrefixList(listName);
-      usage = _inIpv6BgpPeer ? BGP_OUTBOUND_PREFIX6_LIST : BGP_OUTBOUND_PREFIX_LIST;
+    if (_inIpv6BgpPeer) {
+      // TODO Support IPv6 prefix-lists in BGP
+      if (ctx.IN() != null) {
+        usage = BGP_INBOUND_PREFIX6_LIST;
+      } else if (ctx.OUT() != null) {
+        usage = BGP_OUTBOUND_PREFIX6_LIST;
+      } else {
+        throw new BatfishException("Invalid direction for BGP prefix-list");
+      }
     } else {
-      throw new BatfishException("bad direction");
+      if (ctx.IN() != null) {
+        _currentPeerGroup.setInboundPrefixList(listName);
+        usage = BGP_INBOUND_PREFIX_LIST;
+      } else if (ctx.OUT() != null) {
+        _currentPeerGroup.setOutboundPrefixList(listName);
+        usage = BGP_OUTBOUND_PREFIX_LIST;
+      } else {
+        throw new BatfishException("Invalid direction for BGP prefix-list");
+      }
     }
+    CiscoStructureType type = _inIpv6BgpPeer ? PREFIX6_LIST : PREFIX_LIST;
     _configuration.referenceStructure(type, listName, usage, line);
   }
 
@@ -8492,7 +8633,6 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       settings.setDefaultInformationOriginate(true);
     }
     if (ctx.no_redistribution != null) {
-      todo(ctx);
       settings.setNoRedistribution(true);
     }
     if (ctx.no_summary != null) {
@@ -8513,7 +8653,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     Long cost = ctx.cost == null ? null : toLong(ctx.cost);
 
     Map<Prefix, OspfAreaSummary> area =
-        currentVrf().getOspfProcess().getSummaries().computeIfAbsent(areaNum, k -> new TreeMap<>());
+        _currentOspfProcess.getSummaries().computeIfAbsent(areaNum, k -> new TreeMap<>());
     area.put(prefix, new OspfAreaSummary(advertise, cost));
   }
 
@@ -8569,23 +8709,38 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     boolean in = ctx.IN() != null;
     CiscoStructureType type;
     CiscoStructureUsage usage;
+    DistributeListFilterType filterType;
     if (ctx.PREFIX() != null) {
       type = PREFIX_LIST;
+      filterType = DistributeListFilterType.PREFIX_LIST;
       usage = in ? OSPF_DISTRIBUTE_LIST_PREFIX_LIST_IN : OSPF_DISTRIBUTE_LIST_PREFIX_LIST_OUT;
     } else if (ctx.ROUTE_MAP() != null) {
+      filterType = DistributeListFilterType.ROUTE_MAP;
       type = ROUTE_MAP;
       usage = in ? OSPF_DISTRIBUTE_LIST_ROUTE_MAP_IN : OSPF_DISTRIBUTE_LIST_ROUTE_MAP_OUT;
     } else {
+      filterType = DistributeListFilterType.ACCESS_LIST;
       type = IP_ACCESS_LIST;
       usage = in ? OSPF_DISTRIBUTE_LIST_ACCESS_LIST_IN : OSPF_DISTRIBUTE_LIST_ACCESS_LIST_OUT;
     }
     _configuration.referenceStructure(type, name, usage, line);
 
+    DistributeList distributeList = new DistributeList(name, filterType);
     if (ctx.iname != null) {
       String ifaceName = getCanonicalInterfaceName(ctx.iname.getText());
       _configuration.referenceStructure(INTERFACE, ifaceName, usage, line);
+      if (in) {
+        _currentOspfProcess.getInboundInterfaceDistributeLists().put(ifaceName, distributeList);
+      } else {
+        _currentOspfProcess.getOutboundInterfaceDistributeLists().put(ifaceName, distributeList);
+      }
+    } else {
+      if (in) {
+        _currentOspfProcess.setInboundGlobalDistributeList(distributeList);
+      } else {
+        _currentOspfProcess.setOutboundGlobalDistributeList(distributeList);
+      }
     }
-
     todo(ctx);
   }
 
@@ -8656,7 +8811,24 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   }
 
   @Override
-  public void exitRo_redistribute_bgp(Ro_redistribute_bgpContext ctx) {
+  public void exitRo_redistribute_bgp_arista(Ro_redistribute_bgp_aristaContext ctx) {
+    OspfProcess proc = _currentOspfProcess;
+    RoutingProtocol sourceProtocol = RoutingProtocol.BGP;
+    OspfRedistributionPolicy r = new OspfRedistributionPolicy(sourceProtocol);
+    proc.getRedistributionPolicies().put(sourceProtocol, r);
+    if (ctx.map != null) {
+      String map = ctx.map.getText();
+      int mapLine = ctx.map.getLine();
+      r.setRouteMap(map);
+      r.setRouteMapLine(mapLine);
+      _configuration.referenceStructure(ROUTE_MAP, map, OSPF_REDISTRIBUTE_BGP_MAP, mapLine);
+    }
+    r.setOspfMetricType(OspfRedistributionPolicy.DEFAULT_METRIC_TYPE);
+    r.setOnlyClassfulRoutes(false);
+  }
+
+  @Override
+  public void exitRo_redistribute_bgp_cisco(Ro_redistribute_bgp_ciscoContext ctx) {
     OspfProcess proc = _currentOspfProcess;
     RoutingProtocol sourceProtocol = RoutingProtocol.BGP;
     OspfRedistributionPolicy r = new OspfRedistributionPolicy(sourceProtocol);
@@ -8786,7 +8958,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
 
   @Override
   public void exitRo_rfc1583_compatibility(Ro_rfc1583_compatibilityContext ctx) {
-    currentVrf().getOspfProcess().setRfc1583Compatible(ctx.NO() == null);
+    _currentOspfProcess.setRfc1583Compatible(ctx.NO() == null);
   }
 
   @Override
@@ -8798,7 +8970,23 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   @Override
   public void exitRo_vrf(Ro_vrfContext ctx) {
     _currentVrf = Configuration.DEFAULT_VRF_NAME;
-    _currentOspfProcess = currentVrf().getOspfProcess();
+    _currentOspfProcess = currentVrf().getOspfProcesses().get(_lastKnownOspfProcess);
+    _lastKnownOspfProcess = null;
+  }
+
+  @Override
+  public void exitRo6_distribute_list(Ro6_distribute_listContext ctx) {
+    String name = ctx.name.getText();
+    int line = ctx.name.getStart().getLine();
+    boolean in = ctx.IN() != null;
+    CiscoStructureUsage usage =
+        in ? OSPF6_DISTRIBUTE_LIST_PREFIX_LIST_IN : OSPF6_DISTRIBUTE_LIST_PREFIX_LIST_OUT;
+    _configuration.referenceStructure(PREFIX6_LIST, name, usage, line);
+
+    if (ctx.iname != null) {
+      String ifaceName = getCanonicalInterfaceName(ctx.iname.getText());
+      _configuration.referenceStructure(INTERFACE, ifaceName, usage, line);
+    }
   }
 
   @Override
@@ -8813,10 +9001,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     Long cost = ctx.cost == null ? null : toLong(ctx.cost);
 
     Map<Prefix, OspfAreaSummary> area =
-        currentVrf()
-            .getOspfProcess()
-            .getSummaries()
-            .computeIfAbsent(_currentOspfArea, k -> new TreeMap<>());
+        _currentOspfProcess.getSummaries().computeIfAbsent(_currentOspfArea, k -> new TreeMap<>());
     area.put(prefix, new OspfAreaSummary(advertise, cost));
   }
 
@@ -9480,12 +9665,18 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
 
   @Override
   public void exitSet_community_additive_rm_stanza(Set_community_additive_rm_stanzaContext ctx) {
-    List<Long> commList = new ArrayList<>();
+    ImmutableList.Builder<StandardCommunity> builder = ImmutableList.builder();
     for (CommunityContext c : ctx.communities) {
-      long community = toLong(c);
-      commList.add(community);
+      Long community = toLong(c);
+      if (community == null) {
+        _w.redFlag(
+            String.format(
+                "Invalid standard community: '%s' in: '%s'", c.getText(), getFullText(ctx)));
+        return;
+      }
+      builder.add(StandardCommunity.of(community));
     }
-    RouteMapSetAdditiveCommunityLine line = new RouteMapSetAdditiveCommunityLine(commList);
+    RouteMapSetAdditiveCommunityLine line = new RouteMapSetAdditiveCommunityLine(builder.build());
     _currentRouteMapClause.addSetLine(line);
   }
 
@@ -9533,7 +9724,13 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   public void exitSet_community_rm_stanza(Set_community_rm_stanzaContext ctx) {
     List<Long> commList = new ArrayList<>();
     for (CommunityContext c : ctx.communities) {
-      long community = toLong(c);
+      Long community = toLong(c);
+      if (community == null) {
+        _w.redFlag(
+            String.format(
+                "Invalid standard community: '%s' in: '%s'", c.getText(), getFullText(ctx)));
+        return;
+      }
       commList.add(community);
     }
     RouteMapSetCommunityLine line = new RouteMapSetCommunityLine(commList);
@@ -9580,6 +9777,12 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   public void exitSet_origin_rm_stanza(Set_origin_rm_stanzaContext ctx) {
     OriginExpr originExpr = toOriginExpr(ctx.origin_expr_literal());
     RouteMapSetLine line = new RouteMapSetOriginTypeLine(originExpr);
+    _currentRouteMapClause.addSetLine(line);
+  }
+
+  @Override
+  public void exitSet_weight_rm_stanza(Set_weight_rm_stanzaContext ctx) {
+    RouteMapSetWeightLine line = new RouteMapSetWeightLine(toInteger(ctx.DEC()));
     _currentRouteMapClause.addSetLine(line);
   }
 
@@ -9907,6 +10110,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     String name = ctx.mapname.getText();
     _configuration.referenceStructure(
         ROUTE_MAP, name, BGP_ROUTE_MAP_UNSUPPRESS, ctx.getStart().getLine());
+    todo(ctx, "BGP unusuppress-map is not currently supported");
   }
 
   @Override
@@ -10124,7 +10328,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
 
   @Override
   public void processParseTree(ParserRuleContext tree) {
-    ParseTreeWalker walker = new BatfishParseTreeWalker();
+    ParseTreeWalker walker = new BatfishParseTreeWalker(_parser);
     walker.walk(this, tree);
   }
 
@@ -10201,6 +10405,8 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     return new ExplicitAsPathSet(elems);
   }
 
+  @Nullable
+  @SuppressWarnings("unused")
   private EigrpMetric toEigrpMetric(
       ParserRuleContext ctx,
       Token ctxBw,
@@ -10212,23 +10418,28 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       return null;
     }
     EigrpMetric.Builder builder = EigrpMetric.builder();
-    double bandwidth = toLong(ctxBw) * 1000.0D;
-    builder.setBandwidth(bandwidth);
-    double delay = toLong(ctxDelay) * 1E7;
-    builder.setDelay(delay);
-    int reliability = toInteger(ctxReliability);
-    if (reliability != 0) {
-      todo(ctx);
-    }
-    int effBw = toInteger(ctxEffBw);
-    if (effBw != 0) {
-      todo(ctx);
-    }
-    int mtu = toInteger(ctxMtu);
-    if (mtu != 0) {
-      todo(ctx);
-    }
 
+    long bandwidthLong = toLong(ctxBw);
+    if (bandwidthLong < 1 || bandwidthLong >= (1L << 32)) {
+      _w.redFlag("EIGRP metric has invalid bandwidth");
+      return null;
+    }
+    double bandwidth = bandwidthLong * 1000.0D;
+    builder.setBandwidth(bandwidth);
+
+    long delayLong = toLong(ctxDelay);
+    if (delayLong < 1 || delayLong >= (1L << 32)) {
+      _w.redFlag("EIGRP metric has invalid delay");
+      return null;
+    }
+    double delay = delayLong * 1E7;
+    builder.setDelay(delay);
+
+    /*
+     * The other three metrics (reliability, load, and MTU) may be non-zero but are only used if
+     * the K constants are configured.
+     * See https://github.com/batfish/batfish/issues/1946
+     */
     builder.setMode(_currentEigrpProcess.getMode());
     return builder.build();
   }
@@ -10278,18 +10489,25 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     }
   }
 
-  private CommunitySetElem toCommunitySetElemExpr(Community_set_elemContext ctx) {
+  private @Nullable CommunitySetElem toCommunitySetElemExpr(Community_set_elemContext ctx) {
     if (ctx.prefix != null) {
       CommunitySetElemHalfExpr prefix = toCommunitySetElemHalfExpr(ctx.prefix);
       CommunitySetElemHalfExpr suffix = toCommunitySetElemHalfExpr(ctx.suffix);
       return new CommunitySetElemHalves(prefix, suffix);
     } else if (ctx.community() != null) {
-      long value = toLong(ctx.community());
+      Long value = toLong(ctx.community());
+      if (value == null) {
+        _w.redFlag(
+            String.format(
+                "Invalid standard community: '%s' in: '%s'",
+                ctx.community().getText(), getFullText(ctx)));
+        return convProblem(CommunitySetElem.class, ctx, null);
+      }
       return new CommunitySetElemHalves(value);
     } else if (ctx.IOS_REGEX() != null) {
       return new CommunitySetElemIosRegex(unquote(ctx.COMMUNITY_SET_REGEX().getText()));
     } else {
-      throw convError(CommunitySetElem.class, ctx);
+      return convProblem(CommunitySetElem.class, ctx, null);
     }
   }
 
@@ -10318,6 +10536,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
 
   private void todo(ParserRuleContext ctx) {
     _w.todo(ctx, getFullText(ctx), _parser);
+  }
+
+  private void todo(ParserRuleContext ctx, String message) {
+    _w.addWarning(ctx, getFullText(ctx), _parser, message);
   }
 
   private DiffieHellmanGroup toDhGroup(Dh_groupContext ctx) {
@@ -10562,6 +10784,51 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     }
   }
 
+  // Handle ASA style ICMP codes
+  private Integer toIcmpType(Icmp_inline_object_typeContext ctx) {
+    if (ctx.ICMP_ALTERNATE_ADDRESS() != null) {
+      return IcmpType.ALTERNATE_ADDRESS;
+    } else if (ctx.ICMP_CONVERSION_ERROR() != null) {
+      return IcmpType.CONVERSION_ERROR;
+    } else if (ctx.ICMP_ECHO() != null) {
+      return IcmpType.ECHO_REQUEST;
+    } else if (ctx.ICMP_ECHO_REPLY() != null) {
+      return IcmpType.ECHO_REPLY;
+    } else if (ctx.ICMP_INFORMATION_REPLY() != null) {
+      return IcmpType.INFO_REPLY;
+    } else if (ctx.ICMP_INFORMATION_REQUEST() != null) {
+      return IcmpType.INFO_REQUEST;
+    } else if (ctx.ICMP_MASK_REPLY() != null) {
+      return IcmpType.MASK_REPLY;
+    } else if (ctx.ICMP_MASK_REQUEST() != null) {
+      return IcmpType.MASK_REQUEST;
+    } else if (ctx.ICMP_MOBILE_REDIRECT() != null) {
+      return IcmpType.MOBILE_REDIRECT;
+    } else if (ctx.ICMP_PARAMETER_PROBLEM() != null) {
+      return IcmpType.PARAMETER_PROBLEM;
+    } else if (ctx.ICMP_REDIRECT() != null) {
+      return IcmpType.REDIRECT_MESSAGE;
+    } else if (ctx.ICMP_ROUTER_ADVERTISEMENT() != null) {
+      return IcmpType.ROUTER_ADVERTISEMENT;
+    } else if (ctx.ICMP_ROUTER_SOLICITATION() != null) {
+      return IcmpType.ROUTER_SOLICITATION;
+    } else if (ctx.ICMP_SOURCE_QUENCH() != null) {
+      return IcmpType.SOURCE_QUENCH;
+    } else if (ctx.ICMP_TIME_EXCEEDED() != null) {
+      return IcmpType.TIME_EXCEEDED;
+    } else if (ctx.ICMP_TIMESTAMP_REPLY() != null) {
+      return IcmpType.TIMESTAMP_REPLY;
+    } else if (ctx.ICMP_TIMESTAMP_REQUEST() != null) {
+      return IcmpType.TIMESTAMP_REQUEST;
+    } else if (ctx.ICMP_TRACEROUTE() != null) {
+      return IcmpType.TRACEROUTE;
+    } else if (ctx.ICMP_UNREACHABLE() != null) {
+      return IcmpType.DESTINATION_UNREACHABLE;
+    } else {
+      throw convError(IcmpType.class, ctx);
+    }
+  }
+
   private IntComparator toIntComparator(Int_compContext ctx) {
     if (ctx.EQ() != null || ctx.IS() != null) {
       return IntComparator.EQ;
@@ -10760,19 +11027,13 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     }
   }
 
-  public long toLong(CommunityContext ctx) {
+  public @Nullable Long toLong(CommunityContext ctx) {
     if (ctx.ACCEPT_OWN() != null) {
       return WellKnownCommunity.ACCEPT_OWN;
-    } else if (ctx.COMMUNITY_NUMBER() != null) {
-      String numberText = ctx.com.getText();
-      String[] parts = numberText.split(":");
-      String leftStr = parts[0];
-      String rightStr = parts[1];
-      long left = Long.parseLong(leftStr);
-      long right = Long.parseLong(rightStr);
-      return (left << 16) | right;
-    } else if (ctx.DEC() != null) {
-      return toLong(ctx.com);
+    } else if (ctx.STANDARD_COMMUNITY() != null) {
+      return StandardCommunity.parse(ctx.getText()).asLong();
+    } else if (ctx.uint32() != null) {
+      return toLong(ctx.uint32());
     } else if (ctx.INTERNET() != null) {
       return WellKnownCommunity.INTERNET;
     } else if (ctx.GSHUT() != null) {
@@ -10785,7 +11046,17 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     } else if (ctx.NO_EXPORT() != null) {
       return WellKnownCommunity.NO_EXPORT;
     } else {
-      throw convError(Long.class, ctx);
+      return convProblem(Long.class, ctx, null);
+    }
+  }
+
+  private @Nullable Long toLong(Uint32Context ctx) {
+    try {
+      long val = Long.parseLong(ctx.getText(), 10);
+      checkArgument(0 <= val && val <= 0xFFFFFFFFL);
+      return val;
+    } catch (IllegalArgumentException e) {
+      return convProblem(Long.class, ctx, null);
     }
   }
 
@@ -11277,32 +11548,28 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
   }
 
   private List<SubRange> toPortRanges(Port_specifierContext ps) {
-    List<SubRange> ranges = new ArrayList<>();
+    Builder builder = IntegerSpace.builder();
     if (ps.EQ() != null) {
-      for (PortContext pc : ps.args) {
-        int port = getPortNumber(pc);
-        ranges.add(new SubRange(port, port));
-      }
+      ps.args.forEach(p -> builder.including(getPortNumber(p)));
     } else if (ps.GT() != null) {
       int port = getPortNumber(ps.arg);
-      ranges.add(new SubRange(port + 1, 65535));
+      builder.including(new SubRange(port + 1, 65535));
     } else if (ps.NEQ() != null) {
-      int port = getPortNumber(ps.arg);
-      SubRange beforeRange = new SubRange(0, port - 1);
-      SubRange afterRange = new SubRange(port + 1, 65535);
-      ranges.add(beforeRange);
-      ranges.add(afterRange);
+      builder.including(IntegerSpace.PORTS);
+      ps.args.forEach(p -> builder.excluding(getPortNumber(p)));
     } else if (ps.LT() != null) {
       int port = getPortNumber(ps.arg);
-      ranges.add(new SubRange(0, port - 1));
+      builder.including(new SubRange(0, port - 1));
     } else if (ps.RANGE() != null) {
       int lowPort = getPortNumber(ps.arg1);
       int highPort = getPortNumber(ps.arg2);
-      ranges.add(new SubRange(lowPort, highPort));
+      builder.including(new SubRange(lowPort, highPort));
     } else {
       throw convError(List.class, ps);
     }
-    return ranges;
+    return builder.build().getSubRanges().stream()
+        .sorted() // for output/ref determinism
+        .collect(ImmutableList.toImmutableList());
   }
 
   private RoutePolicyBoolean toRoutePolicyBoolean(Boolean_and_rp_stanzaContext ctx) {
@@ -11533,7 +11800,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     } else {
       // inline
       return new RoutePolicyCommunitySetInline(
-          ctx.elems.stream().map(this::toCommunitySetElemExpr).collect(Collectors.toList()));
+          ctx.elems.stream()
+              .map(this::toCommunitySetElemExpr)
+              .filter(Objects::nonNull)
+              .collect(Collectors.toList()));
     }
   }
 

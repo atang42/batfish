@@ -11,6 +11,7 @@ import static org.batfish.question.routes.RoutesAnswerer.COL_LOCAL_PREF;
 import static org.batfish.question.routes.RoutesAnswerer.COL_METRIC;
 import static org.batfish.question.routes.RoutesAnswerer.COL_NETWORK;
 import static org.batfish.question.routes.RoutesAnswerer.COL_NEXT_HOP;
+import static org.batfish.question.routes.RoutesAnswerer.COL_NEXT_HOP_INTERFACE;
 import static org.batfish.question.routes.RoutesAnswerer.COL_NEXT_HOP_IP;
 import static org.batfish.question.routes.RoutesAnswerer.COL_NODE;
 import static org.batfish.question.routes.RoutesAnswerer.COL_ORIGIN_PROTOCOL;
@@ -34,22 +35,20 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Multiset;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.SortedSet;
 import org.batfish.common.plugin.IBatfishTestAdapter;
 import org.batfish.datamodel.AbstractRoute;
+import org.batfish.datamodel.AbstractRouteDecorator;
+import org.batfish.datamodel.AnnotatedRoute;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.DataPlane;
 import org.batfish.datamodel.GenericRib;
 import org.batfish.datamodel.InterfaceAddress;
 import org.batfish.datamodel.Ip;
-import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.LocalRoute;
 import org.batfish.datamodel.MockDataPlane;
 import org.batfish.datamodel.NetworkConfigurations;
@@ -72,7 +71,7 @@ public class RoutesAnswererTest {
 
   @Test
   public void testGetMainRibRoutesWhenEmptyRib() {
-    SortedMap<String, SortedMap<String, GenericRib<AbstractRoute>>> ribs =
+    SortedMap<String, SortedMap<String, GenericRib<AbstractRouteDecorator>>> ribs =
         ImmutableSortedMap.of(
             "n1", ImmutableSortedMap.of(Configuration.DEFAULT_VRF_NAME, new MockRib<>()));
 
@@ -90,7 +89,7 @@ public class RoutesAnswererTest {
 
   @Test
   public void testHasNetworkFiltering() {
-    SortedMap<String, SortedMap<String, GenericRib<AbstractRoute>>> ribs =
+    SortedMap<String, SortedMap<String, GenericRib<AbstractRouteDecorator>>> ribs =
         ImmutableSortedMap.of(
             "n1",
             ImmutableSortedMap.of(
@@ -124,7 +123,7 @@ public class RoutesAnswererTest {
 
   @Test
   public void testHasNodeFiltering() {
-    SortedMap<String, SortedMap<String, GenericRib<AbstractRoute>>> ribs =
+    SortedMap<String, SortedMap<String, GenericRib<AbstractRouteDecorator>>> ribs =
         ImmutableSortedMap.of(
             "n1",
             ImmutableSortedMap.of(
@@ -151,7 +150,7 @@ public class RoutesAnswererTest {
 
   @Test
   public void testHasProtocolFiltering() {
-    SortedMap<String, SortedMap<String, GenericRib<AbstractRoute>>> ribs =
+    SortedMap<String, SortedMap<String, GenericRib<AbstractRouteDecorator>>> ribs =
         ImmutableSortedMap.of(
             "n1",
             ImmutableSortedMap.of(
@@ -176,7 +175,7 @@ public class RoutesAnswererTest {
 
   @Test
   public void testHasVrfFiltering() {
-    SortedMap<String, SortedMap<String, GenericRib<AbstractRoute>>> ribs =
+    SortedMap<String, SortedMap<String, GenericRib<AbstractRouteDecorator>>> ribs =
         ImmutableSortedMap.of(
             "n1",
             ImmutableSortedMap.of(
@@ -225,6 +224,7 @@ public class RoutesAnswererTest {
             COL_NETWORK,
             COL_NEXT_HOP,
             COL_NEXT_HOP_IP,
+            COL_NEXT_HOP_INTERFACE,
             COL_PROTOCOL,
             COL_METRIC,
             COL_ADMIN_DISTANCE,
@@ -241,6 +241,7 @@ public class RoutesAnswererTest {
             Schema.STRING,
             Schema.IP,
             Schema.STRING,
+            Schema.STRING,
             Schema.INTEGER,
             Schema.INTEGER,
             Schema.INTEGER));
@@ -248,30 +249,28 @@ public class RoutesAnswererTest {
 
   @Test
   public void testGetTableMetadataBGP() {
-    ImmutableList.Builder<String> expectedBuilder = ImmutableList.builder();
-    expectedBuilder.add(
-        COL_NODE,
-        COL_VRF_NAME,
-        COL_NETWORK,
-        COL_NEXT_HOP_IP,
-        COL_PROTOCOL,
-        // BGP attributes
-        COL_AS_PATH,
-        COL_METRIC,
-        COL_LOCAL_PREF,
-        COL_COMMUNITIES,
-        COL_ORIGIN_PROTOCOL,
-        COL_TAG);
-    List<String> expected = expectedBuilder.build();
+    List<String> expected =
+        ImmutableList.of(
+            COL_NODE,
+            COL_VRF_NAME,
+            COL_NETWORK,
+            COL_NEXT_HOP_IP,
+            COL_NEXT_HOP_INTERFACE,
+            COL_PROTOCOL,
+            // BGP attributes
+            COL_AS_PATH,
+            COL_METRIC,
+            COL_LOCAL_PREF,
+            COL_COMMUNITIES,
+            COL_ORIGIN_PROTOCOL,
+            COL_TAG);
 
-    for (RibProtocol rib : Arrays.asList(RibProtocol.BGP, RibProtocol.BGPMP)) {
-      List<ColumnMetadata> columnMetadata = getTableMetadata(rib).getColumnMetadata();
-      assertThat(
-          columnMetadata.stream()
-              .map(ColumnMetadata::getName)
-              .collect(ImmutableList.toImmutableList()),
-          equalTo(expected));
-    }
+    List<ColumnMetadata> columnMetadata = getTableMetadata(RibProtocol.BGP).getColumnMetadata();
+    assertThat(
+        columnMetadata.stream()
+            .map(ColumnMetadata::getName)
+            .collect(ImmutableList.toImmutableList()),
+        equalTo(expected));
   }
 
   @Test
@@ -372,20 +371,18 @@ public class RoutesAnswererTest {
         Schema.INTEGER,
         Schema.INTEGER);
 
-    for (RibProtocol rib : Arrays.asList(RibProtocol.BGP, RibProtocol.BGPMP)) {
-      List<ColumnMetadata> columnMetadata = getDiffTableMetadata(rib).getColumnMetadata();
-      assertThat(
-          columnMetadata.stream()
-              .map(ColumnMetadata::getName)
-              .collect(ImmutableList.toImmutableList()),
-          equalTo(expectedBuilder.build()));
+    List<ColumnMetadata> columnMetadata = getDiffTableMetadata(RibProtocol.BGP).getColumnMetadata();
+    assertThat(
+        columnMetadata.stream()
+            .map(ColumnMetadata::getName)
+            .collect(ImmutableList.toImmutableList()),
+        equalTo(expectedBuilder.build()));
 
-      assertThat(
-          columnMetadata.stream()
-              .map(ColumnMetadata::getSchema)
-              .collect(ImmutableList.toImmutableList()),
-          equalTo(schemaBuilderList.build()));
-    }
+    assertThat(
+        columnMetadata.stream()
+            .map(ColumnMetadata::getSchema)
+            .collect(ImmutableList.toImmutableList()),
+        equalTo(schemaBuilderList.build()));
   }
 
   /** Run through full pipeline (create question and answerer), */
@@ -396,18 +393,20 @@ public class RoutesAnswererTest {
     Configuration c =
         nf.configurationBuilder().setConfigurationFormat(ConfigurationFormat.CISCO_IOS).build();
     Vrf vrf = nf.vrfBuilder().setOwner(c).build();
-    SortedMap<String, SortedMap<String, GenericRib<AbstractRoute>>> ribs =
+    SortedMap<String, SortedMap<String, GenericRib<AnnotatedRoute<AbstractRoute>>>> ribs =
         ImmutableSortedMap.of(
             c.getHostname(),
             ImmutableSortedMap.of(
                 vrf.getName(),
                 new MockRib<>(
                     ImmutableSet.of(
-                        StaticRoute.builder()
-                            .setAdministrativeCost(1)
-                            .setNetwork(Prefix.parse("1.1.1.1/32"))
-                            .setNextHopInterface("Null")
-                            .build()))));
+                        new AnnotatedRoute<>(
+                            StaticRoute.builder()
+                                .setAdministrativeCost(1)
+                                .setNetwork(Prefix.parse("1.1.1.1/32"))
+                                .setNextHopInterface("Null")
+                                .build(),
+                            vrf.getName())))));
     NetworkConfigurations nc = NetworkConfigurations.of(ImmutableMap.of(c.getHostname(), c));
 
     AnswerElement el =
@@ -466,7 +465,7 @@ public class RoutesAnswererTest {
   }
 
   /** Mock rib that only supports one operation: returning pre-set routes. */
-  static class MockRib<R extends AbstractRoute> implements GenericRib<R> {
+  static class MockRib<R extends AbstractRouteDecorator> implements GenericRib<R> {
 
     private static final long serialVersionUID = 1L;
 
@@ -486,22 +485,14 @@ public class RoutesAnswererTest {
     }
 
     @Override
-    public Map<Prefix, IpSpace> getMatchingIps() {
-      throw new UnsupportedOperationException();
+    public Set<AbstractRoute> getRoutes() {
+      return _routes.stream()
+          .map(AbstractRouteDecorator::getAbstractRoute)
+          .collect(ImmutableSet.toImmutableSet());
     }
 
     @Override
-    public SortedSet<Prefix> getPrefixes() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public IpSpace getRoutableIps() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Set<R> getRoutes() {
+    public Set<R> getTypedRoutes() {
       return _routes;
     }
 

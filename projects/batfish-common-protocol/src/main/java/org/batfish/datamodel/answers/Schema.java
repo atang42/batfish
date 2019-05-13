@@ -21,6 +21,8 @@ import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.flow.Trace;
 import org.batfish.datamodel.pojo.Environment;
 import org.batfish.datamodel.pojo.Node;
+import org.batfish.datamodel.questions.BgpRoute;
+import org.batfish.datamodel.questions.BgpRouteDiffs;
 
 public class Schema {
 
@@ -41,6 +43,8 @@ public class Schema {
   private static final Map<String, String> schemaAliases =
       ImmutableMap.<String, String>builder()
           .put("AclTrace", getClassString(AclTrace.class))
+          .put("BgpRoute", getClassString(BgpRoute.class))
+          .put("BgpRouteDiffs", getClassString(BgpRouteDiffs.class))
           .put("Boolean", getClassString(Boolean.class))
           .put("Double", getClassString(Double.class))
           .put("Environment", getClassString(Environment.class))
@@ -60,6 +64,8 @@ public class Schema {
           .build();
 
   public static final Schema ACL_TRACE = new Schema("AclTrace");
+  public static final Schema BGP_ROUTE = new Schema("BgpRoute");
+  public static final Schema BGP_ROUTE_DIFFS = new Schema("BgpRouteDiffs");
   public static final Schema BOOLEAN = new Schema("Boolean");
   public static final Schema DOUBLE = new Schema("Double");
   public static final Schema FILE_LINES = new Schema("FileLines");

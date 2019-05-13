@@ -1,10 +1,13 @@
 package org.batfish.representation.cisco;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
+import static java.util.Collections.singletonList;
 import static org.batfish.datamodel.routing_policy.statement.Statements.RemovePrivateAs;
 import static org.batfish.representation.cisco.CiscoConfiguration.MATCH_DEFAULT_ROUTE;
 import static org.batfish.representation.cisco.CiscoConfiguration.MAX_ADMINISTRATIVE_COST;
 import static org.batfish.representation.cisco.CiscoConfiguration.computeBgpCommonExportPolicyName;
+import static org.batfish.representation.cisco.CiscoConfiguration.computeBgpPeerExportPolicyName;
+import static org.batfish.representation.cisco.CiscoConfiguration.computeNxosBgpDefaultRouteExportPolicyName;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -30,15 +33,18 @@ import org.batfish.datamodel.GeneratedRoute;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.InterfaceAddress;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.LongSpace;
 import org.batfish.datamodel.OriginType;
 import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.Vrf;
+import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
 import org.batfish.datamodel.routing_policy.expr.CallExpr;
 import org.batfish.datamodel.routing_policy.expr.Conjunction;
-import org.batfish.datamodel.routing_policy.expr.Disjunction;
 import org.batfish.datamodel.routing_policy.expr.LiteralOrigin;
+import org.batfish.datamodel.routing_policy.expr.MatchProtocol;
 import org.batfish.datamodel.routing_policy.expr.SelfNextHop;
 import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.SetNextHop;
@@ -266,7 +272,10 @@ final class CiscoNxConversions {
     if (dynamic) {
       newNeighborBuilder =
           BgpPassivePeerConfig.builder()
-              .setRemoteAs(ImmutableList.of(firstNonNull(neighbor.getRemoteAs(), -1L)))
+              .setRemoteAsns(
+                  Optional.ofNullable(neighbor.getRemoteAs())
+                      .map(LongSpace::of)
+                      .orElse(LongSpace.EMPTY))
               .setPeerPrefix(prefix);
     } else {
       newNeighborBuilder =
@@ -317,6 +326,7 @@ final class CiscoNxConversions {
       newNeighborBuilder.setRouteReflectorClient(
           firstNonNull(naf4.getRouteReflectorClient(), Boolean.FALSE));
     }
+    newNeighborBuilder.setIpv4UnicastAddressFamily(Ipv4UnicastAddressFamily.instance());
 
     // Export policy
     List<Statement> exportStatements = new LinkedList<>();
@@ -327,39 +337,18 @@ final class CiscoNxConversions {
       // TODO(handle different types of RemovePrivateAs)
       exportStatements.add(RemovePrivateAs.toStaticStatement());
     }
-    // Peer-specific export policy.
-    Conjunction peerExportGuard = new Conjunction();
-    List<BooleanExpr> peerExportConditions = peerExportGuard.getConjuncts();
-    exportStatements.add(
-        new If(
-            "peer-export policy main conditional: exitAccept if true / exitReject if false",
-            peerExportGuard,
-            ImmutableList.of(Statements.ExitAccept.toStaticStatement()),
-            ImmutableList.of(Statements.ExitReject.toStaticStatement())));
-    List<BooleanExpr> localOrCommonOrigination = new LinkedList<>();
-    localOrCommonOrigination.add(new CallExpr(computeBgpCommonExportPolicyName(vrf.getName())));
 
-    // If `default-originate [route-map NAME]` is configured for this neighbor, generate the
-    // default route and inject it.
+    // If defaultOriginate is set, generate route and default route export policy. Default route
+    // will match this policy and get exported without going through the rest of the export policy.
+    // TODO Verify that nextHopSelf and removePrivateAs settings apply to default-originate route.
     if (naf4 != null && firstNonNull(naf4.getDefaultOriginate(), Boolean.FALSE)) {
-
-      String defaultRouteExportPolicyName;
-      defaultRouteExportPolicyName =
-          String.format(
-              "~BGP_DEFAULT_ROUTE_PEER_EXPORT_POLICY:%s:%s~",
-              vrf.getName(), dynamic ? prefix : prefix.getStartIp());
-      RoutingPolicy defaultRouteExportPolicy = new RoutingPolicy(defaultRouteExportPolicyName, c);
-      c.getRoutingPolicies().put(defaultRouteExportPolicyName, defaultRouteExportPolicy);
-      defaultRouteExportPolicy
-          .getStatements()
-          .add(
-              new If(
-                  MATCH_DEFAULT_ROUTE,
-                  ImmutableList.of(
-                      new SetOrigin(new LiteralOrigin(OriginType.IGP, null)),
-                      Statements.ReturnTrue.toStaticStatement())));
-      defaultRouteExportPolicy.getStatements().add(Statements.ReturnFalse.toStaticStatement());
-      localOrCommonOrigination.add(new CallExpr(defaultRouteExportPolicy.getName()));
+      initBgpDefaultRouteExportPolicy(c);
+      exportStatements.add(
+          new If(
+              "Export default route from peer with default-originate configured",
+              new CallExpr(computeNxosBgpDefaultRouteExportPolicyName(true)),
+              singletonList(Statements.ReturnTrue.toStaticStatement()),
+              ImmutableList.of()));
 
       GeneratedRoute defaultRoute =
           GeneratedRoute.builder()
@@ -369,7 +358,17 @@ final class CiscoNxConversions {
               .build();
       newNeighborBuilder.setGeneratedRoutes(ImmutableSet.of(defaultRoute));
     }
-    peerExportConditions.add(new Disjunction(localOrCommonOrigination));
+
+    // Peer-specific export policy, after matching default-originate route.
+    Conjunction peerExportGuard = new Conjunction();
+    List<BooleanExpr> peerExportConditions = peerExportGuard.getConjuncts();
+    exportStatements.add(
+        new If(
+            "peer-export policy main conditional: exitAccept if true / exitReject if false",
+            peerExportGuard,
+            ImmutableList.of(Statements.ExitAccept.toStaticStatement()),
+            ImmutableList.of(Statements.ExitReject.toStaticStatement())));
+    peerExportConditions.add(new CallExpr(computeBgpCommonExportPolicyName(vrf.getName())));
 
     if (naf4 != null) {
       String outboundMap = naf4.getOutboundRouteMap();
@@ -380,15 +379,37 @@ final class CiscoNxConversions {
 
     RoutingPolicy exportPolicy =
         new RoutingPolicy(
-            String.format(
-                "~BGP_PEER_EXPORT_POLICY:%s:%s~",
-                vrf.getName(), dynamic ? prefix : prefix.getStartIp()),
+            computeBgpPeerExportPolicyName(
+                vrf.getName(), dynamic ? prefix.toString() : prefix.getStartIp().toString()),
             c);
     exportPolicy.setStatements(exportStatements);
     c.getRoutingPolicies().put(exportPolicy.getName(), exportPolicy);
     newNeighborBuilder.setExportPolicy(exportPolicy.getName());
 
     return newNeighborBuilder.build();
+  }
+
+  /**
+   * Initializes export policy for default routes if it doesn't already exist. This policy is the
+   * same across BGP processes, so only one is created for each configuration.
+   */
+  static void initBgpDefaultRouteExportPolicy(Configuration c) {
+    String defaultRouteExportPolicyName = computeNxosBgpDefaultRouteExportPolicyName(true);
+    if (!c.getRoutingPolicies().containsKey(defaultRouteExportPolicyName)) {
+      RoutingPolicy.builder()
+          .setOwner(c)
+          .setName(defaultRouteExportPolicyName)
+          .addStatement(
+              new If(
+                  new Conjunction(
+                      ImmutableList.of(
+                          MATCH_DEFAULT_ROUTE, new MatchProtocol(RoutingProtocol.AGGREGATE))),
+                  ImmutableList.of(
+                      new SetOrigin(new LiteralOrigin(OriginType.IGP, null)),
+                      Statements.ReturnTrue.toStaticStatement())))
+          .addStatement(Statements.ReturnFalse.toStaticStatement())
+          .build();
+    }
   }
 
   private static String getTextDesc(Ip ip, Vrf v) {

@@ -11,12 +11,12 @@ import javax.annotation.Nullable;
  * A {@link FilterSpecifierFactory} that accepts three types of inputs:
  *
  * <ul>
- *   <li>null, which returns {@link ShorthandFilterSpecifier} that matches everything
+ *   <li>null, which returns {@link AllFiltersFilterSpecifier} that matches everything
  *   <li>inFilterOf(foo), which returns {@link InterfaceSpecifierFilterSpecifier} with foo being fed
  *       to {@link FlexibleInterfaceSpecifierFactory}
  *   <li>outFilterOf(foo), as above but for output filters
  *   <li>ref.filtergroup(foo, bar), which returns {@link ReferenceFilterGroupFilterSpecifier};
- *   <li>inputs accepted by {@link ShorthandFilterSpecifier}
+ *   <li>name regex
  * </ul>
  */
 @AutoService(FilterSpecifierFactory.class)
@@ -40,7 +40,7 @@ public class FlexibleFilterSpecifierFactory implements FilterSpecifierFactory {
   @Override
   public FilterSpecifier buildFilterSpecifier(@Nullable Object input) {
     if (input == null) {
-      return new ShorthandFilterSpecifierFactory().buildFilterSpecifier(null);
+      return AllFiltersFilterSpecifier.INSTANCE;
     }
     checkArgument(input instanceof String, NAME + " requires String input");
     String str = ((String) input).trim();
@@ -63,9 +63,11 @@ public class FlexibleFilterSpecifierFactory implements FilterSpecifierFactory {
 
     matcher = REF_PATTERN.matcher(str);
     if (matcher.find()) {
-      return new ReferenceFilterGroupFilterSpecifierFactory()
-          .buildFilterSpecifier(matcher.group(1));
+      String[] words = matcher.group(1).split(",");
+      checkArgument(
+          words.length == 2, "Arguments to ref.filtergroup should be two words separated by ','");
+      return new ReferenceFilterGroupFilterSpecifier(words[0].trim(), words[1].trim());
     }
-    return new ShorthandFilterSpecifierFactory().buildFilterSpecifier(str);
+    return new NameRegexFilterSpecifier(Pattern.compile(str, Pattern.CASE_INSENSITIVE));
   }
 }

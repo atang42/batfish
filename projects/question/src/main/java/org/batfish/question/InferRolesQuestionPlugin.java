@@ -22,9 +22,7 @@ import org.batfish.role.NodeRoleDimension;
 public class InferRolesQuestionPlugin extends QuestionPlugin {
 
   public static class InferRolesAnswerElement extends AnswerElement {
-
     private static final String PROP_ROLE_DIMENSIONS = "roleDimensions";
-
     private static final String PROP_MATCHING_NODES_COUNT = "matchingNodesCount";
 
     @Nonnull private final SortedSet<NodeRoleDimension> _roleDimensions;
@@ -66,7 +64,12 @@ public class InferRolesQuestionPlugin extends QuestionPlugin {
       Set<String> nodes = question.getNodeRegex().getMatchingNodes(_batfish);
 
       SortedSet<NodeRoleDimension> roleDimensions =
-          new InferRoles(nodes, _batfish.getEnvironmentTopology(), question.getCaseSensitive())
+          new InferRoles(
+                  nodes,
+                  _batfish
+                      .getTopologyProvider()
+                      .getInitialLayer3Topology(_batfish.getNetworkSnapshot()),
+                  question.getCaseSensitive())
               .inferRoles();
       answerElement.getRoleDimensions().addAll(roleDimensions);
 
@@ -83,20 +86,13 @@ public class InferRolesQuestionPlugin extends QuestionPlugin {
     }
   }
 
-  // <question_page_comment>
-  /*
+  /**
    * Infer a regex that identifies a role from a node name.
    *
    * <p>Uses heuristics to identify a part of a node's name that represents its role.
-   *
-   * @type InferRoles multifile
-   * @param nodeRegex Regular expression for names of nodes to include. Default value is '.*' (all
-   *     nodes).
    */
   public static final class InferRolesQuestion extends Question {
-
     private static final String PROP_NODE_REGEX = "nodeRegex";
-
     private static final String PROP_CASE_SENSITIVE = "caseSensitive";
 
     private NodesSpecifier _nodeRegex;

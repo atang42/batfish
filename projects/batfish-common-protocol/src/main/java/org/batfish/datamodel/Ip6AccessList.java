@@ -2,14 +2,11 @@ package org.batfish.datamodel;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
-import com.kjetland.jackson.jsonSchema.annotations.JsonSchemaDescription;
 import java.util.List;
 import org.batfish.common.util.ComparableStructure;
 
-@JsonSchemaDescription("An access-list used to filter IPV6 packets")
+/** An access-list used to filter IPV6 packets */
 public class Ip6AccessList extends ComparableStructure<String> {
-
   private static final String PROP_LINES = "lines";
 
   private static final long serialVersionUID = 1L;
@@ -47,8 +44,8 @@ public class Ip6AccessList extends ComparableStructure<String> {
     return new FilterResult(null, LineAction.DENY);
   }
 
+  /** The lines against which to check an IPV6 packet. */
   @JsonProperty(PROP_LINES)
-  @JsonPropertyDescription("The lines against which to check an IPV6 packet")
   public List<Ip6AccessListLine> getLines() {
     return _lines;
   }

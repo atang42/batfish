@@ -1,15 +1,19 @@
 package org.batfish.grammar.flatjuniper;
 
-import static org.batfish.common.util.CommonUtil.communityStringToLong;
 import static org.batfish.datamodel.AuthenticationMethod.GROUP_RADIUS;
 import static org.batfish.datamodel.AuthenticationMethod.GROUP_TACACS;
 import static org.batfish.datamodel.AuthenticationMethod.PASSWORD;
+import static org.batfish.datamodel.Configuration.DEFAULT_VRF_NAME;
 import static org.batfish.datamodel.Names.zoneToZoneFilter;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.match;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDst;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrcInterface;
+import static org.batfish.datamodel.flow.TransformationStep.TransformationType.DEST_NAT;
+import static org.batfish.datamodel.flow.TransformationStep.TransformationType.SOURCE_NAT;
+import static org.batfish.datamodel.flow.TransformationStep.TransformationType.STATIC_NAT;
 import static org.batfish.datamodel.matchers.AaaAuthenticationLoginListMatchers.hasMethods;
-import static org.batfish.datamodel.matchers.AbstractRouteMatchers.hasPrefix;
+import static org.batfish.datamodel.matchers.AbstractRouteDecoratorMatchers.hasPrefix;
+import static org.batfish.datamodel.matchers.AnnotatedRouteMatchers.hasSourceVrf;
 import static org.batfish.datamodel.matchers.BgpNeighborMatchers.hasAllowLocalAsIn;
 import static org.batfish.datamodel.matchers.BgpNeighborMatchers.hasClusterId;
 import static org.batfish.datamodel.matchers.BgpNeighborMatchers.hasEnforceFirstAs;
@@ -55,6 +59,7 @@ import static org.batfish.datamodel.matchers.InterfaceMatchers.hasMtu;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasNativeVlan;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasOspfAreaName;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasOspfCost;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasOspfEnabled;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasOspfPointToPoint;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasSwitchPortMode;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasZoneName;
@@ -97,10 +102,13 @@ import static org.batfish.datamodel.matchers.VrfMatchers.hasBgpProcess;
 import static org.batfish.datamodel.matchers.VrfMatchers.hasGeneratedRoutes;
 import static org.batfish.datamodel.matchers.VrfMatchers.hasOspfProcess;
 import static org.batfish.datamodel.matchers.VrfMatchers.hasStaticRoutes;
+import static org.batfish.datamodel.transformation.IpField.DESTINATION;
+import static org.batfish.datamodel.transformation.IpField.SOURCE;
 import static org.batfish.datamodel.transformation.Noop.NOOP_DEST_NAT;
 import static org.batfish.datamodel.transformation.Transformation.when;
 import static org.batfish.datamodel.transformation.TransformationStep.assignDestinationIp;
 import static org.batfish.datamodel.transformation.TransformationStep.assignSourceIp;
+import static org.batfish.datamodel.transformation.TransformationStep.assignSourcePort;
 import static org.batfish.datamodel.vendor_family.juniper.JuniperFamily.AUXILIARY_LINE_NAME;
 import static org.batfish.datamodel.vendor_family.juniper.JuniperFamily.CONSOLE_LINE_NAME;
 import static org.batfish.representation.juniper.JuniperConfiguration.ACL_NAME_EXISTING_CONNECTION;
@@ -122,12 +130,14 @@ import static org.batfish.representation.juniper.JuniperStructureUsage.INTERFACE
 import static org.batfish.representation.juniper.JuniperStructureUsage.OSPF_AREA_INTERFACE;
 import static org.batfish.representation.juniper.JuniperStructureUsage.SECURITY_POLICY_MATCH_APPLICATION;
 import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.anything;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.emptyIterable;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasKey;
@@ -171,9 +181,10 @@ import org.batfish.common.util.CommonUtil;
 import org.batfish.config.Settings;
 import org.batfish.datamodel.AbstractRoute;
 import org.batfish.datamodel.AclIpSpace;
+import org.batfish.datamodel.AnnotatedRoute;
 import org.batfish.datamodel.BgpPeerConfig;
 import org.batfish.datamodel.BgpProcess;
-import org.batfish.datamodel.BgpRoute;
+import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.ConnectedRoute;
@@ -220,6 +231,8 @@ import org.batfish.datamodel.StaticRoute;
 import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.SwitchportMode;
 import org.batfish.datamodel.Topology;
+import org.batfish.datamodel.Vrf;
+import org.batfish.datamodel.acl.AclLineMatchExpr;
 import org.batfish.datamodel.acl.AclLineMatchExprs;
 import org.batfish.datamodel.acl.AndMatchExpr;
 import org.batfish.datamodel.acl.MatchHeaderSpace;
@@ -228,6 +241,7 @@ import org.batfish.datamodel.acl.PermittedByAcl;
 import org.batfish.datamodel.answers.ConvertConfigurationAnswerElement;
 import org.batfish.datamodel.answers.InitInfoAnswerElement;
 import org.batfish.datamodel.answers.ParseVendorConfigurationAnswerElement;
+import org.batfish.datamodel.bgp.community.StandardCommunity;
 import org.batfish.datamodel.isis.IsisHelloAuthenticationType;
 import org.batfish.datamodel.isis.IsisInterfaceMode;
 import org.batfish.datamodel.matchers.IkePhase1KeyMatchers;
@@ -245,6 +259,7 @@ import org.batfish.datamodel.matchers.StubSettingsMatchers;
 import org.batfish.datamodel.ospf.OspfArea;
 import org.batfish.datamodel.ospf.OspfAreaSummary;
 import org.batfish.datamodel.ospf.OspfDefaultOriginateType;
+import org.batfish.datamodel.ospf.OspfProcess;
 import org.batfish.datamodel.ospf.StubType;
 import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.Environment.Direction;
@@ -253,6 +268,10 @@ import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.SetAdministrativeCost;
 import org.batfish.datamodel.transformation.AssignIpAddressFromPool;
+import org.batfish.datamodel.transformation.AssignPortFromPool;
+import org.batfish.datamodel.transformation.IpField;
+import org.batfish.datamodel.transformation.Noop;
+import org.batfish.datamodel.transformation.ShiftIpAddressIntoSubnet;
 import org.batfish.datamodel.transformation.Transformation;
 import org.batfish.grammar.BatfishParseTreeWalker;
 import org.batfish.grammar.VendorConfigurationFormatDetector;
@@ -283,6 +302,8 @@ import org.batfish.representation.juniper.NatRuleSet;
 import org.batfish.representation.juniper.NatRuleThenInterface;
 import org.batfish.representation.juniper.NatRuleThenOff;
 import org.batfish.representation.juniper.NatRuleThenPool;
+import org.batfish.representation.juniper.NatRuleThenPrefix;
+import org.batfish.representation.juniper.NatRuleThenPrefixName;
 import org.batfish.representation.juniper.NoPortTranslation;
 import org.batfish.representation.juniper.PatPool;
 import org.batfish.representation.juniper.Screen;
@@ -314,7 +335,7 @@ public final class FlatJuniperGrammarTest {
   }
 
   private static Flow createFlow(String sourceAddress, String destinationAddress, FlowState state) {
-    Flow.Builder fb = new Flow.Builder();
+    Flow.Builder fb = Flow.builder();
     fb.setIngressNode("node");
     fb.setSrcIp(Ip.parse(sourceAddress));
     fb.setDstIp(Ip.parse(destinationAddress));
@@ -324,12 +345,13 @@ public final class FlatJuniperGrammarTest {
   }
 
   private static Flow createFlow(IpProtocol protocol, int port) {
-    Flow.Builder fb = new Flow.Builder();
-    fb.setIngressNode("node");
-    fb.setIpProtocol(protocol);
-    fb.setDstPort(port);
-    fb.setSrcPort(port);
-    fb.setTag("test");
+    Flow.Builder fb =
+        Flow.builder()
+            .setIngressNode("node")
+            .setIpProtocol(protocol)
+            .setDstPort(port)
+            .setSrcPort(port)
+            .setTag("test");
     return fb.build();
   }
 
@@ -632,7 +654,7 @@ public final class FlatJuniperGrammarTest {
     String testrigName = "static-route-communities";
     String c1Name = "r1";
     String c2Name = "r2";
-    Long acceptedCommunity = communityStringToLong("100:1002");
+    StandardCommunity acceptedCommunity = StandardCommunity.parse("100:1002");
 
     List<String> configurationNames = ImmutableList.of(c1Name, c2Name);
     Batfish batfish =
@@ -643,8 +665,7 @@ public final class FlatJuniperGrammarTest {
             _folder);
     batfish.computeDataPlane();
     DataPlane dp = batfish.loadDataPlane();
-    Set<AbstractRoute> r1Routes =
-        dp.getRibs().get(c1Name).get(Configuration.DEFAULT_VRF_NAME).getRoutes();
+    Set<AbstractRoute> r1Routes = dp.getRibs().get(c1Name).get(DEFAULT_VRF_NAME).getRoutes();
 
     assertThat(r1Routes, not(hasItem(hasPrefix(Prefix.parse("10.20.20.0/24")))));
     assertThat(
@@ -711,9 +732,9 @@ public final class FlatJuniperGrammarTest {
     Layer1Topology layer1LogicalTopology =
         batfish.getTopologyProvider().getLayer1LogicalTopology(batfish.getNetworkSnapshot()).get();
     Layer2Topology layer2Topology =
-        batfish.getTopologyProvider().getLayer2Topology(batfish.getNetworkSnapshot()).get();
+        batfish.getTopologyProvider().getInitialLayer2Topology(batfish.getNetworkSnapshot()).get();
     Topology layer3Topology =
-        batfish.getTopologyProvider().getLayer3Topology(batfish.getNetworkSnapshot());
+        batfish.getTopologyProvider().getInitialLayer3Topology(batfish.getNetworkSnapshot());
 
     // check layer-1 logical adjacencies
     assertThat(
@@ -834,51 +855,53 @@ public final class FlatJuniperGrammarTest {
 
     // p1
     RoutingPolicy p1 = c.getRoutingPolicies().get("p1");
-    BgpRoute.Builder b1 =
-        BgpRoute.builder()
+    Bgpv4Route.Builder b1 =
+        Bgpv4Route.builder()
             .setNetwork(cr.getNetwork())
-            .setCommunities(ImmutableSet.of(5L))
+            .setCommunities(ImmutableSet.of(StandardCommunity.of(5L)))
             .setOriginatorIp(Ip.parse("2.2.2.2"))
             .setOriginType(OriginType.INCOMPLETE)
             .setProtocol(RoutingProtocol.BGP);
-    p1.process(cr, b1, Ip.ZERO, Configuration.DEFAULT_VRF_NAME, Direction.OUT);
-    BgpRoute br1 = b1.build();
+    p1.process(cr, b1, Ip.ZERO, DEFAULT_VRF_NAME, Direction.OUT);
+    Bgpv4Route br1 = b1.build();
 
     assertThat(
         br1.getCommunities(),
         equalTo(
             ImmutableSet.of(
-                WellKnownCommunity.NO_ADVERTISE,
-                WellKnownCommunity.NO_EXPORT,
-                WellKnownCommunity.NO_EXPORT_SUBCONFED)));
+                StandardCommunity.of(WellKnownCommunity.NO_ADVERTISE),
+                StandardCommunity.of(WellKnownCommunity.NO_EXPORT),
+                StandardCommunity.of(WellKnownCommunity.NO_EXPORT_SUBCONFED))));
 
     // p2
     RoutingPolicy p2 = c.getRoutingPolicies().get("p2");
-    BgpRoute.Builder b2 =
-        BgpRoute.builder()
+    Bgpv4Route.Builder b2 =
+        Bgpv4Route.builder()
             .setNetwork(cr.getNetwork())
-            .setCommunities(ImmutableSet.of(5L))
+            .setCommunities(ImmutableSet.of(StandardCommunity.of(5L)))
             .setOriginatorIp(Ip.parse("2.2.2.2"))
             .setOriginType(OriginType.INCOMPLETE)
             .setProtocol(RoutingProtocol.BGP);
-    p2.process(cr, b2, Ip.ZERO, Configuration.DEFAULT_VRF_NAME, Direction.OUT);
-    BgpRoute br2 = b2.build();
+    p2.process(cr, b2, Ip.ZERO, DEFAULT_VRF_NAME, Direction.OUT);
+    Bgpv4Route br2 = b2.build();
 
-    assertThat(br2.getCommunities(), equalTo(ImmutableSet.of(2L, 3L)));
+    assertThat(
+        br2.getCommunities(),
+        equalTo(ImmutableSet.of(StandardCommunity.of(2L), StandardCommunity.of(3L))));
 
     // p3
     RoutingPolicy p3 = c.getRoutingPolicies().get("p3");
-    BgpRoute.Builder b3 =
-        BgpRoute.builder()
+    Bgpv4Route.Builder b3 =
+        Bgpv4Route.builder()
             .setNetwork(cr.getNetwork())
-            .setCommunities(ImmutableSet.of(5L))
+            .setCommunities(ImmutableSet.of(StandardCommunity.of(5L)))
             .setOriginatorIp(Ip.parse("2.2.2.2"))
             .setOriginType(OriginType.INCOMPLETE)
             .setProtocol(RoutingProtocol.BGP);
-    p3.process(cr, b3, Ip.ZERO, Configuration.DEFAULT_VRF_NAME, Direction.OUT);
-    BgpRoute br3 = b3.build();
+    p3.process(cr, b3, Ip.ZERO, DEFAULT_VRF_NAME, Direction.OUT);
+    Bgpv4Route br3 = b3.build();
 
-    assertThat(br3.getCommunities(), equalTo(ImmutableSet.of(5L)));
+    assertThat(br3.getCommunities(), equalTo(ImmutableSet.of(StandardCommunity.of(5L))));
   }
 
   @Test
@@ -889,52 +912,64 @@ public final class FlatJuniperGrammarTest {
 
     // p4
     RoutingPolicy p4 = c.getRoutingPolicies().get("p4");
-    BgpRoute.Builder b4 =
-        BgpRoute.builder()
+    Bgpv4Route.Builder b4 =
+        Bgpv4Route.builder()
             .setNetwork(cr.getNetwork())
-            .setCommunities(ImmutableSet.of(5L))
+            .setCommunities(ImmutableSet.of(StandardCommunity.of(5L)))
             .setOriginatorIp(Ip.parse("2.2.2.2"))
             .setOriginType(OriginType.INCOMPLETE)
             .setProtocol(RoutingProtocol.BGP);
-    p4.process(cr, b4, Ip.ZERO, Configuration.DEFAULT_VRF_NAME, Direction.OUT);
-    BgpRoute br4 = b4.build();
+    p4.process(cr, b4, Ip.ZERO, DEFAULT_VRF_NAME, Direction.OUT);
+    Bgpv4Route br4 = b4.build();
 
     assertThat(
         br4.getCommunities(),
         equalTo(
             ImmutableSet.of(
-                WellKnownCommunity.NO_ADVERTISE,
-                WellKnownCommunity.NO_EXPORT,
-                WellKnownCommunity.NO_EXPORT_SUBCONFED,
-                5L)));
+                StandardCommunity.of(WellKnownCommunity.NO_ADVERTISE),
+                StandardCommunity.of(WellKnownCommunity.NO_EXPORT),
+                StandardCommunity.of(WellKnownCommunity.NO_EXPORT_SUBCONFED),
+                StandardCommunity.of(5L))));
 
     // p5
     RoutingPolicy p5 = c.getRoutingPolicies().get("p5");
-    BgpRoute.Builder b5 =
-        BgpRoute.builder()
+    Bgpv4Route.Builder b5 =
+        Bgpv4Route.builder()
             .setNetwork(cr.getNetwork())
-            .setCommunities(ImmutableSet.of(5L))
+            .setCommunities(ImmutableSet.of(StandardCommunity.of(5L)))
             .setOriginatorIp(Ip.parse("2.2.2.2"))
             .setOriginType(OriginType.INCOMPLETE)
             .setProtocol(RoutingProtocol.BGP);
-    p5.process(cr, b5, Ip.ZERO, Configuration.DEFAULT_VRF_NAME, Direction.OUT);
-    BgpRoute br5 = b5.build();
+    p5.process(cr, b5, Ip.ZERO, DEFAULT_VRF_NAME, Direction.OUT);
+    Bgpv4Route br5 = b5.build();
 
-    assertThat(br5.getCommunities(), equalTo(ImmutableSet.of(2L, 3L, 5L)));
+    assertThat(
+        br5.getCommunities(),
+        equalTo(
+            ImmutableSet.of(
+                StandardCommunity.of(2L), StandardCommunity.of(3L), StandardCommunity.of(5L))));
 
     // p6
     RoutingPolicy p6 = c.getRoutingPolicies().get("p6");
-    BgpRoute.Builder b6 =
-        BgpRoute.builder()
+    Bgpv4Route.Builder b6 =
+        Bgpv4Route.builder()
             .setNetwork(cr.getNetwork())
-            .setCommunities(ImmutableSet.of(5L))
+            .setCommunities(ImmutableSet.of(StandardCommunity.of(5L)))
             .setOriginatorIp(Ip.parse("2.2.2.2"))
             .setOriginType(OriginType.INCOMPLETE)
             .setProtocol(RoutingProtocol.BGP);
-    p6.process(cr, b6, Ip.ZERO, Configuration.DEFAULT_VRF_NAME, Direction.OUT);
-    BgpRoute br6 = b6.build();
+    p6.process(cr, b6, Ip.ZERO, DEFAULT_VRF_NAME, Direction.OUT);
+    Bgpv4Route br6 = b6.build();
 
-    assertThat(br6.getCommunities(), equalTo(ImmutableSet.of(5L)));
+    assertThat(br6.getCommunities(), equalTo(ImmutableSet.of(StandardCommunity.of(5L))));
+  }
+
+  @Test
+  public void testBgpDisable() throws IOException {
+    // Config has "set protocols bgp disable"; no VI BGP process should be created
+    String hostname = "bgp_disable";
+    Configuration c = getBatfishForConfigurationNames(hostname).loadConfigurations().get(hostname);
+    assertThat(c.getVrfs().get(DEFAULT_VRF_NAME).getBgpProcess(), nullValue());
   }
 
   @Test
@@ -1754,10 +1789,10 @@ public final class FlatJuniperGrammarTest {
     ConnectedRoute cr31 = new ConnectedRoute(Prefix.parse("2.0.0.0/31"), "blah");
     ConnectedRoute cr32 = new ConnectedRoute(Prefix.parse("2.0.0.0/32"), "blah");
     assertThat(
-        rp2.process(cr31, BgpRoute.builder(), null, Configuration.DEFAULT_VRF_NAME, Direction.OUT),
+        rp2.process(cr31, Bgpv4Route.builder(), null, DEFAULT_VRF_NAME, Direction.OUT),
         equalTo(false));
     assertThat(
-        rp2.process(cr32, BgpRoute.builder(), null, Configuration.DEFAULT_VRF_NAME, Direction.OUT),
+        rp2.process(cr32, Bgpv4Route.builder(), null, DEFAULT_VRF_NAME, Direction.OUT),
         equalTo(true));
 
     // all should be discard routes
@@ -1771,21 +1806,21 @@ public final class FlatJuniperGrammarTest {
     RoutingPolicy rp4 = config.getRoutingPolicies().get(ar4.getGenerationPolicy());
     ConnectedRoute cr4 = new ConnectedRoute(Prefix.parse("4.0.0.0/32"), "blah");
     assertThat(
-        rp4.process(cr4, BgpRoute.builder(), null, Configuration.DEFAULT_VRF_NAME, Direction.OUT),
+        rp4.process(cr4, Bgpv4Route.builder(), null, DEFAULT_VRF_NAME, Direction.OUT),
         equalTo(true));
 
     // rejects first, so reject
     RoutingPolicy rp5 = config.getRoutingPolicies().get(ar5.getGenerationPolicy());
     ConnectedRoute cr5 = new ConnectedRoute(Prefix.parse("5.0.0.0/32"), "blah");
     assertThat(
-        rp5.process(cr5, BgpRoute.builder(), null, Configuration.DEFAULT_VRF_NAME, Direction.OUT),
+        rp5.process(cr5, Bgpv4Route.builder(), null, DEFAULT_VRF_NAME, Direction.OUT),
         equalTo(false));
 
     // accepts first, so accept
     RoutingPolicy rp6 = config.getRoutingPolicies().get(ar6.getGenerationPolicy());
     ConnectedRoute cr6 = new ConnectedRoute(Prefix.parse("6.0.0.0/32"), "blah");
     assertThat(
-        rp6.process(cr6, BgpRoute.builder(), null, Configuration.DEFAULT_VRF_NAME, Direction.OUT),
+        rp6.process(cr6, Bgpv4Route.builder(), null, DEFAULT_VRF_NAME, Direction.OUT),
         equalTo(true));
   }
 
@@ -1891,10 +1926,10 @@ public final class FlatJuniperGrammarTest {
     ConnectedRoute cr31 = new ConnectedRoute(Prefix.parse("2.0.0.0/31"), "blah");
     ConnectedRoute cr32 = new ConnectedRoute(Prefix.parse("2.0.0.0/32"), "blah");
     assertThat(
-        rp2.process(cr31, BgpRoute.builder(), null, Configuration.DEFAULT_VRF_NAME, Direction.OUT),
+        rp2.process(cr31, Bgpv4Route.builder(), null, DEFAULT_VRF_NAME, Direction.OUT),
         equalTo(false));
     assertThat(
-        rp2.process(cr32, BgpRoute.builder(), null, Configuration.DEFAULT_VRF_NAME, Direction.OUT),
+        rp2.process(cr32, Bgpv4Route.builder(), null, DEFAULT_VRF_NAME, Direction.OUT),
         equalTo(true));
 
     // none should be discard routes
@@ -1913,7 +1948,7 @@ public final class FlatJuniperGrammarTest {
         config.getDefaultVrf().getGeneratedRoutes().stream()
             .map(GeneratedRoute::getCommunities)
             .collect(ImmutableSet.toImmutableSet()),
-        equalTo(ImmutableSet.of(ImmutableSortedSet.of(65537L))));
+        equalTo(ImmutableSet.of(ImmutableSortedSet.of(StandardCommunity.of(65537L)))));
   }
 
   @Test
@@ -1981,12 +2016,55 @@ public final class FlatJuniperGrammarTest {
         BatfishTestUtils.parseTextConfigs(
                 _folder, "org/batfish/grammar/juniper/testconfigs/ospf-area-default-metric")
             .get("ospf-area-default-metric");
-    OspfArea area1 = config.getDefaultVrf().getOspfProcess().getAreas().get(1L);
+    OspfArea area1 =
+        config.getDefaultVrf().getOspfProcesses().get(DEFAULT_VRF_NAME).getAreas().get(1L);
     assertThat(area1, hasInjectDefaultRoute());
     assertThat(area1, hasMetricOfDefaultRoute(equalTo(10)));
 
-    OspfArea area2 = config.getDefaultVrf().getOspfProcess().getAreas().get(2L);
+    OspfArea area2 =
+        config.getDefaultVrf().getOspfProcesses().get(DEFAULT_VRF_NAME).getAreas().get(2L);
     assertThat(area2, not(hasInjectDefaultRoute()));
+  }
+
+  @Test
+  public void testOspfInterfaceDisable() throws IOException {
+    // Config has interfaces ge-0/0/1.0 and ge-0/0/2.0 configured in OSPF.
+    // Interface ge-0/0/2.0 has disable set in OSPF config.
+    Configuration config = parseConfig("ospf-interface-disable");
+    assertThat(
+        config.getVrfs().get(DEFAULT_VRF_NAME).getOspfProcesses(),
+        hasEntry(equalTo(DEFAULT_VRF_NAME), notNullValue()));
+    assertThat(config.getActiveInterfaces().get("ge-0/0/1.0"), hasOspfEnabled());
+    assertThat(config.getActiveInterfaces().get("ge-0/0/2.0"), not(hasOspfEnabled()));
+  }
+
+  @Test
+  public void testOspfDisable() throws IOException {
+    /*
+    - Default VRF has OSPF process disabled, with interface ge-0/0/0.0
+    - VRF INSTANCE_1 has OSPF process disabled, with interface ge-0/0/1.0
+    - VRF INSTANCE_2 has OSPF process disabled, then enabled, with interface ge-0/0/2.0
+    - VRF INSTANCE_3 has OSPF process enabled, then disabled, with interface ge-0/0/3.0
+     */
+    Configuration config = parseConfig("ospf-disable");
+
+    // Default VRF: OSPF process should not be created
+    assertThat(config.getVrfs().get(DEFAULT_VRF_NAME).getOspfProcesses(), anEmptyMap());
+    assertThat(config.getActiveInterfaces().get("ge-0/0/0.0"), not(hasOspfEnabled()));
+
+    // INSTANCE_1: OSPF process should not be created
+    assertThat(config.getVrfs().get("INSTANCE_1").getOspfProcesses(), anEmptyMap());
+    assertThat(config.getActiveInterfaces().get("ge-0/0/1.0"), not(hasOspfEnabled()));
+
+    // INSTANCE_2: OSPF process should be created and its interface enabled
+    assertThat(
+        config.getVrfs().get("INSTANCE_2").getOspfProcesses(),
+        hasEntry(equalTo("INSTANCE_2"), notNullValue()));
+    assertThat(config.getActiveInterfaces().get("ge-0/0/2.0"), hasOspfEnabled());
+
+    // INSTANCE_3: OSPF process should not be created
+    assertThat(config.getVrfs().get("INSTANCE_3").getOspfProcesses(), anEmptyMap());
+    assertThat(config.getActiveInterfaces().get("ge-0/0/3.0"), not(hasOspfEnabled()));
   }
 
   @Test
@@ -1998,7 +2076,8 @@ public final class FlatJuniperGrammarTest {
     OspfAreaSummary summary =
         config
             .getDefaultVrf()
-            .getOspfProcess()
+            .getOspfProcesses()
+            .get(DEFAULT_VRF_NAME)
             .getAreas()
             .get(1L)
             .getSummaries()
@@ -2010,7 +2089,8 @@ public final class FlatJuniperGrammarTest {
     summary =
         config
             .getDefaultVrf()
-            .getOspfProcess()
+            .getOspfProcesses()
+            .get(DEFAULT_VRF_NAME)
             .getAreas()
             .get(2L)
             .getSummaries()
@@ -2032,11 +2112,11 @@ public final class FlatJuniperGrammarTest {
   public void testOspfReferenceBandwidth() throws IOException {
     String hostname = "ospf-reference-bandwidth";
     Configuration c = parseConfig(hostname);
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasReferenceBandwidth(equalTo(1E9D)))));
-    assertThat(c, hasVrf("vrf1", hasOspfProcess(hasReferenceBandwidth(equalTo(2E9D)))));
-    assertThat(c, hasVrf("vrf2", hasOspfProcess(hasReferenceBandwidth(equalTo(3E9D)))));
-    assertThat(c, hasVrf("vrf3", hasOspfProcess(hasReferenceBandwidth(equalTo(4E9D)))));
-    assertThat(c, hasVrf("vrf4", hasOspfProcess(hasReferenceBandwidth(equalTo(5E9D)))));
+    assertThat(c, hasDefaultVrf(hasOspfProcess(DEFAULT_VRF_NAME, hasReferenceBandwidth(1E9D))));
+    assertThat(c, hasVrf("vrf1", hasOspfProcess("vrf1", hasReferenceBandwidth(2E9D))));
+    assertThat(c, hasVrf("vrf2", hasOspfProcess("vrf2", hasReferenceBandwidth(3E9D))));
+    assertThat(c, hasVrf("vrf3", hasOspfProcess("vrf3", hasReferenceBandwidth(4E9D))));
+    assertThat(c, hasVrf("vrf4", hasOspfProcess("vrf4", hasReferenceBandwidth(5E9D))));
   }
 
   @Test
@@ -2054,7 +2134,6 @@ public final class FlatJuniperGrammarTest {
             .build();
 
     Environment.Builder eb = Environment.builder(c).setDirection(Direction.IN);
-    eb.setVrf("vrf1");
     policyPreference.call(
         eb.setOriginalRoute(staticRoute).setOutputRoute(OspfExternalType2Route.builder()).build());
 
@@ -2065,9 +2144,6 @@ public final class FlatJuniperGrammarTest {
   @Test
   public void testPsPreferenceStructure() throws IOException {
     Configuration c = parseConfig("policy-statement-preference");
-
-    Environment.Builder eb = Environment.builder(c).setDirection(Direction.IN);
-    eb.setVrf("vrf1");
 
     RoutingPolicy policyPreference = c.getRoutingPolicies().get("preference");
 
@@ -2131,7 +2207,7 @@ public final class FlatJuniperGrammarTest {
     Configuration c = parseConfig("interface-arp");
 
     /* The additional ARP IP set for irb.0 should appear in the data model */
-    assertThat(c, hasInterface("irb.0", hasAdditionalArpIps(hasItem(Ip.parse("1.0.0.2")))));
+    assertThat(c, hasInterface("irb.0", hasAdditionalArpIps(containsIp(Ip.parse("1.0.0.2")))));
   }
 
   @Test
@@ -2280,7 +2356,14 @@ public final class FlatJuniperGrammarTest {
     Configuration c = parseConfig(hostname);
 
     Flow tcpFlow = createFlow(IpProtocol.TCP, 0);
-    Flow icmpFlow = createFlow(IpProtocol.ICMP, 0);
+    Flow icmpFlow =
+        Flow.builder()
+            .setIngressNode("node")
+            .setIpProtocol(IpProtocol.ICMP)
+            .setIcmpType(0)
+            .setIcmpCode(0)
+            .setTag("tag")
+            .build();
 
     // Tcp flow should be accepted by the filter and others should be rejected
     assertThat(c, hasIpAccessList("FILTER", accepts(tcpFlow, null, c)));
@@ -2805,41 +2888,28 @@ public final class FlatJuniperGrammarTest {
   public void testJuniperOspfStubSettings() throws IOException {
     Configuration c = parseConfig("juniper-ospf-stub-settings");
 
+    // Get OSPF process
+    assertThat(c, hasDefaultVrf(hasOspfProcess(DEFAULT_VRF_NAME, notNullValue())));
+    OspfProcess proc = c.getVrfs().get(DEFAULT_VRF_NAME).getOspfProcesses().get(DEFAULT_VRF_NAME);
+
     // Check correct stub types are assigned
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasArea(0L, hasStubType(StubType.NONE)))));
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasArea(1L, hasStubType(StubType.NSSA)))));
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasArea(2L, hasStubType(StubType.NSSA)))));
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasArea(3L, hasStubType(StubType.STUB)))));
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasArea(4L, hasStubType(StubType.STUB)))));
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasArea(5L, hasStubType(StubType.NONE)))));
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasArea(6L, hasStubType(StubType.STUB)))));
+    assertThat(proc, hasArea(0L, hasStubType(StubType.NONE)));
+    assertThat(proc, hasArea(1L, hasStubType(StubType.NSSA)));
+    assertThat(proc, hasArea(2L, hasStubType(StubType.NSSA)));
+    assertThat(proc, hasArea(3L, hasStubType(StubType.STUB)));
+    assertThat(proc, hasArea(4L, hasStubType(StubType.STUB)));
+    assertThat(proc, hasArea(5L, hasStubType(StubType.NONE)));
+    assertThat(proc, hasArea(6L, hasStubType(StubType.STUB)));
 
     // Check for stub subtype settings
     assertThat(
-        c,
-        hasDefaultVrf(
-            hasOspfProcess(
-                hasArea(
-                    1L, hasNssa(hasDefaultOriginateType(OspfDefaultOriginateType.INTER_AREA))))));
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasArea(1L, hasNssa(hasSuppressType3(false))))));
-    assertThat(
-        c,
-        hasDefaultVrf(
-            hasOspfProcess(
-                hasArea(2L, hasNssa(hasDefaultOriginateType(OspfDefaultOriginateType.NONE))))));
-    assertThat(c, hasDefaultVrf(hasOspfProcess(hasArea(2L, hasNssa(hasSuppressType3())))));
-    assertThat(
-        c,
-        hasDefaultVrf(
-            hasOspfProcess(hasArea(3L, hasStub(StubSettingsMatchers.hasSuppressType3(false))))));
-    assertThat(
-        c,
-        hasDefaultVrf(
-            hasOspfProcess(hasArea(4L, hasStub(StubSettingsMatchers.hasSuppressType3())))));
-    assertThat(
-        c,
-        hasDefaultVrf(
-            hasOspfProcess(hasArea(6L, hasStub(StubSettingsMatchers.hasSuppressType3())))));
+        proc, hasArea(1L, hasNssa(hasDefaultOriginateType(OspfDefaultOriginateType.INTER_AREA))));
+    assertThat(proc, hasArea(1L, hasNssa(hasSuppressType3(false))));
+    assertThat(proc, hasArea(2L, hasNssa(hasDefaultOriginateType(OspfDefaultOriginateType.NONE))));
+    assertThat(proc, hasArea(2L, hasNssa(hasSuppressType3())));
+    assertThat(proc, hasArea(3L, hasStub(StubSettingsMatchers.hasSuppressType3(false))));
+    assertThat(proc, hasArea(4L, hasStub(StubSettingsMatchers.hasSuppressType3())));
+    assertThat(proc, hasArea(6L, hasStub(StubSettingsMatchers.hasSuppressType3())));
   }
 
   @Test
@@ -2853,8 +2923,7 @@ public final class FlatJuniperGrammarTest {
           c.getRoutingPolicies()
               .get("POLICY-NAME")
               .call(
-                  Environment.builder(c)
-                      .setVrf(Configuration.DEFAULT_VRF_NAME)
+                  Environment.builder(c, DEFAULT_VRF_NAME)
                       .setOriginalRoute(new ConnectedRoute(p, "nextHop"))
                       .build());
       assertThat(result.getBooleanValue(), equalTo(true));
@@ -2865,8 +2934,7 @@ public final class FlatJuniperGrammarTest {
         c.getRoutingPolicies()
             .get("POLICY-NAME")
             .call(
-                Environment.builder(c)
-                    .setVrf(Configuration.DEFAULT_VRF_NAME)
+                Environment.builder(c, DEFAULT_VRF_NAME)
                     .setOriginalRoute(
                         StaticRoute.builder()
                             .setAdministrativeCost(0)
@@ -2880,8 +2948,7 @@ public final class FlatJuniperGrammarTest {
         c.getRoutingPolicies()
             .get("POLICY-NAME")
             .call(
-                Environment.builder(c)
-                    .setVrf(Configuration.DEFAULT_VRF_NAME)
+                Environment.builder(c, DEFAULT_VRF_NAME)
                     .setOriginalRoute(new ConnectedRoute(Prefix.parse("3.3.3.0/24"), "nextHop"))
                     .build());
     assertThat(result.getBooleanValue(), equalTo(false));
@@ -2901,18 +2968,24 @@ public final class FlatJuniperGrammarTest {
       set policy-options policy-statement COMMUNITY_POLICY term T1 from community BGP2
     */
     RoutingPolicy communityPolicy = c.getRoutingPolicies().get("COMMUNITY_POLICY");
-    BgpRoute.Builder brb =
-        BgpRoute.builder()
+    Bgpv4Route.Builder brb =
+        Bgpv4Route.builder()
             .setAdmin(100)
             .setNetwork(testPrefix)
             .setOriginatorIp(Ip.parse("2.2.2.2"))
             .setOriginType(OriginType.INCOMPLETE)
             .setProtocol(RoutingProtocol.BGP);
-    result = communityPolicy.call(envWithRoute(c, brb.setCommunities(ImmutableSet.of(1L)).build()));
+    result =
+        communityPolicy.call(
+            envWithRoute(c, brb.setCommunities(ImmutableSet.of(StandardCommunity.of(1L))).build()));
     assertThat(result.getBooleanValue(), equalTo(true));
-    result = communityPolicy.call(envWithRoute(c, brb.setCommunities(ImmutableSet.of(2L)).build()));
+    result =
+        communityPolicy.call(
+            envWithRoute(c, brb.setCommunities(ImmutableSet.of(StandardCommunity.of(2L))).build()));
     assertThat(result.getBooleanValue(), equalTo(true));
-    result = communityPolicy.call(envWithRoute(c, brb.setCommunities(ImmutableSet.of(3L)).build()));
+    result =
+        communityPolicy.call(
+            envWithRoute(c, brb.setCommunities(ImmutableSet.of(StandardCommunity.of(3L))).build()));
     assertThat(result.getBooleanValue(), equalTo(false));
 
     /*
@@ -2925,8 +2998,7 @@ public final class FlatJuniperGrammarTest {
     assertThat(result.getBooleanValue(), equalTo(false));
     result =
         familyPolicy.call(
-            Environment.builder(c)
-                .setVrf(Configuration.DEFAULT_VRF_NAME)
+            Environment.builder(c, DEFAULT_VRF_NAME)
                 .setOriginalRoute6(new GeneratedRoute6(Prefix6.ZERO))
                 .build());
     assertThat(result.getBooleanValue(), equalTo(true));
@@ -3049,32 +3121,20 @@ public final class FlatJuniperGrammarTest {
     srb = StaticRoute.builder().setAdministrativeCost(100).setNetwork(testPrefix);
     result =
         tagPolicy.call(
-            Environment.builder(c)
-                .setVrf(Configuration.DEFAULT_VRF_NAME)
-                .setOutputRoute(srb.setTag(1))
-                .build());
+            Environment.builder(c, DEFAULT_VRF_NAME).setOutputRoute(srb.setTag(1)).build());
     assertThat(result.getBooleanValue(), equalTo(true));
     result =
         tagPolicy.call(
-            Environment.builder(c)
-                .setVrf(Configuration.DEFAULT_VRF_NAME)
-                .setOutputRoute(srb.setTag(2))
-                .build());
+            Environment.builder(c, DEFAULT_VRF_NAME).setOutputRoute(srb.setTag(2)).build());
     assertThat(result.getBooleanValue(), equalTo(true));
     result =
         tagPolicy.call(
-            Environment.builder(c)
-                .setVrf(Configuration.DEFAULT_VRF_NAME)
-                .setOutputRoute(srb.setTag(3))
-                .build());
+            Environment.builder(c, DEFAULT_VRF_NAME).setOutputRoute(srb.setTag(3)).build());
     assertThat(result.getBooleanValue(), equalTo(false));
   }
 
   private static Environment envWithRoute(Configuration c, AbstractRoute route) {
-    return Environment.builder(c)
-        .setVrf(Configuration.DEFAULT_VRF_NAME)
-        .setOriginalRoute(route)
-        .build();
+    return Environment.builder(c, DEFAULT_VRF_NAME).setOriginalRoute(route).build();
   }
 
   @Test
@@ -3270,7 +3330,6 @@ public final class FlatJuniperGrammarTest {
   @Test
   public void testLocalRouteExportBgp() throws IOException {
     Configuration c = parseConfig("local-route-export-bgp");
-    Environment.Builder eb = Environment.builder(c).setDirection(Direction.OUT);
 
     String peer1Vrf = "peer1Vrf";
     RoutingPolicy peer1RejectAllLocal =
@@ -3292,51 +3351,59 @@ public final class FlatJuniperGrammarTest {
     LocalRoute localRouteLan = new LocalRoute(new InterfaceAddress("10.0.1.0/30"), "ge-0/0/1.0");
 
     // Peer policies should reject local routes not exported by their VRFs
-    eb.setVrf(peer1Vrf);
+    Environment.Builder eb = Environment.builder(c, peer1Vrf).setDirection(Direction.OUT);
     assertThat(
         peer1RejectAllLocal
-            .call(eb.setOriginalRoute(localRoutePtp).setOutputRoute(new BgpRoute.Builder()).build())
+            .call(
+                eb.setOriginalRoute(localRoutePtp).setOutputRoute(new Bgpv4Route.Builder()).build())
             .getBooleanValue(),
         equalTo(false));
     assertThat(
         peer1RejectAllLocal
-            .call(eb.setOriginalRoute(localRouteLan).setOutputRoute(new BgpRoute.Builder()).build())
+            .call(
+                eb.setOriginalRoute(localRouteLan).setOutputRoute(new Bgpv4Route.Builder()).build())
             .getBooleanValue(),
         equalTo(false));
 
-    eb.setVrf(peer2Vrf);
+    eb = Environment.builder(c, peer2Vrf).setDirection(Direction.OUT);
     assertThat(
         peer2RejectPtpLocal
-            .call(eb.setOriginalRoute(localRoutePtp).setOutputRoute(new BgpRoute.Builder()).build())
+            .call(
+                eb.setOriginalRoute(localRoutePtp).setOutputRoute(new Bgpv4Route.Builder()).build())
             .getBooleanValue(),
         equalTo(false));
     assertThat(
         peer2RejectPtpLocal
-            .call(eb.setOriginalRoute(localRouteLan).setOutputRoute(new BgpRoute.Builder()).build())
+            .call(
+                eb.setOriginalRoute(localRouteLan).setOutputRoute(new Bgpv4Route.Builder()).build())
             .getBooleanValue(),
         equalTo(true));
 
-    eb.setVrf(peer3Vrf);
+    eb = Environment.builder(c, peer3Vrf).setDirection(Direction.OUT);
     assertThat(
         peer3RejectLanLocal
-            .call(eb.setOriginalRoute(localRoutePtp).setOutputRoute(new BgpRoute.Builder()).build())
+            .call(
+                eb.setOriginalRoute(localRoutePtp).setOutputRoute(new Bgpv4Route.Builder()).build())
             .getBooleanValue(),
         equalTo(true));
     assertThat(
         peer3RejectLanLocal
-            .call(eb.setOriginalRoute(localRouteLan).setOutputRoute(new BgpRoute.Builder()).build())
+            .call(
+                eb.setOriginalRoute(localRouteLan).setOutputRoute(new Bgpv4Route.Builder()).build())
             .getBooleanValue(),
         equalTo(false));
 
-    eb.setVrf(peer4Vrf);
+    eb = Environment.builder(c, peer4Vrf).setDirection(Direction.OUT);
     assertThat(
         peer4AllowAllLocal
-            .call(eb.setOriginalRoute(localRoutePtp).setOutputRoute(new BgpRoute.Builder()).build())
+            .call(
+                eb.setOriginalRoute(localRoutePtp).setOutputRoute(new Bgpv4Route.Builder()).build())
             .getBooleanValue(),
         equalTo(true));
     assertThat(
         peer4AllowAllLocal
-            .call(eb.setOriginalRoute(localRouteLan).setOutputRoute(new BgpRoute.Builder()).build())
+            .call(
+                eb.setOriginalRoute(localRouteLan).setOutputRoute(new Bgpv4Route.Builder()).build())
             .getBooleanValue(),
         equalTo(true));
   }
@@ -3344,7 +3411,6 @@ public final class FlatJuniperGrammarTest {
   @Test
   public void testLocalRouteExportOspf() throws IOException {
     Configuration c = parseConfig("local-route-export-ospf");
-    Environment.Builder eb = Environment.builder(c).setDirection(Direction.OUT);
 
     String vrf1 = "vrf1";
     RoutingPolicy vrf1RejectAllLocal =
@@ -3365,7 +3431,7 @@ public final class FlatJuniperGrammarTest {
     LocalRoute localRouteLan = new LocalRoute(new InterfaceAddress("10.0.1.0/30"), "ge-0/0/1.0");
 
     // Peer policies should reject local routes not exported by their VRFs
-    eb.setVrf(vrf1);
+    Environment.Builder eb = Environment.builder(c, vrf1).setDirection(Direction.OUT);
     assertThat(
         vrf1RejectAllLocal
             .call(
@@ -3383,7 +3449,7 @@ public final class FlatJuniperGrammarTest {
             .getBooleanValue(),
         equalTo(false));
 
-    eb.setVrf(vrf2);
+    eb = Environment.builder(c, vrf2).setDirection(Direction.OUT);
     assertThat(
         vrf2RejectPtpLocal
             .call(
@@ -3401,7 +3467,7 @@ public final class FlatJuniperGrammarTest {
             .getBooleanValue(),
         equalTo(true));
 
-    eb.setVrf(vrf3);
+    eb = Environment.builder(c, vrf3).setDirection(Direction.OUT);
     assertThat(
         vrf3RejectLanLocal
             .call(
@@ -3419,7 +3485,7 @@ public final class FlatJuniperGrammarTest {
             .getBooleanValue(),
         equalTo(false));
 
-    eb.setVrf(vrf4);
+    eb = Environment.builder(c, vrf4).setDirection(Direction.OUT);
     assertThat(
         vrf4AllowAllLocal
             .call(
@@ -3596,10 +3662,15 @@ public final class FlatJuniperGrammarTest {
     AssignIpAddressFromPool transformationStep =
         assignSourceIp(Ip.parse("10.10.10.1"), Ip.parse("10.10.10.254"));
 
+    AssignPortFromPool portTransformationStep =
+        assignSourcePort(Nat.DEFAULT_FROM_PORT, Nat.DEFAULT_TO_PORT);
+
     Transformation ruleSet1Transformation =
         when(matchSrcInterface("ge-0/0/0.0"))
             .setAndThen(
-                when(matchDst(Prefix.parse("1.1.1.1/24"))).apply(transformationStep).build())
+                when(matchDst(Prefix.parse("1.1.1.1/24")))
+                    .apply(transformationStep, portTransformationStep)
+                    .build())
             .build();
 
     // rule set 3 has a zone from location, so it goes second
@@ -3607,7 +3678,7 @@ public final class FlatJuniperGrammarTest {
         when(matchSrcInterface("ge-0/0/0.0", "ge-0/0/1.0"))
             .setAndThen(
                 when(matchDst(Prefix.parse("3.3.3.3/24")))
-                    .apply(transformationStep)
+                    .apply(transformationStep, portTransformationStep)
                     .setOrElse(ruleSet1Transformation)
                     .build())
             .setOrElse(ruleSet1Transformation)
@@ -3618,7 +3689,7 @@ public final class FlatJuniperGrammarTest {
         when(matchSrcInterface("ge-0/0/0.0"))
             .setAndThen(
                 when(matchDst(Prefix.parse("2.2.2.2/24")))
-                    .apply(transformationStep)
+                    .apply(transformationStep, portTransformationStep)
                     .setOrElse(
                         // routing instance rule set
                         ruleSet3Transformation)
@@ -3764,40 +3835,35 @@ public final class FlatJuniperGrammarTest {
     assertThat(
         c,
         hasDefaultVrf(
-            hasOspfProcess(hasArea(0L, OspfAreaMatchers.hasInterfaces(hasItem("xe-0/0/0.0"))))));
+            hasOspfProcess(
+                DEFAULT_VRF_NAME,
+                hasArea(0L, OspfAreaMatchers.hasInterfaces(hasItem("xe-0/0/0.0"))))));
 
     assertThat(c, hasInterface("xe-0/0/0.1", hasOspfAreaName(1L)));
     assertThat(c, hasInterface("xe-0/0/0.1", isOspfPassive()));
     assertThat(
         c,
         hasDefaultVrf(
-            hasOspfProcess(hasArea(1L, OspfAreaMatchers.hasInterfaces(hasItem("xe-0/0/0.1"))))));
+            hasOspfProcess(
+                DEFAULT_VRF_NAME,
+                hasArea(1L, OspfAreaMatchers.hasInterfaces(hasItem("xe-0/0/0.1"))))));
 
     /* The following interfaces should be absent since they have no IP addresses assigned. */
     assertThat(c, hasInterface("xe-0/0/0.2", hasOspfAreaName(nullValue())));
-    assertThat(
-        c,
-        hasDefaultVrf(
-            hasOspfProcess(
-                hasArea(0L, OspfAreaMatchers.hasInterfaces(not(hasItem("xe-0/0/0.2")))))));
-
-    assertThat(
-        c,
-        hasDefaultVrf(
-            hasOspfProcess(
-                hasArea(0L, OspfAreaMatchers.hasInterfaces(not(hasItem("xe-0/0/0.3")))))));
-    assertThat(
-        c,
-        hasDefaultVrf(
-            hasOspfProcess(
-                hasArea(1L, OspfAreaMatchers.hasInterfaces(not(hasItem("xe-0/0/0.3")))))));
+    assertThat(c, hasDefaultVrf(hasOspfProcess(DEFAULT_VRF_NAME, notNullValue())));
+    OspfProcess proc = c.getVrfs().get(DEFAULT_VRF_NAME).getOspfProcesses().get(DEFAULT_VRF_NAME);
+    assertThat(proc, hasArea(0L, OspfAreaMatchers.hasInterfaces(not(hasItem("xe-0/0/0.2")))));
+    assertThat(proc, hasArea(0L, OspfAreaMatchers.hasInterfaces(not(hasItem("xe-0/0/0.3")))));
+    assertThat(proc, hasArea(1L, OspfAreaMatchers.hasInterfaces(not(hasItem("xe-0/0/0.3")))));
   }
 
   @Test
   public void testOspfRouterId() throws IOException {
     Configuration c = parseConfig("ospf-router-id");
 
-    assertThat(c, hasVrf("default", hasOspfProcess(hasRouterId(equalTo(Ip.parse("1.0.0.0"))))));
+    assertThat(
+        c,
+        hasDefaultVrf(hasOspfProcess(DEFAULT_VRF_NAME, hasRouterId(equalTo(Ip.parse("1.0.0.0"))))));
   }
 
   @Test
@@ -3813,13 +3879,19 @@ public final class FlatJuniperGrammarTest {
         c,
         hasDefaultVrf(
             hasOspfProcess(
+                DEFAULT_VRF_NAME,
                 hasArea(
                     1L,
                     allOf(
                         hasStubType(equalTo(StubType.STUB)),
                         hasSummary(Prefix.parse("10.0.1.0/24"), isAdvertised()))))));
     String summaryFilterName =
-        c.getDefaultVrf().getOspfProcess().getAreas().get(1L).getSummaryFilter();
+        c.getDefaultVrf()
+            .getOspfProcesses()
+            .get(DEFAULT_VRF_NAME)
+            .getAreas()
+            .get(1L)
+            .getSummaryFilter();
     assertThat(summaryFilterName, not(nullValue()));
     assertThat(c.getRouteFilterLists().get(summaryFilterName), not(nullValue()));
     Prefix blockPrefix = Prefix.parse("10.0.1.0/24");
@@ -3843,7 +3915,7 @@ public final class FlatJuniperGrammarTest {
     FlatJuniperCombinedParser cp = new FlatJuniperCombinedParser(recoveryText, settings);
     Flat_juniper_configurationContext ctx = cp.parse();
     FlatJuniperRecoveryExtractor extractor = new FlatJuniperRecoveryExtractor();
-    ParseTreeWalker walker = new BatfishParseTreeWalker();
+    ParseTreeWalker walker = new BatfishParseTreeWalker(cp);
     walker.walk(extractor, ctx);
 
     assertThat(extractor.getNumSets(), equalTo(9));
@@ -3976,7 +4048,6 @@ public final class FlatJuniperGrammarTest {
   @Test
   public void testRoutingPolicy() throws IOException {
     Configuration c = parseConfig("routing-policy");
-    Environment.Builder eb = Environment.builder(c).setDirection(Direction.IN);
 
     RoutingPolicy policyExact = c.getRoutingPolicies().get("route-filter-exact");
     RoutingPolicy policyLonger = c.getRoutingPolicies().get("route-filter-longer");
@@ -4002,7 +4073,7 @@ public final class FlatJuniperGrammarTest {
     ConnectedRoute connectedRouteMaskInvalidLength =
         new ConnectedRoute(Prefix.parse("1.9.3.9/17"), "nhinttest");
 
-    eb.setVrf("vrf1");
+    Environment.Builder eb = Environment.builder(c, "vrf1").setDirection(Direction.IN);
 
     assertThat(
         policyExact.call(eb.setOriginalRoute(connectedRouteExact).build()).getBooleanValue(),
@@ -4198,8 +4269,7 @@ public final class FlatJuniperGrammarTest {
               .getRoutingPolicies()
               .get("POLICY-NAME")
               .call(
-                  Environment.builder(config)
-                      .setVrf(Configuration.DEFAULT_VRF_NAME)
+                  Environment.builder(config, DEFAULT_VRF_NAME)
                       .setOriginalRoute(new ConnectedRoute(p, "iface"))
                       .build());
       assertThat(result.getBooleanValue(), equalTo(true));
@@ -4211,8 +4281,7 @@ public final class FlatJuniperGrammarTest {
             .getRoutingPolicies()
             .get("POLICY-NAME")
             .call(
-                Environment.builder(config)
-                    .setVrf(Configuration.DEFAULT_VRF_NAME)
+                Environment.builder(config, DEFAULT_VRF_NAME)
                     .setOriginalRoute(new ConnectedRoute(Prefix.parse("3.3.3.3/24"), "iface"))
                     .build());
     assertThat(result.getBooleanValue(), equalTo(false));
@@ -4223,8 +4292,7 @@ public final class FlatJuniperGrammarTest {
             .getRoutingPolicies()
             .get("POLICY-NAME")
             .call(
-                Environment.builder(config)
-                    .setVrf(Configuration.DEFAULT_VRF_NAME)
+                Environment.builder(config, DEFAULT_VRF_NAME)
                     .setOriginalRoute(
                         StaticRoute.builder()
                             .setNextHopInterface("iface")
@@ -4361,7 +4429,7 @@ public final class FlatJuniperGrammarTest {
         ifaceScreenAcl,
         equalTo(
             IpAccessList.builder()
-                .setName("~SCREEN~ge-0/0/0.0")
+                .setName("~SCREEN_INTERFACE~ge-0/0/0.0")
                 .setLines(
                     ImmutableList.of(
                         IpAccessListLine.accepting(
@@ -4387,6 +4455,68 @@ public final class FlatJuniperGrammarTest {
   }
 
   @Test
+  public void testInstanceImport() throws IOException {
+    String hostname = "instance-import";
+    Configuration c = parseConfig(hostname);
+
+    /*
+     * instance-import for default VRF imports two policies, PS1 followed by PS2.
+     * PS1 accepts VRF3, then VRF1. PS2 accepts VRF1 and an undefined MYSTERY_VRF, and rejects VRF2.
+     * Resulting list of VRFs whose routes to import should have the referenced VRFs in the order
+     * they were referenced, ignoring second reference to VRF1, not including undefined MYSTERY_VRF.
+     */
+    Vrf defaultVrf = c.getVrfs().get(DEFAULT_VRF_NAME);
+    assertThat(defaultVrf.getCrossVrfImportVrfs(), contains("VRF3", "VRF1", "VRF2"));
+
+    /*
+    Test instance import policy behavior.
+     - Routes from VRF1 and VRF3 should be accepted, but not routes from VRF2.
+     - Routes from arbitrary other VRFs should be rejected by default policy.
+    The only thing in the arguments to process that should get checked is source VRF.
+    */
+    RoutingPolicy instanceImportPolicy =
+        c.getRoutingPolicies().get(defaultVrf.getCrossVrfImportPolicy());
+    StaticRoute sr = StaticRoute.builder().setNetwork(Prefix.ZERO).setAdmin(5).build();
+    assertThat(
+        instanceImportPolicy.process(
+            new AnnotatedRoute<>(sr, "VRF1"), null, null, DEFAULT_VRF_NAME, null),
+        equalTo(true));
+    assertThat(
+        instanceImportPolicy.process(
+            new AnnotatedRoute<>(sr, "VRF2"), null, null, DEFAULT_VRF_NAME, null),
+        equalTo(false));
+    assertThat(
+        instanceImportPolicy.process(
+            new AnnotatedRoute<>(sr, "VRF3"), null, null, DEFAULT_VRF_NAME, null),
+        equalTo(true));
+    assertThat(
+        instanceImportPolicy.process(
+            new AnnotatedRoute<>(sr, "ANOTHER_VRF"), null, null, DEFAULT_VRF_NAME, null),
+        equalTo(false));
+
+    /*
+    Check resulting state of routes in snapshot.
+     - VRF1 has static 1.1.1.1/30, which should be in default VRF since VRF1 routes are accepted
+     - VRF2 has static 2.2.2.2/30, which should not be in default VRF since VRF2 routes are rejected
+     - VRF3 doesn't have any routes, so should have no impact on default VRF
+    */
+    Batfish batfish = BatfishTestUtils.getBatfish(ImmutableSortedMap.of(hostname, c), _folder);
+    batfish.computeDataPlane();
+    DataPlane dp = batfish.loadDataPlane();
+    ImmutableMap<String, Set<AnnotatedRoute<AbstractRoute>>> routes =
+        dp.getRibs().get(hostname).entrySet().stream()
+            .collect(
+                ImmutableMap.toImmutableMap(Entry::getKey, e -> e.getValue().getTypedRoutes()));
+
+    assertThat(
+        routes.get(DEFAULT_VRF_NAME),
+        contains(allOf(hasPrefix(Prefix.parse("1.1.1.1/30")), hasSourceVrf("VRF1"))));
+
+    // Ensure that VRF2 does in fact have 2.2.2.2/30, as expected
+    assertThat(routes.get("VRF2"), hasItem(hasPrefix(Prefix.parse("2.2.2.2/30"))));
+  }
+
+  @Test
   public void testInterfaceRibGroup() throws IOException {
     String hostname = "juniper-interface-ribgroup";
     Configuration c = parseConfig(hostname);
@@ -4394,24 +4524,37 @@ public final class FlatJuniperGrammarTest {
     batfish.computeDataPlane();
     DataPlane dp = batfish.loadDataPlane();
 
-    ImmutableMap<String, Set<AbstractRoute>> routes =
+    ImmutableMap<String, Set<AnnotatedRoute<AbstractRoute>>> routes =
         dp.getRibs().get(hostname).entrySet().stream()
-            .collect(ImmutableMap.toImmutableMap(Entry::getKey, e -> e.getValue().getRoutes()));
+            .collect(
+                ImmutableMap.toImmutableMap(Entry::getKey, e -> e.getValue().getTypedRoutes()));
+    String vrf2Name = "VRF2";
 
-    Set<AbstractRoute> defaultExpectedRoutes =
+    Set<AnnotatedRoute<AbstractRoute>> defaultExpectedRoutes =
         ImmutableSet.of(
-            new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"),
-            new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"));
-    Set<AbstractRoute> vrf2ExpectedRoutes =
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"),
+                DEFAULT_VRF_NAME));
+    Set<AnnotatedRoute<AbstractRoute>> vrf2ExpectedRoutes =
         ImmutableSet.of(
-            new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"),
-            new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"),
-            new ConnectedRoute(Prefix.parse("2.2.2.8/31"), "ge-0/0/3.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.8/31"), "ge-0/0/3.0"));
-    assertThat(routes.get(Configuration.DEFAULT_VRF_NAME), equalTo(defaultExpectedRoutes));
-    assertThat(routes.get("VRF2"), equalTo(vrf2ExpectedRoutes));
+            // From default VRF
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"), DEFAULT_VRF_NAME),
+            // Present normally
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.8/31"), "ge-0/0/3.0"), vrf2Name),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.8/31"), "ge-0/0/3.0"), vrf2Name));
+    assertThat(routes.get(DEFAULT_VRF_NAME), equalTo(defaultExpectedRoutes));
+    assertThat(routes.get(vrf2Name), equalTo(vrf2ExpectedRoutes));
   }
 
   @Test
@@ -4422,34 +4565,52 @@ public final class FlatJuniperGrammarTest {
     batfish.computeDataPlane();
     DataPlane dp = batfish.loadDataPlane();
 
-    ImmutableMap<String, Set<AbstractRoute>> routes =
+    ImmutableMap<String, Set<AnnotatedRoute<AbstractRoute>>> routes =
         dp.getRibs().get(hostname).entrySet().stream()
-            .collect(ImmutableMap.toImmutableMap(Entry::getKey, e -> e.getValue().getRoutes()));
+            .collect(
+                ImmutableMap.toImmutableMap(Entry::getKey, e -> e.getValue().getTypedRoutes()));
+    String vrf2Name = "VRF2";
 
-    assertThat(
-        routes.get(Configuration.DEFAULT_VRF_NAME),
-        containsInAnyOrder(
-            new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"),
-            new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"),
-            new ConnectedRoute(Prefix.parse("2.2.2.4/31"), "ge-0/0/1.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.4/31"), "ge-0/0/1.0"),
-            new ConnectedRoute(Prefix.parse("2.2.2.6/31"), "ge-0/0/2.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.6/31"), "ge-0/0/2.0")));
-    assertThat(
-        routes.get("VRF2"),
-        containsInAnyOrder(
+    Set<AnnotatedRoute<AbstractRoute>> vrf2ExpectedRoutes =
+        ImmutableSet.of(
             // allowed Default policy
-            new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.4/31"), "ge-0/0/1.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.6/31"), "ge-0/0/2.0"),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.4/31"), "ge-0/0/1.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.6/31"), "ge-0/0/2.0"), DEFAULT_VRF_NAME),
             // allowed by RIB_IN
-            new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0"),
-            new ConnectedRoute(Prefix.parse("2.2.2.4/31"), "ge-0/0/1.0"),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.4/31"), "ge-0/0/1.0"), DEFAULT_VRF_NAME),
             // Present normally
-            new ConnectedRoute(Prefix.parse("2.2.2.8/31"), "ge-0/0/3.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.8/31"), "ge-0/0/3.0")));
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.8/31"), "ge-0/0/3.0"), vrf2Name),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.8/31"), "ge-0/0/3.0"), vrf2Name));
+    Set<AnnotatedRoute<AbstractRoute>> defaultExpectedRoutes =
+        ImmutableSet.of(
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.4/31"), "ge-0/0/1.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.4/31"), "ge-0/0/1.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.6/31"), "ge-0/0/2.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.6/31"), "ge-0/0/2.0"),
+                DEFAULT_VRF_NAME));
+    assertThat(routes.get(DEFAULT_VRF_NAME), equalTo(defaultExpectedRoutes));
+    assertThat(routes.get(vrf2Name), equalTo(vrf2ExpectedRoutes));
   }
 
   @Test
@@ -4460,22 +4621,32 @@ public final class FlatJuniperGrammarTest {
     batfish.computeDataPlane();
     DataPlane dp = batfish.loadDataPlane();
 
-    ImmutableMap<String, Set<AbstractRoute>> routes =
+    ImmutableMap<String, Set<AnnotatedRoute<AbstractRoute>>> routes =
         dp.getRibs().get(hostname).entrySet().stream()
-            .collect(ImmutableMap.toImmutableMap(Entry::getKey, e -> e.getValue().getRoutes()));
+            .collect(
+                ImmutableMap.toImmutableMap(Entry::getKey, e -> e.getValue().getTypedRoutes()));
+    String vrf2Name = "VRF2";
 
-    assertThat(
-        routes.get(Configuration.DEFAULT_VRF_NAME),
-        containsInAnyOrder(
-            new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"),
-            new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0", 0),
-            new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0")));
-    assertThat(
-        routes.get("VRF2"),
-        containsInAnyOrder(
-            new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"),
-            new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"),
-            new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0", 123)));
+    Set<AnnotatedRoute<AbstractRoute>> defaultExpectedRoutes =
+        ImmutableSet.of(
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0", 0), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"),
+                DEFAULT_VRF_NAME));
+    Set<AnnotatedRoute<AbstractRoute>> vrf2ExpectedRoutes =
+        ImmutableSet.of(
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("1.1.1.1/32"), "lo0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new LocalRoute(new InterfaceAddress("2.2.2.2/31"), "ge-0/0/0.0"), DEFAULT_VRF_NAME),
+            new AnnotatedRoute<>(
+                new ConnectedRoute(Prefix.parse("2.2.2.2/31"), "ge-0/0/0.0", 123),
+                DEFAULT_VRF_NAME));
+    assertThat(routes.get(DEFAULT_VRF_NAME), equalTo(defaultExpectedRoutes));
+    assertThat(routes.get(vrf2Name), equalTo(vrf2ExpectedRoutes));
   }
 
   @Test
@@ -4569,5 +4740,103 @@ public final class FlatJuniperGrammarTest {
     // pool5 should not have pat specified
     assertNotNull(pool5);
     assertNull(pool5.getPortAddressTranslation());
+  }
+
+  @Test
+  public void testVrfSpecificPoolPortAddressTranslation() {
+    JuniperConfiguration juniperConfiguration = parseJuniperConfig("juniper-nat-vrf");
+    Nat sourceNat = juniperConfiguration.getMasterLogicalSystem().getNatSource();
+    NatPool pool0 = sourceNat.getPools().get("POOL0");
+    NatPool pool1 = sourceNat.getPools().get("POOL1");
+    assertThat(pool0.getOwner(), equalTo("R1"));
+    assertNull(pool1.getOwner());
+  }
+
+  @Test
+  public void testStaticNat() {
+    JuniperConfiguration juniperConfiguration = parseJuniperConfig("juniper-nat-static");
+    Nat nat = juniperConfiguration.getMasterLogicalSystem().getNatStatic();
+    assertThat(nat.getRuleSets().keySet(), contains("RULESET1"));
+
+    NatRuleSet ruleset = nat.getRuleSets().get("RULESET1");
+    assertThat(ruleset.getRules(), hasSize(2));
+
+    NatRule rule1 = ruleset.getRules().get(0);
+    assertThat(rule1.getName(), equalTo("RULE1"));
+    assertThat(rule1.getMatches(), contains(new NatRuleMatchDstAddrName("DESTNAME")));
+    assertThat(
+        rule1.getThen(), equalTo(new NatRuleThenPrefixName("PREFIXNAME", IpField.DESTINATION)));
+
+    NatRule rule2 = ruleset.getRules().get(1);
+    assertThat(rule2.getName(), equalTo("RULE2"));
+    assertThat(rule2.getMatches(), contains(new NatRuleMatchDstAddr(Prefix.parse("2.0.0.0/24"))));
+    assertThat(
+        rule2.getThen(),
+        equalTo(new NatRuleThenPrefix(Prefix.parse("10.10.10.0/24"), IpField.DESTINATION)));
+  }
+
+  @Test
+  public void testStaticNatViModel() throws IOException {
+    Configuration config = parseConfig("juniper-nat-static");
+
+    // incoming transformation
+    Transformation destNatTransformation =
+        when(match(HeaderSpace.builder().setSrcIps(Prefix.parse("3.3.3.3/24").toIpSpace()).build()))
+            .apply(new Noop(DEST_NAT))
+            .build();
+
+    Transformation rule2IncomingTransformation =
+        when(match(HeaderSpace.builder().setDstIps(Prefix.parse("2.0.0.0/24").toIpSpace()).build()))
+            .apply(
+                new ShiftIpAddressIntoSubnet(
+                    STATIC_NAT, DESTINATION, Prefix.parse("10.10.10.0/24")))
+            .setOrElse(destNatTransformation)
+            .build();
+
+    Transformation expectedIncomingTransformation =
+        when(match(
+                HeaderSpace.builder().setDstIps(new IpSpaceReference("global~DESTNAME")).build()))
+            .apply(
+                new ShiftIpAddressIntoSubnet(
+                    STATIC_NAT, DESTINATION, Prefix.parse("10.10.10.0/24")))
+            .setOrElse(rule2IncomingTransformation)
+            .build();
+
+    Transformation incomingTransformation =
+        config.getAllInterfaces().get("ge-0/0/0.0").getIncomingTransformation();
+
+    assertThat(incomingTransformation, equalTo(expectedIncomingTransformation));
+
+    // outgoing transformation
+    AclLineMatchExpr matchFromLocation = AclLineMatchExprs.matchSrcInterface("ge-0/0/1.0");
+    Transformation srcNatTransformation =
+        when(matchFromLocation)
+            .setAndThen(
+                when(match(
+                        HeaderSpace.builder()
+                            .setSrcIps(Prefix.parse("3.3.3.3/24").toIpSpace())
+                            .build()))
+                    .apply(new Noop(SOURCE_NAT))
+                    .build())
+            .build();
+
+    Transformation rule2OutgoingTransformation =
+        when(match(
+                HeaderSpace.builder().setSrcIps(Prefix.parse("10.10.10.0/24").toIpSpace()).build()))
+            .apply(new ShiftIpAddressIntoSubnet(STATIC_NAT, SOURCE, Prefix.parse("2.0.0.0/24")))
+            .setOrElse(srcNatTransformation)
+            .build();
+
+    Transformation expectedOutgoingTransformation =
+        when(match(
+                HeaderSpace.builder().setSrcIps(new IpSpaceReference("global~PREFIXNAME")).build()))
+            .apply(new ShiftIpAddressIntoSubnet(STATIC_NAT, SOURCE, Prefix.parse("1.0.0.0/24")))
+            .setOrElse(rule2OutgoingTransformation)
+            .build();
+
+    Transformation outgoingTransformation =
+        config.getAllInterfaces().get("ge-0/0/0.0").getOutgoingTransformation();
+
+    assertThat(outgoingTransformation, equalTo(expectedOutgoingTransformation));
   }
 }

@@ -13,6 +13,7 @@ import javax.annotation.ParametersAreNonnullByDefault;
 /** Represents a Layer 3 link by a pair of IP addresses. */
 @ParametersAreNonnullByDefault
 public final class IpLink implements Comparable<IpLink> {
+
   private static final String PROP_IP1 = "ip1";
   private static final String PROP_IP2 = "ip2";
 

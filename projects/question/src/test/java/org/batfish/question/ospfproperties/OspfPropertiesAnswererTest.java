@@ -5,8 +5,8 @@ import static org.junit.Assert.assertThat;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultiset;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multiset;
+import java.util.stream.Stream;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.Vrf;
@@ -15,19 +15,21 @@ import org.batfish.datamodel.pojo.Node;
 import org.batfish.datamodel.questions.OspfPropertySpecifier;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableMetadata;
+import org.batfish.specifier.MockSpecifierContext;
+import org.batfish.specifier.NameNodeSpecifier;
 import org.junit.Test;
 
 public class OspfPropertiesAnswererTest {
 
   @Test
   public void getProperties() {
-    OspfProcess ospf1 = OspfProcess.builder().setReferenceBandwidth(1e8).build();
+    OspfProcess ospf1 =
+        OspfProcess.builder().setProcessId("uber-proc").setReferenceBandwidth(1e8).build();
     ospf1.setExportPolicy("my-policy");
     ospf1.setReferenceBandwidth(42.0);
-    ospf1.setProcessId("uber-proc");
 
     Vrf vrf1 = new Vrf("vrf1");
-    vrf1.setOspfProcess(ospf1);
+    vrf1.setOspfProcesses(Stream.of(ospf1));
 
     Configuration conf1 = new Configuration("node1", ConfigurationFormat.CISCO_IOS);
     conf1.setVrfs(ImmutableMap.of("vrf1", vrf1));
@@ -40,12 +42,11 @@ public class OspfPropertiesAnswererTest {
 
     TableMetadata metadata = OspfPropertiesAnswerer.createTableMetadata(question);
 
+    MockSpecifierContext ctxt =
+        MockSpecifierContext.builder().setConfigs(ImmutableMap.of("node1", conf1)).build();
     Multiset<Row> propertyRows =
         OspfPropertiesAnswerer.getProperties(
-            question.getProperties(),
-            ImmutableMap.of("node1", conf1),
-            ImmutableSet.of("node1"),
-            metadata.toColumnMap());
+            question.getProperties(), ctxt, new NameNodeSpecifier("node1"), metadata.toColumnMap());
 
     // we should have exactly one row1 with two properties
     Row expectedRow =

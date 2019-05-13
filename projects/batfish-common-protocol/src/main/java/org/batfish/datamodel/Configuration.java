@@ -5,12 +5,12 @@ import static com.google.common.base.Predicates.not;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
-import com.kjetland.jackson.jsonSchema.annotations.JsonSchemaDescription;
+import com.google.common.collect.Ordering;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.Comparator;
@@ -22,20 +22,22 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.batfish.common.BatfishException;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.NetworkFactory.NetworkFactoryBuilder;
 import org.batfish.datamodel.ospf.OspfProcess;
+import org.batfish.datamodel.packet_policy.PacketPolicy;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.tracking.TrackMethod;
 import org.batfish.datamodel.vendor_family.VendorFamily;
+import org.batfish.referencelibrary.ReferenceBook;
 
-@JsonSchemaDescription(
-    "A Configuration represents an autonomous network device, such as a router, host, switch, or "
-        + "firewall.")
+/**
+ * A Configuration represents an autonomous network device, such as a router, host, switch, or
+ * firewall.
+ */
 public final class Configuration implements Serializable {
 
   public static class Builder extends NetworkFactoryBuilder<Configuration> {
@@ -97,79 +99,44 @@ public final class Configuration implements Serializable {
   public static final String DEFAULT_VRF_NAME = "default";
 
   public static final String NODE_NONE_NAME = "(none)";
-
   private static final String PROP_AS_PATH_ACCESS_LISTS = "asPathAccessLists";
-
   private static final String PROP_AUTHENTICATION_KEY_CHAINS = "authenticationKeyChains";
-
   private static final String PROP_COMMUNITY_LISTS = "communityLists";
-
   private static final String PROP_CONFIGURATION_FORMAT = "configurationFormat";
-
   private static final String PROP_DEFAULT_CROSS_ZONE_ACTION = "defaultCrossZoneAction";
-
   private static final String PROP_DEFAULT_INBOUND_ACTION = "defaultInboundAction";
-
   private static final String PROP_DEVICE_TYPE = "deviceType";
-
   private static final String PROP_DNS_SOURCE_INTERFACE = "dnsSourceInterface";
-
   private static final String PROP_DOMAIN_NAME = "domainName";
-
+  private static final String PROP_GENERATED_REFERENCE_BOOKS = "generatedReferenceBooks";
   private static final String PROP_IKE_PHASE1_KEYS = "ikePhase1Keys";
-
   private static final String PROP_IKE_PHASE1_POLICIES = "ikePhase1Policies";
-
   private static final String PROP_IKE_PHASE1_PROPOSALS = "ikePhase1Proposals";
-
   private static final String PROP_INTERFACES = "interfaces";
-
   private static final String PROP_IP6_ACCESS_LISTS = "ip6AccessLists";
-
   private static final String PROP_IP_ACCESS_LISTS = "ipAccessLists";
-
   private static final String PROP_IP_SPACES = "ipSpaces";
-
   private static final String PROP_IP_SPACE_METADATA = "ipSpaceMetadata";
-
   private static final String PROP_IPSEC_PEER_CONFIGS = "ipsecPeerConfigs";
-
   private static final String PROP_IPSEC_PHASE2_POLICIES = "ipsecPhase2Policies";
-
   private static final String PROP_IPSEC_PHASE2_PROPOSALS = "ipsecPhase2Proposals";
-
   private static final String PROP_LOGGING_SERVERS = "loggingServers";
-
   private static final String PROP_LOGGING_SOURCE_INTERFACE = "loggingSourceInterface";
-
   private static final String PROP_MLAGS = "mlags";
-
   private static final String PROP_NAME = "name";
-
   private static final String PROP_NTP_SERVERS = "ntpServers";
-
   private static final String PROP_NTP_SOURCE_INTERFACE = "ntpSourceInterface";
-
+  private static final String PROP_PACKET_POLICIES = "packetPolicies";
   private static final String PROP_ROUTE6_FILTER_LISTS = "route6FilterLists";
-
   private static final String PROP_ROUTE_FILTER_LISTS = "routeFilterLists";
-
   private static final String PROP_ROUTING_POLICIES = "routingPolicies";
-
   private static final String PROP_SNMP_SOURCE_INTERFACE = "snmpSourceInterface";
-
   private static final String PROP_SNMP_TRAP_SERVERS = "snmpTrapServers";
-
   private static final String PROP_TACACS_SERVERS = "tacacsServers";
-
   private static final String PROP_TACACS_SOURCE_INTERFACE = "tacacsSourceInterface";
-
   private static final String PROP_TRACKING_GROUPS = "trackingGroups";
-
   private static final String PROP_VENDOR_FAMILY = "vendorFamily";
-
   private static final String PROP_VRFS = "vrfs";
-
   private static final String PROP_ZONES = "zones";
 
   private static final long serialVersionUID = 1L;
@@ -181,8 +148,6 @@ public final class Configuration implements Serializable {
   private NavigableMap<String, AsPathAccessList> _asPathAccessLists;
 
   private NavigableMap<String, AuthenticationKeyChain> _authenticationKeyChains;
-
-  private transient NavigableSet<BgpAdvertisement> _bgpAdvertisements;
 
   private NavigableMap<String, CommunityList> _communityLists;
 
@@ -199,6 +164,8 @@ public final class Configuration implements Serializable {
   private String _dnsSourceInterface;
 
   private String _domainName;
+
+  private NavigableMap<String, ReferenceBook> _generatedReferenceBooks;
 
   private @Nonnull NavigableMap<String, IkePhase1Key> _ikePhase1keys;
 
@@ -237,29 +204,13 @@ public final class Configuration implements Serializable {
 
   private String _ntpSourceInterface;
 
-  private transient NavigableSet<BgpAdvertisement> _originatedAdvertisements;
-
-  private transient NavigableSet<BgpAdvertisement> _originatedEbgpAdvertisements;
-
-  private transient NavigableSet<BgpAdvertisement> _originatedIbgpAdvertisements;
-
-  private transient NavigableSet<BgpAdvertisement> _receivedAdvertisements;
-
-  private transient NavigableSet<BgpAdvertisement> _receivedEbgpAdvertisements;
-
-  private transient NavigableSet<BgpAdvertisement> _receivedIbgpAdvertisements;
+  private NavigableMap<String, PacketPolicy> _packetPolicies;
 
   private NavigableMap<String, Route6FilterList> _route6FilterLists;
 
   private NavigableMap<String, RouteFilterList> _routeFilterLists;
 
   private NavigableMap<String, RoutingPolicy> _routingPolicies;
-
-  private transient NavigableSet<BgpAdvertisement> _sentAdvertisements;
-
-  private transient NavigableSet<BgpAdvertisement> _sentEbgpAdvertisements;
-
-  private transient NavigableSet<BgpAdvertisement> _sentIbgpAdvertisements;
 
   private String _snmpSourceInterface;
 
@@ -295,6 +246,7 @@ public final class Configuration implements Serializable {
     _configurationFormat = configurationFormat;
     _dnsServers = new TreeSet<>();
     _domainName = null;
+    _generatedReferenceBooks = new TreeMap<>();
     _ikePhase1keys = ImmutableSortedMap.of();
     _ikePhase1Policies = new TreeMap<>();
     _ikePhase1Proposals = new TreeMap<>();
@@ -310,6 +262,7 @@ public final class Configuration implements Serializable {
     _mlags = ImmutableSortedMap.of();
     _normalVlanRange = new SubRange(VLAN_NORMAL_MIN_DEFAULT, VLAN_NORMAL_MAX_DEFAULT);
     _ntpServers = new TreeSet<>();
+    _packetPolicies = new TreeMap<>();
     _routeFilterLists = new TreeMap<>();
     _route6FilterLists = new TreeMap<>();
     _routingPolicies = new TreeMap<>();
@@ -347,8 +300,7 @@ public final class Configuration implements Serializable {
           neighbor.setImportPolicySources(getRoutingPolicySources(neighbor.getImportPolicy()));
         }
       }
-      OspfProcess ospfProcess = vrf.getOspfProcess();
-      if (ospfProcess != null) {
+      for (OspfProcess ospfProcess : vrf.getOspfProcesses().values()) {
         ospfProcess.setExportPolicySources(getRoutingPolicySources(ospfProcess.getExportPolicy()));
       }
       for (GeneratedRoute gr : vrf.getGeneratedRoutes()) {
@@ -358,21 +310,16 @@ public final class Configuration implements Serializable {
     }
   }
 
+  /** Dictionary of all AS-path access-lists for this node. */
   @JsonProperty(PROP_AS_PATH_ACCESS_LISTS)
-  @JsonPropertyDescription("Dictionary of all AS-path access-lists for this node.")
   public NavigableMap<String, AsPathAccessList> getAsPathAccessLists() {
     return _asPathAccessLists;
   }
 
+  /** Dictionary of all authentication key chains for this node. */
   @JsonProperty(PROP_AUTHENTICATION_KEY_CHAINS)
-  @JsonPropertyDescription("Dictionary of all authentication key chains for this node.")
   public NavigableMap<String, AuthenticationKeyChain> getAuthenticationKeyChains() {
     return _authenticationKeyChains;
-  }
-
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getBgpAdvertisements() {
-    return _bgpAdvertisements;
   }
 
   /** Returns the lowest IP across all interfaces for now. We'll improve it later. */
@@ -394,30 +341,29 @@ public final class Configuration implements Serializable {
         .collect(ImmutableSet.toImmutableSet());
   }
 
+  /** Dictionary of all community-lists for this node. */
   @JsonProperty(PROP_COMMUNITY_LISTS)
-  @JsonPropertyDescription("Dictionary of all community-lists for this node.")
   public NavigableMap<String, CommunityList> getCommunityLists() {
     return _communityLists;
   }
 
+  /**
+   * Best guess at vendor configuration format. Used for setting default values, protocol costs,
+   * etc.
+   */
   @JsonProperty(PROP_CONFIGURATION_FORMAT)
-  @JsonPropertyDescription(
-      "Best guess at vendor configuration format. Used for setting default values, protocol "
-          + "costs, etc.")
   public ConfigurationFormat getConfigurationFormat() {
     return _configurationFormat;
   }
 
+  /** Default forwarding action to take for traffic that crosses firewall zones. */
   @JsonProperty(PROP_DEFAULT_CROSS_ZONE_ACTION)
-  @JsonPropertyDescription(
-      "Default forwarding action to take for traffic that crosses firewall zones.")
   public LineAction getDefaultCrossZoneAction() {
     return _defaultCrossZoneAction;
   }
 
+  /** Default forwarding action to take for traffic destined for this device. */
   @JsonProperty(PROP_DEFAULT_INBOUND_ACTION)
-  @JsonPropertyDescription(
-      "Default forwarding action to take for traffic destined for this device.")
   public LineAction getDefaultInboundAction() {
     return _defaultInboundAction;
   }
@@ -441,40 +387,53 @@ public final class Configuration implements Serializable {
     return _dnsSourceInterface;
   }
 
+  /** Domain name of this node. */
   @JsonProperty(PROP_DOMAIN_NAME)
-  @JsonPropertyDescription("Domain name of this node.")
   public String getDomainName() {
     return _domainName;
   }
 
+  /** Dictionary of Reference Books generated from device configurations (e.g., F5 Pools). */
+  @JsonProperty(PROP_GENERATED_REFERENCE_BOOKS)
+  public NavigableMap<String, ReferenceBook> getGeneratedReferenceBooks() {
+    return _generatedReferenceBooks;
+  }
+
+  /** Hostname of this node. */
   @JsonProperty(PROP_NAME)
-  @JsonPropertyDescription("Hostname of this node.")
   public String getHostname() {
     return _name;
   }
 
+  /** Dictionary of all IKE phase1 keys for this node. */
   @JsonProperty(PROP_IKE_PHASE1_KEYS)
-  @JsonPropertyDescription("Dictionary of all IKE phase1 keys for this node.")
   public NavigableMap<String, IkePhase1Key> getIkePhase1Keys() {
     return _ikePhase1keys;
   }
 
+  /** Dictionary of all IKE phase1 policies for this node. */
   @JsonProperty(PROP_IKE_PHASE1_POLICIES)
-  @JsonPropertyDescription("Dictionary of all IKE phase1 policies for this node.")
   public NavigableMap<String, IkePhase1Policy> getIkePhase1Policies() {
     return _ikePhase1Policies;
   }
 
+  /** Dictionary of all IKE phase1 proposals for this node. */
   @JsonProperty(PROP_IKE_PHASE1_PROPOSALS)
-  @JsonPropertyDescription("Dictionary of all IKE phase1 proposals for this node.")
   public NavigableMap<String, IkePhase1Proposal> getIkePhase1Proposals() {
     return _ikePhase1Proposals;
   }
 
-  @JsonPropertyDescription("Dictionary of all interfaces across all VRFs for this node.")
+  /** Dictionary of all interfaces across all VRFs for this node. */
   @JsonProperty(PROP_INTERFACES)
   public NavigableMap<String, Interface> getAllInterfaces() {
     return _interfaces;
+  }
+
+  @JsonIgnore
+  public Map<String, Interface> getActiveInterfaces() {
+    return _interfaces.entrySet().stream()
+        .filter(e -> e.getValue().getActive())
+        .collect(ImmutableMap.toImmutableMap(Entry::getKey, Entry::getValue));
   }
 
   @JsonIgnore
@@ -483,19 +442,19 @@ public final class Configuration implements Serializable {
     return getAllInterfaces();
   }
 
-  @JsonPropertyDescription("Dictionary of all IPV6 access-lists for this node.")
+  /** Dictionary of all IPV6 access-lists for this node. */
   @JsonProperty(PROP_IP6_ACCESS_LISTS)
   public NavigableMap<String, Ip6AccessList> getIp6AccessLists() {
     return _ip6AccessLists;
   }
 
+  /** Dictionary of all IPV4 access-lists for this node. */
   @JsonProperty(PROP_IP_ACCESS_LISTS)
-  @JsonPropertyDescription("Dictionary of all IPV4 access-lists for this node.")
   public NavigableMap<String, IpAccessList> getIpAccessLists() {
     return _ipAccessLists;
   }
 
-  @JsonPropertyDescription("Dictionary of all IPSec peer configs for this node")
+  /** Dictionary of all IPSec peer configs for this node. */
   @JsonProperty(PROP_IPSEC_PEER_CONFIGS)
   public NavigableMap<String, IpsecPeerConfig> getIpsecPeerConfigs() {
     return _ipsecPeerConfigs;
@@ -511,14 +470,14 @@ public final class Configuration implements Serializable {
     return _ipSpaceMetadata;
   }
 
+  /** Dictionary of all IPSec phase 2 policies for this node. */
   @JsonProperty(PROP_IPSEC_PHASE2_POLICIES)
-  @JsonPropertyDescription("Dictionary of all IPSec phase 2 policies for this node.")
   public NavigableMap<String, IpsecPhase2Policy> getIpsecPhase2Policies() {
     return _ipsecPhase2Policies;
   }
 
+  /** Dictionary of all IPSec phase 2 proposals for this node. */
   @JsonProperty(PROP_IPSEC_PHASE2_PROPOSALS)
-  @JsonPropertyDescription("Dictionary of all IPSec phase 2 proposals for this node.")
   public NavigableMap<String, IpsecPhase2Proposal> getIpsecPhase2Proposals() {
     return _ipsecPhase2Proposals;
   }
@@ -554,50 +513,26 @@ public final class Configuration implements Serializable {
     return _ntpSourceInterface;
   }
 
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getOriginatedAdvertisements() {
-    return _originatedAdvertisements;
+  /** Return the defined policies that can be used for policy-based routing */
+  @JsonProperty(PROP_PACKET_POLICIES)
+  public Map<String, PacketPolicy> getPacketPolicies() {
+    return _packetPolicies;
   }
 
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getOriginatedEbgpAdvertisements() {
-    return _originatedEbgpAdvertisements;
-  }
-
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getOriginatedIbgpAdvertisements() {
-    return _originatedIbgpAdvertisements;
-  }
-
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getReceivedAdvertisements() {
-    return _receivedAdvertisements;
-  }
-
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getReceivedEbgpAdvertisements() {
-    return _receivedEbgpAdvertisements;
-  }
-
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getReceivedIbgpAdvertisements() {
-    return _receivedIbgpAdvertisements;
-  }
-
-  @JsonPropertyDescription("Dictionary of all IPV6 route filter lists for this node.")
+  /** Dictionary of all IPV6 route filter lists for this node. */
   @JsonProperty(PROP_ROUTE6_FILTER_LISTS)
   public NavigableMap<String, Route6FilterList> getRoute6FilterLists() {
     return _route6FilterLists;
   }
 
+  /** Dictionary of all IPV4 route filter lists for this node. */
   @JsonProperty(PROP_ROUTE_FILTER_LISTS)
-  @JsonPropertyDescription("Dictionary of all IPV4 route filter lists for this node.")
   public NavigableMap<String, RouteFilterList> getRouteFilterLists() {
     return _routeFilterLists;
   }
 
+  /** Dictionary of all routing policies for this node. */
   @JsonProperty(PROP_ROUTING_POLICIES)
-  @JsonPropertyDescription("Dictionary of all routing policies for this node.")
   public NavigableMap<String, RoutingPolicy> getRoutingPolicies() {
     return _routingPolicies;
   }
@@ -613,21 +548,6 @@ public final class Configuration implements Serializable {
     return rp.getSources().stream()
         .filter(not(RoutingPolicy::isGenerated))
         .collect(ImmutableSortedSet.toImmutableSortedSet(Comparator.naturalOrder()));
-  }
-
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getSentAdvertisements() {
-    return _sentAdvertisements;
-  }
-
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getSentEbgpAdvertisements() {
-    return _sentEbgpAdvertisements;
-  }
-
-  @JsonIgnore
-  public NavigableSet<BgpAdvertisement> getSentIbgpAdvertisements() {
-    return _sentIbgpAdvertisements;
   }
 
   @JsonProperty(PROP_SNMP_SOURCE_INTERFACE)
@@ -656,38 +576,22 @@ public final class Configuration implements Serializable {
     return _trackingGroups;
   }
 
-  @JsonPropertyDescription("Object containing vendor-specific information for this node.")
+  /** Object containing vendor-specific information for this node. */
   @JsonProperty(PROP_VENDOR_FAMILY)
   public VendorFamily getVendorFamily() {
     return _vendorFamily;
   }
 
-  @JsonPropertyDescription("Dictionary of all VRFs for this node.")
+  /** Dictionary of all VRFs for this node. */
   @JsonProperty(PROP_VRFS)
   public Map<String, Vrf> getVrfs() {
     return _vrfs;
   }
 
+  /** Dictionary of all firewall zones for this node. */
   @JsonProperty(PROP_ZONES)
-  @JsonPropertyDescription("Dictionary of all firewall zones for this node.")
   public NavigableMap<String, Zone> getZones() {
     return _zones;
-  }
-
-  public void initBgpAdvertisements() {
-    _bgpAdvertisements = new TreeSet<>();
-    _originatedAdvertisements = new TreeSet<>();
-    _originatedEbgpAdvertisements = new TreeSet<>();
-    _originatedIbgpAdvertisements = new TreeSet<>();
-    _receivedAdvertisements = new TreeSet<>();
-    _receivedEbgpAdvertisements = new TreeSet<>();
-    _receivedIbgpAdvertisements = new TreeSet<>();
-    _sentAdvertisements = new TreeSet<>();
-    _sentEbgpAdvertisements = new TreeSet<>();
-    _sentIbgpAdvertisements = new TreeSet<>();
-    for (Vrf vrf : _vrfs.values()) {
-      vrf.initBgpAdvertisements();
-    }
   }
 
   @JsonProperty(PROP_AS_PATH_ACCESS_LISTS)
@@ -841,6 +745,11 @@ public final class Configuration implements Serializable {
     _routingPolicies = routingPolicies;
   }
 
+  @JsonProperty(PROP_PACKET_POLICIES)
+  public void setPacketPolicies(NavigableMap<String, PacketPolicy> packetPolicies) {
+    _packetPolicies = packetPolicies;
+  }
+
   @JsonProperty(PROP_SNMP_SOURCE_INTERFACE)
   public void setSnmpSourceInterface(String snmpSourceInterface) {
     _snmpSourceInterface = snmpSourceInterface;
@@ -883,9 +792,10 @@ public final class Configuration implements Serializable {
 
   public void simplifyRoutingPolicies() {
     NavigableMap<String, RoutingPolicy> simpleRoutingPolicies =
-        new TreeMap<>(
-            _routingPolicies.entrySet().stream()
-                .collect(Collectors.toMap(Entry::getKey, e -> e.getValue().simplify())));
+        _routingPolicies.entrySet().stream()
+            .collect(
+                ImmutableSortedMap.toImmutableSortedMap(
+                    Ordering.natural(), Entry::getKey, e -> e.getValue().simplify()));
     _routingPolicies = simpleRoutingPolicies;
   }
 

@@ -30,6 +30,8 @@ public final class CompletionMetadata implements Serializable {
 
     private Set<String> _prefixes;
 
+    private Set<String> _routingPolicyNames;
+
     private Set<String> _structureNames;
 
     private Set<String> _vrfs;
@@ -47,6 +49,7 @@ public final class CompletionMetadata implements Serializable {
           _ips,
           _nodes,
           _prefixes,
+          _routingPolicyNames,
           _structureNames,
           _vrfs,
           _zones);
@@ -77,6 +80,11 @@ public final class CompletionMetadata implements Serializable {
       return this;
     }
 
+    public @Nonnull Builder setRoutingPolicyNames(Set<String> routingPolicyNames) {
+      _routingPolicyNames = ImmutableSet.copyOf(routingPolicyNames);
+      return this;
+    }
+
     public @Nonnull Builder setStructureNames(Set<String> structureNames) {
       _structureNames = ImmutableSet.copyOf(structureNames);
       return this;
@@ -100,12 +108,12 @@ public final class CompletionMetadata implements Serializable {
   @Deprecated private static final String PROP_ADDRESS_BOOKS = "addressBooks";
 
   @Deprecated private static final String PROP_ADDRESS_GROUPS = "addressGroups";
-
   private static final String PROP_FILTER_NAMES = "filterNames";
   private static final String PROP_INTERFACES = "interfaces";
   private static final String PROP_IPS = "ips";
   private static final String PROP_NODES = "nodes";
   private static final String PROP_PREFIXES = "prefixes";
+  private static final String PROP_ROUTING_POLICY_NAMES = "routingPolicyNames";
   private static final String PROP_STRUCTURE_NAMES = "structureNames";
   private static final String PROP_VRFS = "vrfs";
   private static final String PROP_ZONES = "zones";
@@ -121,6 +129,8 @@ public final class CompletionMetadata implements Serializable {
   private final Set<String> _nodes;
 
   private final Set<String> _prefixes;
+
+  private final Set<String> _routingPolicyNames;
 
   private final Set<String> _structureNames;
 
@@ -143,6 +153,7 @@ public final class CompletionMetadata implements Serializable {
       @Nullable @JsonProperty(PROP_IPS) Set<String> ips,
       @Nullable @JsonProperty(PROP_NODES) Set<String> nodes,
       @Nullable @JsonProperty(PROP_PREFIXES) Set<String> prefixes,
+      @Nullable @JsonProperty(PROP_ROUTING_POLICY_NAMES) Set<String> routingPolicyNames,
       @Nullable @JsonProperty(PROP_STRUCTURE_NAMES) Set<String> structureNames,
       @Nullable @JsonProperty(PROP_VRFS) Set<String> vrfs,
       @Nullable @JsonProperty(PROP_ZONES) Set<String> zones) {
@@ -152,6 +163,7 @@ public final class CompletionMetadata implements Serializable {
         firstNonNull(ips, ImmutableSet.of()),
         firstNonNull(nodes, ImmutableSet.of()),
         firstNonNull(prefixes, ImmutableSet.of()),
+        firstNonNull(routingPolicyNames, ImmutableSet.of()),
         firstNonNull(structureNames, ImmutableSet.of()),
         firstNonNull(vrfs, ImmutableSet.of()),
         firstNonNull(zones, ImmutableSet.of()));
@@ -163,6 +175,7 @@ public final class CompletionMetadata implements Serializable {
       Set<String> ips,
       Set<String> nodes,
       Set<String> prefixes,
+      Set<String> routingPolicyNames,
       Set<String> structureNames,
       Set<String> vrfs,
       Set<String> zones) {
@@ -171,6 +184,7 @@ public final class CompletionMetadata implements Serializable {
     _ips = ips;
     _nodes = nodes;
     _prefixes = prefixes;
+    _routingPolicyNames = routingPolicyNames;
     _structureNames = structureNames;
     _vrfs = vrfs;
     _zones = zones;
@@ -206,6 +220,12 @@ public final class CompletionMetadata implements Serializable {
     return _prefixes;
   }
 
+  @JsonProperty(PROP_ROUTING_POLICY_NAMES)
+  @Nonnull
+  public Set<String> getRoutingPolicyNames() {
+    return _routingPolicyNames;
+  }
+
   @JsonProperty(PROP_STRUCTURE_NAMES)
   @Nonnull
   public Set<String> getStructureNames() {
@@ -238,6 +258,7 @@ public final class CompletionMetadata implements Serializable {
         && _ips.equals(rhs._ips)
         && _nodes.equals(rhs._nodes)
         && _prefixes.equals(rhs._prefixes)
+        && _routingPolicyNames.equals(rhs._routingPolicyNames)
         && _structureNames.equals(rhs._structureNames)
         && _vrfs.equals(rhs._vrfs)
         && _zones.equals(rhs._zones);
@@ -246,7 +267,15 @@ public final class CompletionMetadata implements Serializable {
   @Override
   public int hashCode() {
     return Objects.hash(
-        _filterNames, _interfaces, _ips, _nodes, _prefixes, _structureNames, _vrfs, _zones);
+        _filterNames,
+        _interfaces,
+        _ips,
+        _nodes,
+        _prefixes,
+        _routingPolicyNames,
+        _structureNames,
+        _vrfs,
+        _zones);
   }
 
   @Override
@@ -257,6 +286,7 @@ public final class CompletionMetadata implements Serializable {
         .add(PROP_IPS, _ips)
         .add(PROP_NODES, _nodes)
         .add(PROP_PREFIXES, _prefixes)
+        .add(PROP_ROUTING_POLICY_NAMES, _routingPolicyNames)
         .add(PROP_STRUCTURE_NAMES, _structureNames)
         .add(PROP_VRFS, _vrfs)
         .add(PROP_ZONES, _zones)

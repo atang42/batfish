@@ -10,14 +10,13 @@ import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.questions.Question;
 import org.batfish.datamodel.questions.VxlanVniPropertySpecifier;
-import org.batfish.specifier.FlexibleNodeSpecifierFactory;
+import org.batfish.specifier.AllNodesNodeSpecifier;
 import org.batfish.specifier.NodeSpecifier;
-import org.batfish.specifier.NodeSpecifierFactory;
+import org.batfish.specifier.SpecifierFactories;
 
 /** A question that returns a table with VXLAN network segments and their properties. */
 @ParametersAreNonnullByDefault
 public final class VxlanVniPropertiesQuestion extends Question {
-
   private static final String PROP_NODES = "nodes";
   private static final String PROP_PROPERTIES = "properties";
 
@@ -56,7 +55,7 @@ public final class VxlanVniPropertiesQuestion extends Question {
   @JsonIgnore
   @Nonnull
   NodeSpecifier getNodeSpecifier() {
-    return NodeSpecifierFactory.load(FlexibleNodeSpecifierFactory.NAME).buildNodeSpecifier(_nodes);
+    return SpecifierFactories.getNodeSpecifierOrDefault(_nodes, AllNodesNodeSpecifier.INSTANCE);
   }
 
   @JsonProperty(PROP_PROPERTIES)

@@ -2,14 +2,15 @@ package org.batfish.datamodel;
 
 import static java.util.Comparator.naturalOrder;
 import static java.util.Comparator.nullsFirst;
-import static org.batfish.common.util.CommonUtil.nullIfEmpty;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Comparators;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Ordering;
 import java.io.Serializable;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -17,9 +18,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.SortedSet;
 import javax.annotation.Nullable;
-import org.batfish.common.util.CommonUtil;
 
 public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
+
+  private static <C extends Collection<?>> C nullIfEmpty(C collection) {
+    return collection == null ? null : collection.isEmpty() ? null : collection;
+  }
 
   public static class Builder {
     private SortedSet<Integer> _dscps;
@@ -423,39 +427,54 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
   }
 
   private static final Comparator<HeaderSpace> COMPARATOR =
-      Comparator.comparing(HeaderSpace::getDscps, CommonUtil::compareIterable)
+      Comparator.comparing(HeaderSpace::getDscps, Comparators.lexicographical(Ordering.natural()))
           .thenComparing(HeaderSpace::getDstIps, nullsFirst(naturalOrder()))
-          .thenComparing(HeaderSpace::getDstPorts, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getDstProtocols, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getEcns, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getFragmentOffsets, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getIcmpCodes, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getIcmpTypes, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getIpProtocols, CommonUtil::compareIterable)
+          .thenComparing(HeaderSpace::getDstPorts, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getDstProtocols, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(HeaderSpace::getEcns, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getFragmentOffsets, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(HeaderSpace::getIcmpCodes, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(HeaderSpace::getIcmpTypes, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getIpProtocols, Comparators.lexicographical(Ordering.natural()))
           .thenComparing(HeaderSpace::getNegate)
-          .thenComparing(HeaderSpace::getNotDscps, CommonUtil::compareIterable)
+          .thenComparing(HeaderSpace::getNotDscps, Comparators.lexicographical(Ordering.natural()))
           .thenComparing(HeaderSpace::getNotDstIps, nullsFirst(naturalOrder()))
-          .thenComparing(HeaderSpace::getNotDstPorts, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getNotDstProtocols, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getNotEcns, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getNotFragmentOffsets, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getNotIcmpCodes, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getNotIcmpTypes, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getNotIpProtocols, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getNotPacketLengths, CommonUtil::compareIterable)
+          .thenComparing(
+              HeaderSpace::getNotDstPorts, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getNotDstProtocols, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(HeaderSpace::getNotEcns, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getNotFragmentOffsets, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getNotIcmpCodes, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getNotIcmpTypes, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getNotIpProtocols, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getNotPacketLengths, Comparators.lexicographical(Ordering.natural()))
           .thenComparing(HeaderSpace::getNotSrcIps, nullsFirst(naturalOrder()))
-          .thenComparing(HeaderSpace::getNotSrcPorts, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getNotSrcProtocols, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getPacketLengths, CommonUtil::compareIterable)
+          .thenComparing(
+              HeaderSpace::getNotSrcPorts, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getNotSrcProtocols, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getPacketLengths, Comparators.lexicographical(Ordering.natural()))
           .thenComparing(HeaderSpace::getSrcIps, nullsFirst(naturalOrder()))
           .thenComparing(HeaderSpace::getSrcOrDstIps, nullsFirst(naturalOrder()))
-          .thenComparing(HeaderSpace::getSrcOrDstPorts, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getSrcOrDstProtocols, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getSrcPorts, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getSrcProtocols, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getStates, CommonUtil::compareIterable)
-          .thenComparing(HeaderSpace::getTcpFlags, CommonUtil::compareIterable);
-
+          .thenComparing(
+              HeaderSpace::getSrcOrDstPorts, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getSrcOrDstProtocols, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(HeaderSpace::getSrcPorts, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(
+              HeaderSpace::getSrcProtocols, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(HeaderSpace::getStates, Comparators.lexicographical(Ordering.natural()))
+          .thenComparing(HeaderSpace::getTcpFlags, Comparators.lexicographical(Ordering.natural()));
   private static final String PROP_DSCPS = "dscps";
   private static final String PROP_DST_IPS = "dstIps";
   private static final String PROP_DST_PORTS = "dstPorts";
@@ -639,20 +658,23 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
         && _tcpFlags.equals(other._tcpFlags);
   }
 
-  @JsonPropertyDescription("A set of acceptable DSCP values for a packet")
+  /** A set of acceptable DSCP values for a packet. */
   @JsonProperty(PROP_DSCPS)
   public SortedSet<Integer> getDscps() {
     return _dscps;
   }
 
-  /** The empty set of dstIps is interpreted as no constraint, or all IPs */
-  @JsonPropertyDescription("A space of acceptable destination IP addresses for a packet")
+  /**
+   * A space of acceptable destination IP addresses for a packet.
+   *
+   * <p>The empty set of dstIps is interpreted as no constraint, or all IPs
+   */
   @JsonProperty(PROP_DST_IPS)
   public IpSpace getDstIps() {
     return _dstIps;
   }
 
-  @JsonPropertyDescription("A set of acceptable destination port ranges for a TCP/UDP packet")
+  /** A set of acceptable destination port ranges for a TCP/UDP packet. */
   @JsonProperty(PROP_DST_PORTS)
   public SortedSet<SubRange> getDstPorts() {
     return _dstPorts;
@@ -663,56 +685,55 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
     return _dstProtocols;
   }
 
-  @JsonPropertyDescription("A set of acceptable ECN values for a packet")
+  /** A set of acceptable ECN values for a packet. */
   @JsonProperty(PROP_ECNS)
   public SortedSet<Integer> getEcns() {
     return _ecns;
   }
 
-  @JsonPropertyDescription("A set of acceptable fragment offsets for a UDP packet")
+  /** A set of acceptable fragment offsets for a UDP packet. */
   @JsonProperty(PROP_FRAGMENT_OFFSETS)
   public SortedSet<SubRange> getFragmentOffsets() {
     return _fragmentOffsets;
   }
 
-  @JsonPropertyDescription("A set of acceptable ICMP code ranges for an ICMP packet")
+  /** A set of acceptable ICMP code ranges for an ICMP packet. */
   @JsonProperty(PROP_ICMP_CODES)
   public SortedSet<SubRange> getIcmpCodes() {
     return _icmpCodes;
   }
 
-  @JsonPropertyDescription("A set of acceptable ICMP type ranges for an ICMP packet")
+  /** A set of acceptable ICMP type ranges for an ICMP packet. */
   @JsonProperty(PROP_ICMP_TYPES)
   public SortedSet<SubRange> getIcmpTypes() {
     return _icmpTypes;
   }
 
-  @JsonPropertyDescription("A set of acceptable IP protocols for a packet")
+  /** A set of acceptable IP protocols for a packet. */
   @JsonProperty(PROP_IP_PROTOCOLS)
   public SortedSet<IpProtocol> getIpProtocols() {
     return _ipProtocols;
   }
 
-  @JsonPropertyDescription(
-      "Determines whether to match the complement of the stated criteria of this header space")
+  /** Determines whether to match the complement of the stated criteria of this header space. */
   @JsonProperty(PROP_NEGATE)
   public boolean getNegate() {
     return _negate;
   }
 
-  @JsonPropertyDescription("A set of unacceptable DSCP values for a packet")
+  /** A set of unacceptable DSCP values for a packet. */
   @JsonProperty(PROP_NOT_DSCPS)
   public SortedSet<Integer> getNotDscps() {
     return _notDscps;
   }
 
-  @JsonPropertyDescription("A space of unacceptable destination IP addresses for a packet")
+  /** A space of unacceptable destination IP addresses for a packet. */
   @JsonProperty(PROP_NOT_DST_IPS)
   public IpSpace getNotDstIps() {
     return _notDstIps;
   }
 
-  @JsonPropertyDescription("A set of unacceptable destination port ranges for a TCP/UDP packet")
+  /** A set of unacceptable destination port ranges for a TCP/UDP packet. */
   @JsonProperty(PROP_NOT_DST_PORTS)
   public SortedSet<SubRange> getNotDstPorts() {
     return _notDstPorts;
@@ -723,31 +744,31 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
     return _notDstProtocols;
   }
 
-  @JsonPropertyDescription("A set of unacceptable ECN values for a packet")
+  /** A set of unacceptable ECN values for a packet. */
   @JsonProperty(PROP_NOT_ECNS)
   public SortedSet<Integer> getNotEcns() {
     return _notEcns;
   }
 
-  @JsonPropertyDescription("A set of unacceptable fragment offsets for a UDP packet")
+  /** A set of unacceptable fragment offsets for a UDP packet. */
   @JsonProperty(PROP_NOT_FRAGMENT_OFFSETS)
   public SortedSet<SubRange> getNotFragmentOffsets() {
     return _notFragmentOffsets;
   }
 
-  @JsonPropertyDescription("A set of unacceptable ICMP code ranges for an ICMP packet")
+  /** A set of unacceptable ICMP code ranges for an ICMP packet. */
   @JsonProperty(PROP_NOT_ICMP_CODES)
   public SortedSet<SubRange> getNotIcmpCodes() {
     return _notIcmpCodes;
   }
 
-  @JsonPropertyDescription("A set of unacceptable ICMP type ranges for an ICMP packet")
+  /** A set of unacceptable ICMP type ranges for an ICMP packet. */
   @JsonProperty(PROP_NOT_ICMP_TYPES)
   public SortedSet<SubRange> getNotIcmpTypes() {
     return _notIcmpTypes;
   }
 
-  @JsonPropertyDescription("A set of unacceptable IP protocols for a packet")
+  /** A set of unacceptable IP protocols for a packet. */
   @JsonProperty(PROP_NOT_IP_PROTOCOLS)
   public SortedSet<IpProtocol> getNotIpProtocols() {
     return _notIpProtocols;
@@ -758,13 +779,13 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
     return _notPacketLengths;
   }
 
-  @JsonPropertyDescription("A space of unacceptable source IP addresses for a packet")
+  /** A space of unacceptable source IP addresses for a packet. */
   @JsonProperty(PROP_NOT_SRC_IPS)
   public IpSpace getNotSrcIps() {
     return _notSrcIps;
   }
 
-  @JsonPropertyDescription("A set of unacceptable source port ranges for a TCP/UDP packet")
+  /** A set of unacceptable source port ranges for a TCP/UDP packet. */
   @JsonProperty(PROP_NOT_SRC_PORTS)
   public SortedSet<SubRange> getNotSrcPorts() {
     return _notSrcPorts;
@@ -780,23 +801,25 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
     return _packetLengths;
   }
 
-  @JsonPropertyDescription("A space of acceptable source IP addresses for a packet")
+  /** A space of acceptable source IP addresses for a packet. */
   @JsonProperty(PROP_SRC_IPS)
   public IpSpace getSrcIps() {
     return _srcIps;
   }
 
-  @JsonPropertyDescription(
-      "A space of IP addresses within which either the source or the destination IP of a packet"
-          + " must fall for acceptance")
+  /**
+   * A space of IP addresses within which either the source or the destination IP of a packet must
+   * fall for acceptance.
+   */
   @JsonProperty(PROP_SRC_OR_DST_IPS)
   public IpSpace getSrcOrDstIps() {
     return _srcOrDstIps;
   }
 
-  @JsonPropertyDescription(
-      "A set of ranges within which either the source or the destination port of a TCP/UDP packet"
-          + " must fall for acceptance")
+  /**
+   * A set of ranges within which either the source or the destination port of a TCP/UDP packet must
+   * fall for acceptance.
+   */
   @JsonProperty(PROP_SRC_OR_DST_PORTS)
   public SortedSet<SubRange> getSrcOrDstPorts() {
     return _srcOrDstPorts;
@@ -807,7 +830,7 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
     return _srcOrDstProtocols;
   }
 
-  @JsonPropertyDescription("A set of acceptable source port ranges for a TCP/UDP packet")
+  /** A set of acceptable source port ranges for a TCP/UDP packet. */
   @JsonProperty(PROP_SRC_PORTS)
   public SortedSet<SubRange> getSrcPorts() {
     return _srcPorts;
@@ -818,13 +841,13 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
     return _srcProtocols;
   }
 
-  @JsonPropertyDescription("A set of acceptable abstract firewall states for a packet to match")
+  /** A set of acceptable abstract firewall states for a packet to match. */
   @JsonProperty(PROP_STATES)
   public SortedSet<FlowState> getStates() {
     return _states;
   }
 
-  @JsonPropertyDescription("A set of acceptable TCP flag bitmasks for a TCP packet to match")
+  /** A set of acceptable TCP flag bitmasks for a TCP packet to match. */
   @JsonProperty(PROP_TCP_FLAGS_MATCH_CONDITIONS)
   public List<TcpFlagsMatchConditions> getTcpFlags() {
     return _tcpFlags;
@@ -891,14 +914,14 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
         && _dstProtocols.stream()
             .noneMatch(
                 dstProtocol ->
-                    dstProtocol.getPort() == flow.getDstPort()
+                    dstProtocol.getPort().equals(flow.getDstPort())
                         && dstProtocol.getIpProtocol() == flow.getIpProtocol())) {
       return false;
     }
     if (_notDstProtocols.stream()
         .anyMatch(
             notDstProtocol ->
-                notDstProtocol.getPort() == flow.getDstPort()
+                notDstProtocol.getPort().equals(flow.getDstPort())
                     && notDstProtocol.getIpProtocol() == flow.getIpProtocol())) {
       return false;
     }
@@ -916,6 +939,7 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
       return false;
     }
     if (!_icmpCodes.isEmpty()
+        && flow.getIcmpCode() != null
         && _icmpCodes.stream().noneMatch(sr -> sr.includes(flow.getIcmpCode()))) {
       return false;
     }
@@ -923,6 +947,7 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
       return false;
     }
     if (!_icmpTypes.isEmpty()
+        && flow.getIcmpType() != null
         && _icmpTypes.stream().noneMatch(sr -> sr.includes(flow.getIcmpType()))) {
       return false;
     }
@@ -954,12 +979,11 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
     }
     if (!_srcOrDstProtocols.isEmpty()) {
       IpProtocol flowProtocol = flow.getIpProtocol();
-      int flowDstPort = flow.getDstPort();
-      int flowSrcPort = flow.getSrcPort();
       if (_srcOrDstProtocols.stream()
           .noneMatch(
               protocol ->
-                  (protocol.getPort() == flowDstPort || protocol.getPort() == flowSrcPort)
+                  (protocol.getPort().equals(flow.getDstPort())
+                          || protocol.getPort().equals(flow.getSrcPort()))
                       && protocol.getIpProtocol() == flowProtocol)) {
         return false;
       }
@@ -981,14 +1005,14 @@ public class HeaderSpace implements Serializable, Comparable<HeaderSpace> {
         && _srcProtocols.stream()
             .noneMatch(
                 srcProtocol ->
-                    srcProtocol.getPort() == flow.getSrcPort()
+                    srcProtocol.getPort().equals(flow.getSrcPort())
                         && srcProtocol.getIpProtocol() == flow.getIpProtocol())) {
       return false;
     }
     if (_notSrcProtocols.stream()
         .anyMatch(
             notSrcProtocol ->
-                notSrcProtocol.getPort() == flow.getSrcPort()
+                notSrcProtocol.getPort().equals(flow.getSrcPort())
                     && notSrcProtocol.getIpProtocol() == flow.getIpProtocol())) {
       return false;
     }

@@ -1,16 +1,24 @@
 {
   "class" : "org.batfish.question.specifiers.SpecifiersQuestion",
   "queryType" : "NODE",
+  "specifierFactoryVersion" : "V2",
   "differential" : false,
-  "filterSpecifierFactory" : "FlexibleFilterSpecifierFactory",
   "includeOneTableKeys" : true,
   "instance" : {
-    "description" : "Show the resolved values for node specifier",
+    "description" : "Returns resolved values for node specifier.",
     "instanceName" : "qname",
+    "longDescription" : "Helper question that shows how specified nodeSpec values resolve to the nodes in the network.",
     "tags" : [
       "specifiers"
     ],
     "variables" : {
+      "grammarVersion" : {
+        "description" : "Version of grammar to use for resolution",
+        "displayName" : "Grammar version",
+        "optional" : true,
+        "type" : "string",
+        "value" : "v2"
+      },
       "nodes" : {
         "description" : "Input to the NodeSpecifier",
         "displayName" : "Nodes",
@@ -20,9 +28,5 @@
       }
     }
   },
-  "interfaceSpecifierFactory" : "FlexibleInterfaceSpecifierFactory",
-  "ipSpaceSpecifierFactory" : "FlexibleInferFromLocationIpSpaceSpecifierFactory",
-  "locationSpecifierFactory" : "FlexibleLocationSpecifierFactory",
-  "nodeSpecifierFactory" : "FlexibleNodeSpecifierFactory",
   "nodeSpecifierInput" : "input"
 }

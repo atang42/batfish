@@ -101,7 +101,7 @@ public class BDDInteger {
 
       Long val = satAssignmentToLong(satAssignment);
       values.add(val);
-      pred = pred.and(value(val).not());
+      pred = pred.diff(value(val));
       num++;
     }
     return values.build();
@@ -131,8 +131,8 @@ public class BDDInteger {
    * Create a BDD representing the exact value
    */
   public BDD value(long val) {
-    checkArgument(val >= 0, "val is negative");
-    checkArgument(val < (2L << _bitvec.length), "val is out of range");
+    checkArgument(val >= 0, "value is negative");
+    checkArgument(val < (1L << _bitvec.length), "value %s is out of range", val);
     long currentVal = val;
     BDD bdd = _factory.one();
     for (int i = this._bitvec.length - 1; i >= 0; i--) {
@@ -140,35 +140,28 @@ public class BDDInteger {
       if ((currentVal & 1) != 0) {
         bdd = bdd.and(b);
       } else {
-        bdd = bdd.and(b.not());
+        bdd = bdd.diff(b);
       }
       currentVal >>= 1;
     }
     return bdd;
   }
 
-  /*
-   * Less than or equal to on integers
-   */
-  public BDD leq(long val) {
-    checkArgument(val >= 0, "val is negative");
-    checkArgument(val < (2L << _bitvec.length), "val is out of range");
+  // Helper function to compute leq on the last N bits of the input value.
+  private BDD leqN(long val, int n) {
+    assert n <= _bitvec.length;
     long currentVal = val;
-    BDD[] eq = new BDD[_bitvec.length];
-    BDD[] less = new BDD[_bitvec.length];
-    for (int i = _bitvec.length - 1; i >= 0; i--) {
+    BDD acc = _factory.one(); // whether the suffix of BDD is leq suffix of val.
+    for (int i = 0; i < n; ++i) {
+      BDD bit = _bitvec[_bitvec.length - i - 1];
       if ((currentVal & 1) != 0) {
-        eq[i] = _bitvec[i];
-        less[i] = _bitvec[i].not();
+        // since this bit of val is 1: 0 implies lt OR 1 and suffix leq. ('1 and' is redundant).
+        acc = bit.imp(acc); // "not i or acc" rewritten "i implies acc".
       } else {
-        eq[i] = _bitvec[i].not();
-        less[i] = _factory.zero();
+        // since this bit of val is 0: must be 0 and have leq suffix.
+        acc = bit.less(acc); // "not i and acc" rewritten "i less acc"
       }
       currentVal >>= 1;
-    }
-    BDD acc = _factory.one();
-    for (int i = _bitvec.length - 1; i >= 0; i--) {
-      acc = less[i].or(eq[i].and(acc));
     }
     return acc;
   }
@@ -176,27 +169,72 @@ public class BDDInteger {
   /*
    * Less than or equal to on integers
    */
-  public BDD geq(long val) {
-    checkArgument(val >= 0, "val is negative");
-    checkArgument(val < (2L << _bitvec.length), "val is out of range");
+  public BDD leq(long val) {
+    checkArgument(val >= 0, "value is negative");
+    checkArgument(val < (1L << _bitvec.length), "value %s is out of range", val);
+    return leqN(val, _bitvec.length);
+  }
+
+  // Helper function to compute geq on the last N bits of the input value.
+  private BDD geqN(long val, int n) {
+    assert n <= _bitvec.length;
     long currentVal = val;
-    BDD[] eq = new BDD[_bitvec.length];
-    BDD[] greater = new BDD[_bitvec.length];
-    for (int i = _bitvec.length - 1; i >= 0; i--) {
+    BDD acc = _factory.one(); // whether the suffix of BDD is geq suffix of val.
+    for (int i = 0; i < n; ++i) {
+      BDD bit = _bitvec[_bitvec.length - i - 1];
       if ((currentVal & 1) != 0) {
-        eq[i] = _bitvec[i];
-        greater[i] = _factory.zero();
+        // since this bit of val is 1: must be 1 and have geq suffix.
+        acc = bit.and(acc);
       } else {
-        eq[i] = _bitvec[i].not();
-        greater[i] = _bitvec[i];
+        // since this bit of val is 0: 1 implies gt OR 0 and suffix geq. ('0 and' is redundant.)
+        acc = bit.or(acc);
       }
       currentVal >>= 1;
     }
-    BDD acc = _factory.one();
-    for (int i = _bitvec.length - 1; i >= 0; i--) {
-      acc = greater[i].or(eq[i].and(acc));
-    }
     return acc;
+  }
+
+  /*
+   * Greater than or equal to on integers
+   */
+  public BDD geq(long val) {
+    checkArgument(val >= 0, "value is negative");
+    checkArgument(val < (1L << _bitvec.length), "value %s is out of range", val);
+    return geqN(val, _bitvec.length);
+  }
+
+  /*
+   * Integers in the given range, inclusive, where {@code a} is less than or equal to {@code b}.
+   */
+  // This is basically this.geq(a).and(this.leq(b)). Two differences:
+  //   1. Short-circuit a == b
+  //   2. Save work in the case where a and b have a common prefix.
+  public BDD range(long a, long b) {
+    checkArgument(a <= b, "range is not ordered correctly");
+    checkArgument(a >= 0, "value is negative");
+    checkArgument(b < (1L << _bitvec.length), "value %s is out of range", b);
+
+    if (a == b) {
+      return value(a);
+    }
+
+    long bitOfFirstDifference = Long.highestOneBit(a ^ b);
+    int sizeOfDifferentSuffix = Long.numberOfTrailingZeros(bitOfFirstDifference) + 1;
+    BDD geqA = geqN(a, sizeOfDifferentSuffix);
+    BDD leqB = leqN(b, sizeOfDifferentSuffix);
+
+    BDD between = geqA.and(leqB);
+    long currentVal = a >> sizeOfDifferentSuffix;
+    for (int i = sizeOfDifferentSuffix; i < _bitvec.length; ++i) {
+      BDD bit = _bitvec[_bitvec.length - i - 1];
+      if ((currentVal & 1) != 0) {
+        between = bit.and(between);
+      } else {
+        between = bit.less(between); // "not i and x" rewritten "i less x"
+      }
+      currentVal >>= 1;
+    }
+    return between;
   }
 
   /*
@@ -226,24 +264,22 @@ public class BDDInteger {
   /*
    * Add two BDDs bitwise to create a new BDD
    */
-  public BDDInteger add(BDDInteger var1) {
-    if (this._bitvec.length != var1._bitvec.length) {
-      throw new BDDException();
-    } else {
-      BDD var3 = _factory.zero();
-      BDDInteger var4 = new BDDInteger(_factory, this._bitvec.length);
-      for (int var5 = var4._bitvec.length - 1; var5 >= 0; --var5) {
-        var4._bitvec[var5] = this._bitvec[var5].xor(var1._bitvec[var5]);
-        var4._bitvec[var5] = var4._bitvec[var5].xor(var3.id());
-        BDD var6 = this._bitvec[var5].or(var1._bitvec[var5]);
-        var6 = var6.and(var3);
-        BDD var7 = this._bitvec[var5].and(var1._bitvec[var5]);
-        var7 = var7.or(var6);
-        var3 = var7;
-      }
-      var3.free();
-      return var4;
+  public BDDInteger add(BDDInteger other) {
+    BDD[] as = this._bitvec;
+    BDD[] bs = other._bitvec;
+
+    checkArgument(as.length > 0, "Cannot add BDDIntegers of length 0");
+    checkArgument(as.length == bs.length, "Cannot add BDDIntegers of different length");
+
+    BDD carry = _factory.zero();
+    BDDInteger sum = new BDDInteger(_factory, as.length);
+    BDD[] cs = sum._bitvec;
+    for (int i = cs.length - 1; i > 0; --i) {
+      cs[i] = as[i].xor(bs[i]).xor(carry);
+      carry = as[i].and(bs[i]).or(carry.and(as[i].or(bs[i])));
     }
+    cs[0] = as[0].xor(bs[0]).xor(carry);
+    return sum;
   }
 
   /*

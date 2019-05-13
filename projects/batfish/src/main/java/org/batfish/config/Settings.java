@@ -13,7 +13,6 @@ import org.batfish.common.BatfishLogger;
 import org.batfish.common.BfConsts;
 import org.batfish.common.CoordConsts;
 import org.batfish.common.Version;
-import org.batfish.common.util.CommonUtil;
 import org.batfish.datamodel.Ip;
 import org.batfish.grammar.GrammarSettings;
 import org.batfish.identifiers.AnalysisId;
@@ -79,8 +78,6 @@ public final class Settings extends BaseSettings implements GrammarSettings {
 
   private static final String ARG_SEQUENTIAL = "sequential";
 
-  private static final String ARG_SERIALIZE_TO_TEXT = "stext";
-
   private static final String ARG_SERVICE_BIND_HOST = "servicebindhost";
 
   public static final String ARG_SERVICE_HOST = "servicehost";
@@ -144,7 +141,7 @@ public final class Settings extends BaseSettings implements GrammarSettings {
 
   public Settings(String[] args) {
     super(
-        CommonUtil.getConfig(
+        getConfig(
             BfConsts.PROP_BATFISH_PROPERTIES_PATH,
             BfConsts.ABSPATH_CONFIG_FILE_NAME_BATFISH,
             ConfigurationLocator.class));
@@ -389,10 +386,6 @@ public final class Settings extends BaseSettings implements GrammarSettings {
     return _config.getBoolean(BfConsts.COMMAND_PARSE_VENDOR_INDEPENDENT);
   }
 
-  public boolean getSerializeToText() {
-    return _config.getBoolean(ARG_SERIALIZE_TO_TEXT);
-  }
-
   public boolean getSerializeVendor() {
     return _config.getBoolean(BfConsts.COMMAND_PARSE_VENDOR_SPECIFIC);
   }
@@ -577,7 +570,6 @@ public final class Settings extends BaseSettings implements GrammarSettings {
     setDefaultProperty(BfConsts.ARG_RED_FLAG_SUPPRESS, false);
     setDefaultProperty(ARG_RUN_MODE, RunMode.WORKER.toString());
     setDefaultProperty(ARG_SEQUENTIAL, false);
-    setDefaultProperty(ARG_SERIALIZE_TO_TEXT, false);
     setDefaultProperty(ARG_SERVICE_BIND_HOST, Ip.ZERO.toString());
     setDefaultProperty(ARG_SERVICE_HOST, "localhost");
     setDefaultProperty(ARG_SERVICE_NAME, "worker-service");
@@ -771,8 +763,6 @@ public final class Settings extends BaseSettings implements GrammarSettings {
 
     addBooleanOption(ARG_SEQUENTIAL, "force sequential operation");
 
-    addBooleanOption(ARG_SERIALIZE_TO_TEXT, "serialize to text");
-
     addOption(
         ARG_SERVICE_BIND_HOST,
         "local hostname used bind service (default is 0.0.0.0 which listens on all interfaces)",
@@ -854,6 +844,7 @@ public final class Settings extends BaseSettings implements GrammarSettings {
           "gsinputrole",
           "gsremoteas",
           "outputenv",
+          "stext",
           "venv"
         }) {
       addOption(deprecatedStringArg, DEPRECATED_ARG_DESC, "ignored");
@@ -930,7 +921,6 @@ public final class Settings extends BaseSettings implements GrammarSettings {
     getStringOptionValue(ARG_RUN_MODE);
     getBooleanOptionValue(ARG_SEQUENTIAL);
     getBooleanOptionValue(BfConsts.COMMAND_PARSE_VENDOR_INDEPENDENT);
-    getBooleanOptionValue(ARG_SERIALIZE_TO_TEXT);
     getBooleanOptionValue(BfConsts.COMMAND_PARSE_VENDOR_SPECIFIC);
     getStringOptionValue(ARG_SERVICE_BIND_HOST);
     getStringOptionValue(ARG_SERVICE_HOST);

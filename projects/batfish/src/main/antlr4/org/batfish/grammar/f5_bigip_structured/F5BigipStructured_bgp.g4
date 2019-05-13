@@ -8,13 +8,15 @@ options {
 
 nr_bgp
 :
-  BGP name = word BRACE_LEFT
+  BGP name = structure_name BRACE_LEFT
   (
     NEWLINE
     (
       nrb_address_family
       | nrb_local_as
       | nrb_neighbor
+      | nrb_router_id
+      | nrb_router_id6
       | unrecognized
     )*
   )? BRACE_RIGHT NEWLINE
@@ -88,12 +90,12 @@ nrbafcr_kernel
 
 nrbafcrk_route_map
 :
-  ROUTE_MAP name = word NEWLINE
+  ROUTE_MAP name = structure_name NEWLINE
 ;
 
 nrb_local_as
 :
-  LOCAL_AS as = word NEWLINE
+  LOCAL_AS as = uint32 NEWLINE
 ;
 
 nrb_neighbor
@@ -106,12 +108,16 @@ nrb_neighbor
 
 nrbn_name
 :
-  name = word BRACE_LEFT
+  (
+    name = IP_ADDRESS
+    | name = IPV6_ADDRESS
+  ) BRACE_LEFT
   (
     NEWLINE
     (
       nrbnn_address_family
       | nrbnn_description
+      | nrbnn_ebgp_multihop
       | nrbnn_remote_as
       | nrbnn_update_source
       | unrecognized
@@ -180,7 +186,7 @@ nrbnnafc_route_map
 
 nrbnnafcr_out
 :
-  OUT name = word NEWLINE
+  OUT name = structure_name NEWLINE
 ;
 
 nrbnn_description
@@ -188,12 +194,27 @@ nrbnn_description
   DESCRIPTION description = word NEWLINE
 ;
 
+nrbnn_ebgp_multihop
+:
+  EBGP_MULTIHOP count = uint16 NEWLINE
+;
+
 nrbnn_remote_as
 :
-  REMOTE_AS as = word NEWLINE
+  REMOTE_AS as = uint32 NEWLINE
 ;
 
 nrbnn_update_source
 :
-  UPDATE_SOURCE name = word NEWLINE
+  UPDATE_SOURCE name = structure_name NEWLINE
+;
+
+nrb_router_id
+:
+  ROUTER_ID id = ip_address NEWLINE
+;
+
+nrb_router_id6
+:
+  ROUTER_ID id6 = ipv6_address NEWLINE
 ;

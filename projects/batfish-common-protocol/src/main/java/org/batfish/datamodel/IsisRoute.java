@@ -5,7 +5,6 @@ import static java.util.Objects.requireNonNull;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import java.util.Comparator;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 import org.batfish.datamodel.isis.IsisLevel;
@@ -23,6 +22,7 @@ public class IsisRoute extends AbstractRoute {
     private RoutingProtocol _protocol;
     private String _systemId;
 
+    @Nonnull
     @Override
     public IsisRoute build() {
       return new IsisRoute(
@@ -41,6 +41,7 @@ public class IsisRoute extends AbstractRoute {
           getNonRouting());
     }
 
+    @Nonnull
     @Override
     protected Builder getThis() {
       return this;
@@ -294,20 +295,5 @@ public class IsisRoute extends AbstractRoute {
   @Override
   public int getTag() {
     return NO_TAG;
-  }
-
-  @Override
-  public int routeCompare(@Nonnull AbstractRoute rhs) {
-    if (getClass() != rhs.getClass()) {
-      return 0;
-    }
-    IsisRoute castRhs = (IsisRoute) rhs;
-    return Comparator.comparing(IsisRoute::getArea)
-        .thenComparing(IsisRoute::getAttach)
-        .thenComparing(IsisRoute::getDown)
-        .thenComparing(IsisRoute::getLevel)
-        .thenComparing(IsisRoute::getOverload)
-        .thenComparing(IsisRoute::getSystemId)
-        .compare(this, castRhs);
   }
 }

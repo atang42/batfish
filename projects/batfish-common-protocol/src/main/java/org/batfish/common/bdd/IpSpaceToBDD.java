@@ -5,7 +5,8 @@ import static org.batfish.common.util.CommonUtil.toImmutableMap;
 
 import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.function.Supplier;
@@ -45,9 +46,15 @@ public class IpSpaceToBDD implements GenericIpSpaceVisitor<BDD> {
 
   private final Map<String, Supplier<BDD>> _namedIpSpaceBDDs;
 
+  private final BDD _one;
+
+  private final BDD _zero;
+
   public IpSpaceToBDD(BDDInteger var) {
     _bddInteger = var;
     _factory = var.getFactory();
+    _one = _factory.one();
+    _zero = _factory.zero();
     _bddOps = new BDDOps(_factory);
     _namedIpSpaceBDDs = ImmutableMap.of();
   }
@@ -55,6 +62,8 @@ public class IpSpaceToBDD implements GenericIpSpaceVisitor<BDD> {
   public IpSpaceToBDD(BDDInteger var, Map<String, IpSpace> namedIpSpaces) {
     _bddInteger = var;
     _factory = var.getFactory();
+    _one = _factory.one();
+    _zero = _factory.zero();
     _bddOps = new BDDOps(_factory);
     _namedIpSpaceBDDs =
         toImmutableMap(
@@ -83,14 +92,14 @@ public class IpSpaceToBDD implements GenericIpSpaceVisitor<BDD> {
    */
   private BDD firstBitsEqual(Ip ip, int length) {
     long b = ip.asLong();
-    BDD acc = _factory.one();
+    BDD acc = _one;
     BDD[] bitBDDs = _bddInteger.getBitvec();
-    for (int i = 0; i < length; i++) {
+    for (int i = length - 1; i >= 0; i--) {
       boolean bitValue = Ip.getBitAtPosition(b, i);
       if (bitValue) {
         acc = acc.and(bitBDDs[i]);
       } else {
-        acc = acc.and(bitBDDs[i].not());
+        acc = acc.diff(bitBDDs[i]);
       }
     }
     return acc;
@@ -104,22 +113,22 @@ public class IpSpaceToBDD implements GenericIpSpaceVisitor<BDD> {
   }
 
   public BDD toBDD(Ip ip) {
-    return toBDD(Prefix.create(ip, Prefix.MAX_PREFIX_LENGTH));
+    return firstBitsEqual(ip, Prefix.MAX_PREFIX_LENGTH);
   }
 
   public BDD toBDD(IpWildcard ipWildcard) {
     long ip = ipWildcard.getIp().asLong();
     long wildcard = ipWildcard.getWildcard().asLong();
-    BDD acc = _factory.one();
+    BDD acc = _one;
     BDD[] bitBDDs = _bddInteger.getBitvec();
-    for (int i = 0; i < Prefix.MAX_PREFIX_LENGTH; i++) {
+    for (int i = Prefix.MAX_PREFIX_LENGTH - 1; i >= 0; i--) {
       boolean significant = !Ip.getBitAtPosition(wildcard, i);
       if (significant) {
         boolean bitValue = Ip.getBitAtPosition(ip, i);
         if (bitValue) {
           acc = acc.and(bitBDDs[i]);
         } else {
-          acc = acc.and(bitBDDs[i].not());
+          acc = acc.diff(bitBDDs[i]);
         }
       }
     }
@@ -128,22 +137,19 @@ public class IpSpaceToBDD implements GenericIpSpaceVisitor<BDD> {
 
   @Override
   public BDD visitAclIpSpace(AclIpSpace aclIpSpace) {
-    BDD bdd = _factory.zero();
-    for (AclIpSpaceLine aclIpSpaceLine : Lists.reverse(aclIpSpace.getLines())) {
-      bdd =
-          visit(aclIpSpaceLine.getIpSpace())
-              .ite(
-                  aclIpSpaceLine.getAction() == LineAction.PERMIT
-                      ? _factory.one()
-                      : _factory.zero(),
-                  bdd);
+    int size = aclIpSpace.getLines().size();
+    List<BDD> lineBdds = new ArrayList<>(size);
+    List<LineAction> lineActions = new ArrayList<>(size);
+    for (AclIpSpaceLine line : aclIpSpace.getLines()) {
+      lineActions.add(line.getAction());
+      lineBdds.add(visit(line.getIpSpace()));
     }
-    return bdd;
+    return _bddOps.bddAclLines(lineBdds, lineActions);
   }
 
   @Override
   public BDD visitEmptyIpSpace(EmptyIpSpace emptyIpSpace) {
-    return _factory.zero();
+    return _zero;
   }
 
   @Override
@@ -170,18 +176,18 @@ public class IpSpaceToBDD implements GenericIpSpaceVisitor<BDD> {
   @Override
   public BDD visitIpWildcardSetIpSpace(IpWildcardSetIpSpace ipWildcardSetIpSpace) {
     BDD whitelist =
-        _bddOps.or(
+        _bddOps.orAll(
             ipWildcardSetIpSpace.getWhitelist().stream()
-                .map(this::toBDD)
+                .map((IpWildcard wc) -> this.visit(wc.toIpSpace()))
                 .collect(Collectors.toList()));
 
     BDD blacklist =
-        _bddOps.or(
+        _bddOps.orAll(
             ipWildcardSetIpSpace.getBlacklist().stream()
-                .map(this::toBDD)
+                .map((IpWildcard wc) -> this.visit(wc.toIpSpace()))
                 .collect(Collectors.toList()));
 
-    return whitelist.and(blacklist.not());
+    return whitelist.diff(blacklist);
   }
 
   @Override
@@ -195,6 +201,6 @@ public class IpSpaceToBDD implements GenericIpSpaceVisitor<BDD> {
 
   @Override
   public BDD visitUniverseIpSpace(UniverseIpSpace universeIpSpace) {
-    return _factory.one();
+    return _one;
   }
 }
