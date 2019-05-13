@@ -74,16 +74,15 @@ public class AclLineDiffToPrefix {
           }
           Optional<PacketPrefixRegion> optional = lineSpace.intersection(resultSpace);
           if (optional.isPresent()) {
-            if (_acl1.getLines().contains(line)) {
               _diffLines1.add(line);
-            }
             PacketPrefixRegion intersection = optional.get();
             boolean skip = false;
             for (int i = 0; i < diffs.size(); i++) {
-              if (intersection.contains(diffs.get(i))) {
-                diffs.set(i, intersection);
+              if (diffs.get(i).contains(intersection)) {
+                skip = true;
                 break;
-              } else if (diffs.get(i).contains(intersection)) {
+              } else if (intersection.contains(diffs.get(i))) {
+                diffs.set(i, intersection);
                 skip = true;
                 break;
               }
@@ -109,16 +108,15 @@ public class AclLineDiffToPrefix {
           }
           Optional<PacketPrefixRegion> optional = lineSpace.intersection(resultSpace);
           if (optional.isPresent()) {
-            if (_acl2.getLines().contains(line)) {
               _diffLines2.add(line);
-            }
             PacketPrefixRegion intersection = optional.get();
             boolean skip = false;
             for (int i = 0; i < diffs.size(); i++) {
-              if (intersection.contains(diffs.get(i))) {
-                diffs.set(i, intersection);
+              if (diffs.get(i).contains(intersection)) {
+                skip = true;
                 break;
-              } else if (diffs.get(i).contains(intersection)) {
+              } else if (intersection.contains(diffs.get(i))) {
+                diffs.set(i, intersection);
                 skip = true;
                 break;
               }

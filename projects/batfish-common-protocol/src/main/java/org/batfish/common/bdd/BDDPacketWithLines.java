@@ -68,6 +68,7 @@ public class BDDPacketWithLines extends BDDPacket{
     _aclLineVars.put(router, new HashMap<>());
     _numToAclLine.put(router, new HashMap<>());
 
+    // BDDs for each line
     for (int i = 0; i < acl.getLines().size(); i++) {
       IpAccessListLine line = acl.getLines().get(i);
       BDD var = _aclVars.get(router).get(acl).value(i);
@@ -75,6 +76,12 @@ public class BDDPacketWithLines extends BDDPacket{
       _aclLineVars.get(router).put(repr, var);
       _numToAclLine.get(router).put((long)i, repr);
     }
+
+    // BDD for implicit action
+    BDD var = _aclVars.get(router).get(acl).value(acl.getLines().size());
+    AclLineRepr repr = new AclLineRepr(acl, null);
+    _aclLineVars.get(router).put(repr, var);
+    _numToAclLine.get(router).put((long)acl.getLines().size(), repr);
   }
 
   public BDD getAclLine(String router, IpAccessList acl, IpAccessListLine line) {

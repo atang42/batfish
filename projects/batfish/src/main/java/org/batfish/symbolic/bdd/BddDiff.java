@@ -34,6 +34,11 @@ import org.batfish.symbolic.Graph;
 
 public class BddDiff {
 
+  public static long totalTime = 0;
+  public static int totalPairs = 0;
+  public static int totalFilters = 0;
+  public static int totalDiffs = 0;
+
   private BDDRoute computeBDD(
       Graph g, Configuration conf, RoutingPolicy pol, boolean ignoreNetworks) {
     Set<Prefix> networks = null;
@@ -100,6 +105,12 @@ public class BddDiff {
     SortedMap<String, Configuration> configs = batfish.loadConfigurations();
     Map<String, Map<String, IpAccessList>> aclNameToAcls = new TreeMap<>();
     Map<IpAccessList, String> aclToRouterName = new HashMap<>();
+    long startTime = System.currentTimeMillis();
+    int count = 0;
+
+    if (routerNames.size() == 2) {
+      BddDiff.totalPairs++;
+    }
 
     for (String rr : routerNames) {
       Configuration cc = configs.get(rr);
@@ -121,6 +132,9 @@ public class BddDiff {
       BDDPacketWithLines packet = new BDDPacketWithLines();
       try {
         if (accessLists.size() == 2) {
+          long prevTime = System.currentTimeMillis();
+          BddDiff.totalFilters++;
+          count++;
           List<String> routers = new ArrayList<>(accessLists.keySet());
           BDDAcl acl1 =
               BDDAcl.createWithLines(packet, routers.get(0), accessLists.get(routers.get(0)));
@@ -140,15 +154,16 @@ public class BddDiff {
           if (notEquivalent.isZero()) {
             // System.out.println(entry.getKey() + " is consistent");
           } else {
+            BddDiff.totalDiffs++;
             System.out.println("**************************");
             System.out.println(entry.getKey());
             BDD linesNotEquivalent = notEquivalent.exist(getPacketHeaderFields(packet));
 
             List<AclDiffReport> reportList = new ArrayList<>();
-
             while (!linesNotEquivalent.isZero()) {
               BDD lineSat = linesNotEquivalent.satOne();
               BDD counterexample = notEquivalent.and(lineSat).satOne();
+
               /*
               long dstIp = packet.getDstIp().getValueSatisfying(counterexample).get();
               long srcIp = packet.getSrcIp().getValueSatisfying(counterexample).get();
@@ -177,7 +192,7 @@ public class BddDiff {
                 if (!found) {
                   System.out.print(routers.get(i) + " ");
                   System.out.println(acl.getName());
-                  System.out.println("  Implicit deny");
+                  System.out.println("  Implicit deny ");
                 }
                 i++;
               }
@@ -201,12 +216,14 @@ public class BddDiff {
                 reportList.add(report);
               }
               */
-              linesNotEquivalent.andWith(counterexample.exist(getPacketHeaderFields(packet)).not());
+              BDD cond = counterexample.exist(getPacketHeaderFields(packet)).not();
+              linesNotEquivalent = linesNotEquivalent.and(cond);
             }
             // for (AclDiffReport r : reportList) {
-            //  r.print((Batfish) batfish);
+            //  r.print((Batfish) batfish);:q
             // }
             System.out.println("**************************");
+
           }
         } else {
           /*
@@ -216,10 +233,25 @@ public class BddDiff {
           System.out.println();
           */
         }
+
       } catch (Exception e) {
         e.printStackTrace();
       }
     }
+    /*
+    long timeElapsed = System.currentTimeMillis() - startTime;
+    if (count == 0) {
+      totalPairs--;
+    }
+    totalTime += timeElapsed;
+    System.out.println(nodesSpecifier);
+    System.out.println("Time: " + timeElapsed);
+    System.out.println("Count: " + count);
+    System.out.println("Total Time: " + totalTime);
+    System.out.println("Total Pairs: " + totalPairs);
+    System.out.println("Total Filters: " + totalFilters);
+    System.out.println("Total Diffs: " + totalDiffs);
+    */
   }
 
   public void doTest(IBatfish batfish, NodesSpecifier nodeRegex) {
