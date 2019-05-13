@@ -177,10 +177,10 @@ public abstract class IpAccessListToBdd {
       return toBdd(acl);
     }
     BDDPacketWithLines pkt = (BDDPacketWithLines) _pkt;
+    pkt.addAcl(router, acl);
     BDD accept = pkt.getAccept();
     //System.out.println(accept.var() + " ACCEPT");
-    BDD result = accept.not();
-    pkt.addAcl(router, acl);
+    BDD result = accept.not().and(pkt.getAclNoLine(router, acl));
     List<BDD> bddList = new ArrayList<>();
     for (IpAccessListLine line : Lists.reverse(acl.getLines())) {
       BDD lineMatchBDD = toBdd(line.getMatchCondition());
