@@ -143,5 +143,10 @@
       <artifactId>hamcrest</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.batfish</groupId>
+      <artifactId>batfish</artifactId>
+      <version>0.36.0</version>
+    </dependency>
   </dependencies>
 </project>

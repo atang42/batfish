@@ -1,4 +1,4 @@
-package org.batfish.symbolic.bdd;
+package org.batfish.minesweeper.bdd;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -17,6 +17,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
+import org.batfish.common.plugin.IBatfish;
 import org.batfish.config.Settings;
 import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.DefinedStructureInfo;
@@ -33,8 +34,8 @@ public class AclToConfigLines {
   private ParseVendorConfigurationAnswerElement _pvcae;
   private Settings _settings;
 
-  public AclToConfigLines(Batfish batfish) {
-    _batfish = batfish;
+  public AclToConfigLines(IBatfish batfish) {
+    _batfish = (Batfish) batfish;
     _ccae = _batfish.loadConvertConfigurationAnswerElementOrReparse();
     _pvcae = _batfish.loadParseVendorConfigurationAnswerElement();
     _settings = _batfish.getSettings();

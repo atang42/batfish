@@ -1,4 +1,4 @@
-package org.batfish.symbolic.bdd;
+package org.batfish.minesweeper.bdd;
 
 import java.util.ArrayList;
 import java.util.List;

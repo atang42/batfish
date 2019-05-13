@@ -1,4 +1,4 @@
-package org.batfish.question.bddtest;
+package org.batfish.minesweeper.question;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.auto.service.AutoService;
@@ -8,11 +8,12 @@ import org.batfish.common.plugin.Plugin;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.datamodel.questions.Question;
+import org.batfish.minesweeper.bdd.BddDiff;
 import org.batfish.question.QuestionPlugin;
-import org.batfish.symbolic.bdd.BddDiff;
+
 
 @AutoService(Plugin.class)
-public class BDDTestQuestionPlugin extends QuestionPlugin {
+public class BDDDiffQuestionPlugin extends QuestionPlugin {
 
   public static final class BDDTestQuestion extends Question {
     private NodesSpecifier _nodeRegex;

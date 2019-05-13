@@ -38,7 +38,7 @@ public final class BDDIcmpCode {
     return end == IcmpCode.UNSET ? _var.getFactory().one() : _var.leq(end);
   }
 
-  /** Returns the {@link BDDInteger} backing this. */
+  /** @return the {@link BDDInteger} backing this. */
   public BDDInteger getBDDInteger() {
     return _var;
   }
