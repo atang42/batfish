@@ -1,17 +1,16 @@
-package org.batfish.symbolic.bdd;
+package org.batfish.minesweeper.bdd;
 
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.LineAction;
-import org.batfish.main.Batfish;
 
 public class AclDiffReport {
-
   private Set<PacketPrefixRegion> _regions;
   private SingleRouterReport _report1;
   private SingleRouterReport _report2;
@@ -129,7 +128,7 @@ public class AclDiffReport {
         && first._report2.permits() == second._report2.permits();
   }
 
-  public void print(Batfish batfish, boolean printMore) {
+  public void print(IBatfish batfish, boolean printMore) {
 
     System.out.println();
     AclToConfigLines aclToConfig = new AclToConfigLines(batfish);

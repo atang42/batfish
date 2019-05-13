@@ -1,4 +1,4 @@
-package org.batfish.symbolic.bdd;
+package org.batfish.minesweeper.bdd;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -28,9 +28,8 @@ import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
-import org.batfish.main.Batfish;
-import org.batfish.symbolic.CommunityVar;
-import org.batfish.symbolic.Graph;
+import org.batfish.minesweeper.CommunityVar;
+import org.batfish.minesweeper.Graph;
 
 public class BddDiff {
 
@@ -60,12 +59,12 @@ public class BddDiff {
     BDD bddSrcPort =
         Arrays.stream(packet.getSrcPort().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
     BDD bddProtocol =
-        Arrays.stream(packet.getIpProtocol().getBitvec())
+        Arrays.stream(packet.getIpProtocol().getBDDInteger().getBitvec())
             .reduce(packet.getFactory().one(), BDD::and);
     BDD bddIcmpType =
-        Arrays.stream(packet.getIcmpType().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+        Arrays.stream(packet.getIcmpType().getBDDInteger().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
     BDD bddIcmpCode =
-        Arrays.stream(packet.getIcmpCode().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+        Arrays.stream(packet.getIcmpCode().getBDDInteger().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
     BDD bddDscp =
         Arrays.stream(packet.getDscp().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
     BDD bddEcn =
@@ -201,7 +200,7 @@ public class BddDiff {
 
               diffToPrefix.printDifferenceInPrefix();
               AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
-              report.print((Batfish) batfish, printMore);
+              report.print(batfish, printMore);
               /*boolean merged = false;
               for (AclDiffReport r : reportList) {
                 System.out.println(AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()));
@@ -529,7 +528,7 @@ public class BddDiff {
             .leq(region.getSrcPort().getEnd())
             .and(pkt.getSrcPort().geq(region.getSrcPort().getStart()));
 
-    BDD protoBDD = pkt.getIpProtocol().value(region.getProtocol().number());
+    BDD protoBDD = pkt.getIpProtocol().value(region.getProtocol());
 
     return bdd.and(dstPortBDD).and(srcPortBDD).and(protoBDD);
   }
