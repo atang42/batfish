@@ -6,7 +6,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import javax.annotation.Nullable;
 import org.batfish.datamodel.Prefix;
-import org.batfish.minesweeper.bdd.BDDAcl;
+import org.batfish.common.bdd.BDDAcl;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.utils.MsPair;
 import org.batfish.minesweeper.utils.PrefixUtils;

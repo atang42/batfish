@@ -1,11 +1,14 @@
-package org.batfish.minesweeper.bdd;
+package org.batfish.common.bdd;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.SortedSet;
 import org.batfish.datamodel.AclIpSpace;
 import org.batfish.datamodel.AclIpSpaceLine;
 import org.batfish.datamodel.EmptyIpSpace;
+import org.batfish.datamodel.FlowState;
 import org.batfish.datamodel.HeaderSpace;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.IpIpSpace;
@@ -39,6 +42,7 @@ public class PacketPrefixRegion {
   private SubRange _dstPort;
   private SubRange _srcPort;
   private IpProtocol _protocol;
+  private FlowState _flowState;
 
   private static final SubRange DEFAULT_PORT_RANGE;
 
@@ -191,6 +195,10 @@ public class PacketPrefixRegion {
         protocols.add(IpProtocol.IP);
       } else {
         protocols = new ArrayList<>(space.getIpProtocols());
+      }
+      // TODO: Properly handle other packet attributes
+      if (space.getTcpFlags() != null && space.getTcpFlags().size() > 0) {
+        return new ArrayList<>();
       }
 
       List<PacketPrefixRegion> ret = new ArrayList<>();

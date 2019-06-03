@@ -22,7 +22,7 @@ import org.batfish.datamodel.questions.smt.EquivalenceType;
 import org.batfish.minesweeper.Graph;
 import org.batfish.minesweeper.GraphEdge;
 import org.batfish.minesweeper.answers.RoleAnswerElement;
-import org.batfish.minesweeper.bdd.BDDAcl;
+import org.batfish.common.bdd.BDDAcl;
 import org.batfish.minesweeper.bdd.BDDNetwork;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.utils.Tuple;

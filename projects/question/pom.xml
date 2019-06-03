@@ -146,6 +146,5 @@
       <groupId>org.batfish</groupId>
       <artifactId>batfish</artifactId>
     </dependency>
-
   </dependencies>
 </project>

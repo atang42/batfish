@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.bdd;
+package org.batfish.bdddiff;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
+import org.batfish.common.bdd.PacketPrefixRegion;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 
@@ -138,9 +140,9 @@ public class AclLineDiffToPrefix {
         for (PacketPrefixRegion sp : diffs) {
           _output.append("\t- ").append(sp).append("\n");
         }
-        _differencesCalculated = true;
       }
     }
+    _differencesCalculated = true;
   }
 
   public void printDifferenceInPrefix() {
@@ -175,9 +177,16 @@ public class AclLineDiffToPrefix {
     if (!_differencesCalculated) {
       calculateDifference();
     }
+    Set<PacketPrefixRegion> subtractedRegions = new HashSet<>();
+    for (List<PacketPrefixRegion> regionList : getDifferences().values()) {
+      for (PacketPrefixRegion regions : regionList) {
+        subtractedRegions.add(regions);
+      }
+    }
     AclDiffReport report =
         new AclDiffReport(
             _differences.keySet(),
+            subtractedRegions,
             r1,
             _acl1,
             Arrays.asList(_line1),

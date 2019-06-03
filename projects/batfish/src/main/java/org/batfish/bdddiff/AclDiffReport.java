@@ -1,10 +1,15 @@
-package org.batfish.minesweeper.bdd;
+package org.batfish.bdddiff;
 
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import org.batfish.common.bdd.PacketPrefixRegion;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
@@ -12,6 +17,7 @@ import org.batfish.datamodel.LineAction;
 
 public class AclDiffReport {
   private Set<PacketPrefixRegion> _regions;
+  private Set<PacketPrefixRegion> _subtractedRegions;
   private SingleRouterReport _report1;
   private SingleRouterReport _report2;
 
@@ -68,6 +74,7 @@ public class AclDiffReport {
 
   public AclDiffReport(
       Set<PacketPrefixRegion> regions,
+      Set<PacketPrefixRegion> subtractedRegions,
       String r1,
       IpAccessList acl1,
       List<IpAccessListLine> last1,
@@ -77,6 +84,7 @@ public class AclDiffReport {
       List<IpAccessListLine> last2,
       Set<IpAccessListLine> all2) {
     _regions = new HashSet<>(regions);
+    _subtractedRegions = new HashSet<>(subtractedRegions);
     _report1 = new SingleRouterReport(r1, acl1, last1, all1);
     _report2 = new SingleRouterReport(r2, acl2, last2, all2);
   }
@@ -128,10 +136,10 @@ public class AclDiffReport {
         && first._report2.permits() == second._report2.permits();
   }
 
-  public void print(IBatfish batfish, boolean printMore) {
+  public void print(IBatfish batfish, boolean printMore, boolean differential) {
 
     System.out.println();
-    AclToConfigLines aclToConfig = new AclToConfigLines(batfish);
+    AclToConfigLines aclToConfig = new AclToConfigLines(batfish, differential);
     System.out.println("Configuration lines for : ");
     _regions.forEach((r) -> System.out.println("  " + r));
     System.out.println(_report1._router);
@@ -142,5 +150,25 @@ public class AclDiffReport {
     aclToConfig.printRelevantLines(
         _report2._router, _report2._acl, _regions, _report2._lastDiffs, _report2._implicitDeny, printMore);
     System.out.println();
+  }
+
+  public LineDifference toLineDifference(IBatfish batfish, boolean printMore, boolean differential) {
+    AclToConfigLines aclToConfig = new AclToConfigLines(batfish, differential);
+    String rel1 = aclToConfig.getRelevantLines(
+        _report1._router, _report1._acl, _regions, _report1._lastDiffs, _report1._implicitDeny, printMore);
+    String rel2 = aclToConfig.getRelevantLines(
+            _report2._router, _report2._acl, _regions, _report2._lastDiffs, _report2._implicitDeny, printMore);
+    SortedSet<String> difference = _regions
+        .stream()
+        .map(PacketPrefixRegion::toString)
+        .collect(Collectors.toCollection(TreeSet::new));
+    SortedSet<String> diffSub = _subtractedRegions.stream()
+        .map(PacketPrefixRegion::toString)
+        .collect(Collectors.toCollection(TreeSet::new));
+
+    return new LineDifference(_report1._router, _report2._router,
+        _report1._acl.getName(), _report2._acl.getName(),
+        rel1, rel2,
+        difference, diffSub);
   }
 }

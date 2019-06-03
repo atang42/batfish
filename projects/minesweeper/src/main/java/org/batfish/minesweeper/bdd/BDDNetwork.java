@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import org.batfish.common.NetworkSnapshot;
+import org.batfish.common.Pair;
+import org.batfish.common.bdd.BDDAcl;
 import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
