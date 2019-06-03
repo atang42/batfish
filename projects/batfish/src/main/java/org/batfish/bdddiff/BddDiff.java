@@ -1,5 +1,8 @@
-package org.batfish.minesweeper.bdd;
+package org.batfish.bdddiff;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.Multimap;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -8,45 +11,40 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
-import org.batfish.common.bdd.BDDInteger;
+import org.batfish.common.bdd.BDDAcl;
 import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.bdd.BDDPacketWithLines;
+import org.batfish.common.bdd.PacketPrefixRegion;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.questions.NodesSpecifier;
-import org.batfish.datamodel.routing_policy.RoutingPolicy;
-import org.batfish.minesweeper.CommunityVar;
-import org.batfish.minesweeper.Graph;
+import org.batfish.specifier.AllFiltersFilterSpecifier;
+import org.batfish.specifier.FilterSpecifier;
+import org.batfish.specifier.SpecifierContext;
+import org.batfish.specifier.SpecifierFactories;
 
 public class BddDiff {
 
-  public static long totalTime = 0;
-  public static int totalPairs = 0;
-  public static int totalFilters = 0;
-  public static int totalDiffs = 0;
+  //public static long totalTime = 0;
+  //public static int totalPairs = 0;
+  //public static int totalFilters = 0;
+  //public static int totalDiffs = 0;
 
-  private BDDRoute computeBDD(
-      Graph g, Configuration conf, RoutingPolicy pol, boolean ignoreNetworks) {
-    Set<Prefix> networks = null;
-    if (ignoreNetworks) {
-      networks = Graph.getOriginatedNetworks(conf);
-    }
-    TransferBDD t = new TransferBDD(g, conf, pol.getStatements(), new PolicyQuotient(g));
-    return t.compute(networks);
-  }
 
   private BDD getPacketHeaderFields(BDDPacket packet) {
     BDD headerVars = packet.getFactory().one();
@@ -99,17 +97,23 @@ public class BddDiff {
   /*
   Check differences between ACLs with same name on two routers
    */
-  public void findDiffWithLines(IBatfish batfish, NodesSpecifier nodesSpecifier, String aclRegex, boolean printMore) {
+  public SortedSet<LineDifference> findDiffWithLines(
+      IBatfish batfish,
+      NodesSpecifier nodesSpecifier,
+      String aclRegex,
+      boolean printMore) {
+
+    SortedSet<LineDifference> differences = new TreeSet<>();
     Set<String> routerNames = nodesSpecifier.getMatchingNodes(batfish);
     SortedMap<String, Configuration> configs = batfish.loadConfigurations();
     Map<String, Map<String, IpAccessList>> aclNameToAcls = new TreeMap<>();
     Map<IpAccessList, String> aclToRouterName = new HashMap<>();
-    long startTime = System.currentTimeMillis();
-    int count = 0;
+    System.out.println("NodeRegex = " + nodesSpecifier);
+    System.out.println("printMore = " + printMore);
 
-    if (routerNames.size() == 2) {
-      BddDiff.totalPairs++;
-    }
+    //if (routerNames.size() == 2) {
+    //  BddDiff.totalPairs++;
+    //}
 
     for (String rr : routerNames) {
       Configuration cc = configs.get(rr);
@@ -127,103 +131,12 @@ public class BddDiff {
     }
 
     for (Entry<String, Map<String, IpAccessList>> entry : aclNameToAcls.entrySet()) {
+      String aclName = entry.getKey();
       Map<String, IpAccessList> accessLists = entry.getValue();
       BDDPacketWithLines packet = new BDDPacketWithLines();
       try {
         if (accessLists.size() == 2) {
-          long prevTime = System.currentTimeMillis();
-          BddDiff.totalFilters++;
-          count++;
-          List<String> routers = new ArrayList<>(accessLists.keySet());
-          BDDAcl acl1 =
-              BDDAcl.createWithLines(packet, routers.get(0), accessLists.get(routers.get(0)));
-          BDDAcl acl2 =
-              BDDAcl.createWithLines(packet, routers.get(1), accessLists.get(routers.get(1)));
-          BDD first = acl1.getBdd();
-          BDD second = acl2.getBdd();
-
-          BDD acceptVar = packet.getAccept();
-
-          BDD acceptFirst = first.restrict(acceptVar);
-          BDD acceptSecond = second.restrict(acceptVar);
-          BDD rejectFirst = first.restrict(acceptVar.not());
-          BDD rejectSecond = second.restrict(acceptVar.not());
-          BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
-
-          if (notEquivalent.isZero()) {
-            // System.out.println(entry.getKey() + " is consistent");
-          } else {
-            BddDiff.totalDiffs++;
-            System.out.println("**************************");
-            System.out.println(entry.getKey());
-            BDD linesNotEquivalent = notEquivalent.exist(getPacketHeaderFields(packet));
-
-            List<AclDiffReport> reportList = new ArrayList<>();
-            while (!linesNotEquivalent.isZero()) {
-              BDD lineSat = linesNotEquivalent.satOne();
-              BDD counterexample = notEquivalent.and(lineSat).satOne();
-
-              /*
-              long dstIp = packet.getDstIp().getValueSatisfying(counterexample).get();
-              long srcIp = packet.getSrcIp().getValueSatisfying(counterexample).get();
-              long dstPort = packet.getDstPort().getValueSatisfying(counterexample).get();
-              long srcPort = packet.getSrcPort().getValueSatisfying(counterexample).get();
-              System.out.println("EXAMPLE:");
-              System.out.println("\tDST-IP:    " + Ip.create(dstIp));
-              System.out.println("\tSRC-IP:    " + Ip.create(srcIp));
-              System.out.println("\tDST-PORT:  " + dstPort);
-              System.out.println("\tSRC-PORT:  " + srcPort);
-              */
-              int i = 0;
-              IpAccessListLine[] lineDiff = new IpAccessListLine[2];
-              List<IpAccessList> aclList = new ArrayList<>(accessLists.values());
-              for (IpAccessList acl : accessLists.values()) {
-                boolean found = false;
-                for (IpAccessListLine line : acl.getLines()) {
-                  if (!counterexample.and(packet.getAclLine(routers.get(i), acl, line)).isZero()) {
-                    System.out.print(routers.get(i) + " ");
-                    System.out.println(acl.getName() + ":");
-                    System.out.println("  " + line.getName());
-                    lineDiff[i] = line;
-                    found = true;
-                  }
-                }
-                if (!found) {
-                  System.out.print(routers.get(i) + " ");
-                  System.out.println(acl.getName());
-                  System.out.println("  Implicit deny ");
-                }
-                i++;
-              }
-              AclLineDiffToPrefix diffToPrefix =
-                  new AclLineDiffToPrefix(aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
-
-              diffToPrefix.printDifferenceInPrefix();
-              AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
-              report.print(batfish, printMore);
-              /*boolean merged = false;
-              for (AclDiffReport r : reportList) {
-                System.out.println(AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()));
-                if (AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()) <= 1
-                    && AclDiffReport.combinedSameAction(r, report)) {
-                  merged = true;
-                  r.combineWith(report);
-                  break;
-                }
-              }
-              if (!merged) {
-                reportList.add(report);
-              }
-              */
-              BDD cond = counterexample.exist(getPacketHeaderFields(packet)).not();
-              linesNotEquivalent = linesNotEquivalent.and(cond);
-            }
-            // for (AclDiffReport r : reportList) {
-            //  r.print((Batfish) batfish);:q
-            // }
-            System.out.println("**************************");
-
-          }
+          differences.addAll(compareAcls(batfish, packet, accessLists, printMore, false));
         } else {
           /*
           System.out.print(entry.getKey() + " is present in ");
@@ -251,7 +164,238 @@ public class BddDiff {
     System.out.println("Total Filters: " + totalFilters);
     System.out.println("Total Diffs: " + totalDiffs);
     */
+    return differences;
   }
+
+  public SortedSet<LineDifference> compareAcls(
+      IBatfish batfish,
+      BDDPacketWithLines packet,
+      Map<String, IpAccessList> accessLists,
+      boolean printMore,
+      boolean differential) {
+    assert(accessLists.size() == 2);
+    // BddDiff.totalFilters++;
+    SortedSet<LineDifference> differences = new TreeSet<>();
+    List<String> routers = new ArrayList<>(accessLists.keySet());
+    BDDAcl acl1 = BDDAcl.createWithLines(packet, routers.get(0), accessLists.get(routers.get(0)));
+    BDDAcl acl2 = BDDAcl.createWithLines(packet, routers.get(1), accessLists.get(routers.get(1)));
+    BDD first = acl1.getBdd();
+    BDD second = acl2.getBdd();
+
+    BDD acceptVar = packet.getAccept();
+
+    BDD acceptFirst = first.restrict(acceptVar);
+    BDD acceptSecond = second.restrict(acceptVar);
+    BDD rejectFirst = first.restrict(acceptVar.not());
+    BDD rejectSecond = second.restrict(acceptVar.not());
+    BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
+
+    if (notEquivalent.isZero()) {
+      // System.out.println(entry.getKey() + " is consistent");
+    } else {
+      // BddDiff.totalDiffs++;
+      System.out.println("**************************");
+      BDD linesNotEquivalent = notEquivalent.exist(getPacketHeaderFields(packet));
+
+      List<AclDiffReport> reportList = new ArrayList<>();
+      while (!linesNotEquivalent.isZero()) {
+        BDD lineSat = linesNotEquivalent.satOne();
+        BDD counterexample = notEquivalent.and(lineSat).satOne();
+
+        /*
+        long dstIp = packet.getDstIp().getValueSatisfying(counterexample).get();
+        long srcIp = packet.getSrcIp().getValueSatisfying(counterexample).get();
+        long dstPort = packet.getDstPort().getValueSatisfying(counterexample).get();
+        long srcPort = packet.getSrcPort().getValueSatisfying(counterexample).get();
+        System.out.println("EXAMPLE:");
+        System.out.println("\tDST-IP:    " + Ip.create(dstIp));
+        System.out.println("\tSRC-IP:    " + Ip.create(srcIp));
+        System.out.println("\tDST-PORT:  " + dstPort);
+        System.out.println("\tSRC-PORT:  " + srcPort);
+        */
+        int i = 0;
+        IpAccessListLine[] lineDiff = new IpAccessListLine[2];
+        List<IpAccessList> aclList = new ArrayList<>(accessLists.values());
+        for (IpAccessList acl : accessLists.values()) {
+          boolean found = false;
+          for (IpAccessListLine line : acl.getLines()) {
+            if (!counterexample.and(packet.getAclLine(routers.get(i), acl, line)).isZero()) {
+              System.out.print(routers.get(i) + " ");
+              System.out.println(acl.getName() + ":");
+              System.out.println("  " + line.getName());
+              lineDiff[i] = line;
+              found = true;
+            }
+          }
+          if (!found) {
+            System.out.print(routers.get(i) + " ");
+            System.out.println(acl.getName());
+            System.out.println("  Implicit deny ");
+          }
+          i++;
+        }
+        AclLineDiffToPrefix diffToPrefix =
+            new AclLineDiffToPrefix(aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
+
+        diffToPrefix.printDifferenceInPrefix();
+        AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
+        report.print(batfish, printMore, differential);
+        differences.add(report.toLineDifference(batfish, printMore, differential));
+        /*boolean merged = false;
+        for (AclDiffReport r : reportList) {
+          System.out.println(AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()));
+          if (AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()) <= 1
+              && AclDiffReport.combinedSameAction(r, report)) {
+            merged = true;
+            r.combineWith(report);
+            break;
+          }
+        }
+        if (!merged) {
+          reportList.add(report);
+        }
+        */
+        BDD cond = counterexample.exist(getPacketHeaderFields(packet)).not();
+        linesNotEquivalent = linesNotEquivalent.and(cond);
+      }
+      // for (AclDiffReport r : reportList) {
+      //  r.print((Batfish) batfish);:q
+      // }
+      System.out.println("**************************");
+    }
+    return differences;
+  }
+
+  public SortedSet<LineDifference> getTimeDiff(IBatfish batfish, NodesSpecifier nodesSpecifier, String aclRegex, boolean printMore) {
+    batfish.pushBaseSnapshot();
+    SpecifierContext currentContext = batfish.specifierContext();
+    batfish.popSnapshot();
+
+    batfish.pushDeltaSnapshot();
+    SpecifierContext referenceContext = batfish.specifierContext();
+    batfish.popSnapshot();
+
+    Multimap<String, List<IpAccessList>> aclPairs = ArrayListMultimap.create();
+    Set<String> routers = new TreeSet<>(nodesSpecifier.getMatchingNodes(currentContext));
+    routers.retainAll(nodesSpecifier.getMatchingNodes(referenceContext));
+
+    Set<String> onlyFirst = nodesSpecifier.getMatchingNodes(currentContext).stream()
+        .filter(s -> !routers.contains(s))
+        .collect(Collectors.toCollection(TreeSet::new));
+    Set<String> onlySecond = nodesSpecifier.getMatchingNodes(referenceContext).stream()
+        .filter(s -> !routers.contains(s))
+        .collect(Collectors.toCollection(TreeSet::new));
+    for (String router : routers) {
+      Set<String> currentInterfaces = currentContext.getConfigs().get(router).getAllInterfaces().keySet();
+      Set<String> referenceInterfaces = referenceContext.getConfigs().get(router).getAllInterfaces().keySet();
+
+      Set<String> intersection = new HashSet<>(currentInterfaces);
+      intersection.retainAll(referenceInterfaces);
+      for (String intfName : intersection) {
+        Interface intf1 = currentContext.getConfigs().get(router).getAllInterfaces().get(intfName);
+        Interface intf2 = referenceContext.getConfigs().get(router).getAllInterfaces().get(intfName);
+
+        IpAccessList inAcl1 = intf1.getIncomingFilter();
+        IpAccessList inAcl2 = intf2.getIncomingFilter();
+
+        IpAccessList outAcl1 = intf1.getOutgoingFilter();
+        IpAccessList outAcl2 = intf2.getOutgoingFilter();
+
+        if (inAcl1 != null
+            && inAcl2 != null
+            && inAcl1.getName().matches(aclRegex)
+            && inAcl2.getName().matches(aclRegex)) {
+          ArrayList<IpAccessList> pair = new ArrayList<>();
+          pair.add(inAcl1);
+          pair.add(inAcl2);
+          aclPairs.put(router, pair);
+        } else if (inAcl1 != null && inAcl1.getName().matches(aclRegex)) {
+          onlyFirst.add(router+":"+inAcl1.getName());
+        } else if (inAcl2 != null && inAcl2.getName().matches(aclRegex)) {
+          onlySecond.add(router+":"+inAcl2.getName());
+        }
+
+        if (outAcl1 != null
+            && outAcl2 != null
+            && outAcl1.getName().matches(aclRegex)
+            && outAcl2.getName().matches(aclRegex)) {
+          ArrayList<IpAccessList> pair = new ArrayList<>();
+          pair.add(outAcl1);
+          pair.add(outAcl2);
+          aclPairs.put(router, pair);
+        } else if (outAcl1 != null && outAcl1.getName().matches(aclRegex)) {
+          onlyFirst.add(router+":"+outAcl1.getName());
+        } else if (outAcl2 != null && outAcl2.getName().matches(aclRegex)) {
+          onlySecond.add(router+":"+outAcl2.getName());
+        }
+      }
+    }
+
+    System.out.println("Only in current");
+    onlyFirst.forEach(System.out::println);
+    System.out.println("Only in reference");
+    onlySecond.forEach(System.out::println);
+
+    System.out.println("PAIRS:");
+
+    SortedSet<LineDifference> differences = new TreeSet<>();
+    BDDPacketWithLines packet = new BDDPacketWithLines();
+    for (Entry<String, List<IpAccessList>> entry : aclPairs.entries())
+    {
+      String router = entry.getKey();
+
+      IpAccessList acl1 = entry.getValue().get(0);
+      IpAccessList acl2 = entry.getValue().get(1);
+      System.out.println(router);
+      System.out.println("current:" + acl1.getName() + "--" + "reference:" + acl2.getName());
+
+      Map<String, IpAccessList> accessLists = new HashMap<>();
+      accessLists.put(router + "-current", acl1);
+      accessLists.put(router + "-reference", acl2);
+      differences.addAll(compareAcls(batfish, packet, accessLists, printMore, true));
+    }
+
+    Map<String, SortedSet<String>> diffToFilters = new TreeMap<>();
+    Map<String, SortedSet<String>> filterToDiffs = new TreeMap<>();
+    for(LineDifference diff : differences) {
+      for(String region : diff.getDifference()) {
+        if (!diffToFilters.containsKey(region)) {
+          diffToFilters.put(region, new TreeSet<>());
+        }
+        diffToFilters.get(region).add(diff.getRouter1() + ":" + diff.getFilter1() + "--" + diff.getRouter2() + ":" + diff.getFilter2());
+      }
+    }
+
+    System.out.println("TOTAL DIFFERENCES BY REGION");
+    for (String region : diffToFilters.keySet()) {
+      SortedSet<String> filters = diffToFilters.get(region);
+      System.out.println(region + ": [");
+      filters.forEach(f -> System.out.println("\t" + f));
+      System.out.println("]");
+    }
+
+    return differences;
+  }
+
+  /** Get filters specified by the given filter specifier. */
+  public static Multimap<String, String> getSpecifiedFilters(
+      SpecifierContext specifierContext,
+      NodesSpecifier nodesSpecifier,
+      String aclRegex) {
+    Set<String> nodes = nodesSpecifier.getMatchingNodes(specifierContext);
+    ImmutableMultimap.Builder<String, String> filters = ImmutableMultimap.builder();
+    Map<String, Configuration> configs = specifierContext.getConfigs();
+    FilterSpecifier filterSpecifier = SpecifierFactories.getFilterSpecifierOrDefault(aclRegex,
+        AllFiltersFilterSpecifier.INSTANCE);
+    nodes.stream()
+        .map(configs::get)
+        .forEach(
+            config ->
+                filterSpecifier.resolve(config.getHostname(), specifierContext).stream()
+                    .forEach(filter -> filters.put(config.getHostname(), filter.getName())));
+    return filters.build();
+  }
+
 
   public void doTest(IBatfish batfish, NodesSpecifier nodeRegex) {
     BDDPacket packet = new BDDPacket();
@@ -336,127 +480,6 @@ public class BddDiff {
           }
         }
       }
-    }
-  }
-
-  private static class RouteMapWrapper {
-    public String router;
-    public Configuration config;
-    public RoutingPolicy policy;
-
-    public RouteMapWrapper(String router, Configuration config, RoutingPolicy policy) {
-      this.router = router;
-      this.config = config;
-      this.policy = policy;
-    }
-  }
-
-  public void checkRoutingPolicy(IBatfish batfish, NodesSpecifier nodeRegex) {
-    BDDPacket packet = new BDDPacket();
-
-    Set<String> routers = nodeRegex.getMatchingNodes(batfish);
-    SortedMap<String, Configuration> configs = batfish.loadConfigurations();
-    Map<String, List<RouteMapWrapper>> nameToRoutePolicy = new TreeMap<>();
-    Graph graph = new Graph(batfish);
-
-    for (String rr : routers) {
-      Configuration cc = configs.get(rr);
-      System.out.println(cc.getHostname());
-      for (Entry<String, RoutingPolicy> entry : cc.getRoutingPolicies().entrySet()) {
-        String name = entry.getKey();
-        RoutingPolicy policy = entry.getValue();
-        RouteMapWrapper rmw = new RouteMapWrapper(rr, cc, policy);
-
-        List<RouteMapWrapper> policyList = nameToRoutePolicy.getOrDefault(name, new ArrayList<>());
-        policyList.add(rmw);
-        nameToRoutePolicy.put(name, policyList);
-      }
-    }
-
-    for (Entry<String, List<RouteMapWrapper>> entry : nameToRoutePolicy.entrySet()) {
-      List<RouteMapWrapper> policyList = entry.getValue();
-      if (policyList.size() == 2) {
-        BDDRoute first =
-            computeBDD(graph, policyList.get(0).config, policyList.get(0).policy, false);
-        BDDRoute second =
-            computeBDD(graph, policyList.get(1).config, policyList.get(1).policy, false);
-        checkRoutingEquivalence(first, second, entry.getKey());
-      }
-    }
-  }
-
-  private void checkRoutingEquivalence(BDDRoute first, BDDRoute second, String name) {
-    BDD result = first.getPrefix().getFactory().one();
-
-    if (!first.getCommunities().keySet().equals(second.getCommunities().keySet())) {
-      System.out.println("Routers disagree on " + name + " because of communities");
-      return;
-    }
-    result.andWith(checkBDDIntegerEquivalence(first.getMetric(), second.getMetric()));
-    result.andWith(checkBDDIntegerEquivalence(first.getLocalPref(), second.getLocalPref()));
-    result.andWith(checkBDDIntegerEquivalence(first.getPrefix(), second.getPrefix()));
-    result.andWith(checkBDDIntegerEquivalence(first.getPrefixLength(), second.getPrefixLength()));
-    result.andWith(checkBDDIntegerEquivalence(first.getMed(), second.getMed()));
-    result.andWith(checkBDDIntegerEquivalence(first.getAdminDist(), second.getAdminDist()));
-    result.andWith(
-        checkBDDIntegerEquivalence(
-            first.getProtocolHistory().getInteger(), second.getProtocolHistory().getInteger()));
-    result.andWith(
-        checkBDDIntegerEquivalence(
-            first.getOspfMetric().getInteger(), second.getOspfMetric().getInteger()));
-    for (CommunityVar cvar : first.getCommunities().keySet()) {
-      BDD bdd1 = first.getCommunities().get(cvar);
-      BDD bdd2 = second.getCommunities().get(cvar);
-      BDD isEquivalent = bdd1.and(bdd2).or(bdd1.not().and(bdd2.not()));
-      result.andWith(isEquivalent);
-    }
-
-    // printBDD(result);
-    if (result.isOne()) {
-      System.out.println(name + " is consistent");
-    } else {
-      System.out.println("Routers disagree on " + name);
-      BDD counterexample = result.not().fullSatOne();
-      System.out.println(first.dot(counterexample));
-      System.out.println(second.dot(counterexample));
-    }
-  }
-
-  private BDD checkBDDIntegerEquivalence(BDDInteger first, BDDInteger second) {
-    int length = first.getBitvec().length;
-    if (second.getBitvec().length != length) {
-      System.err.println("Comparing BDDIntegers with different lengths");
-      return null;
-    }
-
-    BDD result = first.getFactory().one();
-    for (int i = 0; i < length; i++) {
-      BDD bit1 = first.getBitvec()[i];
-      BDD bit2 = second.getBitvec()[i];
-      BDD isEquivalent = bit1.and(bit2).or(bit1.not().and(bit2.not()));
-      result.andWith(isEquivalent);
-    }
-    return result;
-  }
-
-  private void printRouteSatisfying(BDD route) {
-    BDDRoute reference = new BDDRoute(new TreeSet<>());
-    Optional<Long> prefix = reference.getPrefix().getValueSatisfying(route);
-    Optional<Long> prefixLen = reference.getPrefixLength().getValueSatisfying(route);
-    Optional<Long> metric = reference.getMetric().getValueSatisfying(route);
-    Optional<Long> med = reference.getMed().getValueSatisfying(route);
-
-    if (prefix.isPresent()) {
-      System.out.println("PREFIX: " + prefix.get());
-    }
-    if (prefixLen.isPresent()) {
-      System.out.println("PREFIX LENGTH: " + prefixLen.get());
-    }
-    if (metric.isPresent() && metric.get() != 0) {
-      System.out.println(metric.get());
-    }
-    if (med.isPresent() && med.get() != 0) {
-      System.out.println(med.get());
     }
   }
 

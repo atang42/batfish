@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.bdd;
+package org.batfish.bdddiff;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -17,6 +17,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
+import org.batfish.common.bdd.PacketPrefixRegion;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.config.Settings;
 import org.batfish.datamodel.ConfigurationFormat;
@@ -26,33 +27,55 @@ import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.answers.ConvertConfigurationAnswerElement;
 import org.batfish.datamodel.answers.ParseVendorConfigurationAnswerElement;
 import org.batfish.main.Batfish;
+import org.batfish.specifier.SpecifierContext;
+import org.batfish.specifier.SpecifierFactories;
 
 public class AclToConfigLines {
 
   private Batfish _batfish;
+  private boolean _differential;
   private ConvertConfigurationAnswerElement _ccae;
   private ParseVendorConfigurationAnswerElement _pvcae;
   private Settings _settings;
+  private ConvertConfigurationAnswerElement _ccaeRef;
+  private ParseVendorConfigurationAnswerElement _pvcaeRef;
+  private SpecifierContext _referenceContext;
 
-  public AclToConfigLines(IBatfish batfish) {
+  private static String linesep = System.lineSeparator();
+
+  public AclToConfigLines(IBatfish batfish, boolean differential) {
     _batfish = (Batfish) batfish;
+    _differential = differential;
     _ccae = _batfish.loadConvertConfigurationAnswerElementOrReparse();
     _pvcae = _batfish.loadParseVendorConfigurationAnswerElement();
     _settings = _batfish.getSettings();
+
+    if (_differential) {
+      _batfish.pushDeltaSnapshot();
+      _ccaeRef = _batfish.loadConvertConfigurationAnswerElementOrReparse();
+      _pvcaeRef = _batfish.loadParseVendorConfigurationAnswerElement();
+      _referenceContext = _batfish.specifierContext();
+      _batfish.popSnapshot();
+    }
   }
 
-  private SortedSet<Integer> getAclLineNums(String router, IpAccessList acl) {
-    Collection<String> filenames = _pvcae.getFileMap().get(router);
+  private SortedSet<Integer> getAclLineNums(String router,
+      IpAccessList acl,
+      ParseVendorConfigurationAnswerElement pvcae,
+      ConvertConfigurationAnswerElement ccae) {
+    Collection<String> filenames = pvcae.getFileMap().get(router);
     for (String name : filenames) {
-      for (String structType : _ccae.getDefinedStructures().get(name).keySet()) {
+      for (String structType : ccae.getDefinedStructures().get(name).keySet()) {
         if (structType.contains("access-list") || structType.contains("filter")) {
           DefinedStructureInfo info =
-              _ccae
+              ccae
                   .getDefinedStructures()
                   .get(name)
                   .get(structType)
                   .getOrDefault(acl.getName(), null);
-          if (info != null) return info.getDefinitionLines();
+          if (info != null) {
+            return info.getDefinitionLines();
+          }
         }
       }
     }
@@ -60,9 +83,24 @@ public class AclToConfigLines {
   }
 
   public SortedMap<Integer, String> getAclLineText(String router, IpAccessList acl) {
-    SortedSet<Integer> lineNums = getAclLineNums(router, acl);
-    Path path = _settings.getActiveTestrigSettings().getInputPath();
-    String name = new ArrayList<String>(_pvcae.getFileMap().get(router)).get(0);
+    Path path;
+    String name;
+    SortedSet<Integer> lineNums;
+    if (router.endsWith("-current")) {
+      router = router.substring(0, router.length() - "-current".length());
+      path = _settings.getActiveTestrigSettings().getInputPath();
+      name = new ArrayList<>(_pvcae.getFileMap().get(router)).get(0);
+      lineNums = getAclLineNums(router, acl, _pvcae, _ccae);
+    } else if (router.endsWith("-reference")) {
+      router = router.substring(0, router.length() - "-reference".length());
+      path = _settings.getDeltaTestrigSettings().getInputPath();
+      name = new ArrayList<>(_pvcaeRef.getFileMap().get(router)).get(0);
+      lineNums = getAclLineNums(router, acl, _pvcaeRef, _ccaeRef);
+    } else {
+      path = _settings.getActiveTestrigSettings().getInputPath();
+      name = new ArrayList<>(_pvcae.getFileMap().get(router)).get(0);
+      lineNums = getAclLineNums(router, acl, _pvcae, _ccae);
+    }
     Path fullname = Paths.get(path.toString(), name);
 
     BufferedReader reader = null;
@@ -89,6 +127,7 @@ public class AclToConfigLines {
     } catch (IOException e) {
       e.printStackTrace();
     }
+
 
     return lines;
   }
@@ -122,6 +161,37 @@ public class AclToConfigLines {
     return builder.toString();
   }
 
+  public String getRelevantLines(
+      String router,
+      IpAccessList acl,
+      Collection<PacketPrefixRegion> regions,
+      @Nullable List<IpAccessListLine> lastLines,
+      boolean hasImplicitDeny,
+      boolean printMore) {
+
+    SortedMap<Integer, String> lines = getAclLineText(router, acl);
+    ConfigurationFormat format;
+    if (router.endsWith("-current")) {
+      router = router.substring(0, router.length() - "-current".length());
+      format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
+    } else if (router.endsWith("-reference")) {
+      router = router.substring(0, router.length() - "-reference".length());
+      format = _referenceContext.getConfigs().get(router).getConfigurationFormat();
+    } else {
+      format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
+    }
+    String ret = "";
+    if (format.getVendorString().equals("cisco")) {
+      ret = (getRelevantLinesCisco(lines, acl, regions, lastLines, hasImplicitDeny, printMore));
+    } else if (format.getVendorString().equals("juniper")) {
+      ret = (getRelevantLinesJuniper(
+          lines.firstKey(), lines.lastKey(), router, acl, regions, lastLines, hasImplicitDeny, printMore));
+    } else {
+      System.err.println("Does not support the format: " + format);
+    }
+    return ret;
+  }
+
   public void printRelevantLines(
       String router,
       IpAccessList acl,
@@ -129,8 +199,19 @@ public class AclToConfigLines {
       @Nullable List<IpAccessListLine> lastLines,
       boolean hasImplicitDeny,
       boolean printMore) {
+
     SortedMap<Integer, String> lines = getAclLineText(router, acl);
-    ConfigurationFormat format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
+
+    ConfigurationFormat format;
+    if (router.endsWith("-current")) {
+      router = router.substring(0, router.length() - "-current".length());
+      format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
+    } else if (router.endsWith("-reference")) {
+      router = router.substring(0, router.length() - "-reference".length());
+      format = _referenceContext.getConfigs().get(router).getConfigurationFormat();
+    } else {
+      format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
+    }
     if (format.getVendorString().equals("cisco")) {
       /*    CISCO PARSE TEST
             Settings settings = new Settings();
@@ -176,7 +257,7 @@ public class AclToConfigLines {
     }
   }
 
-  public void printRelevantLinesCisco(
+  public String getRelevantLinesCisco(
       SortedMap<Integer, String> lines,
       IpAccessList acl,
       Collection<PacketPrefixRegion> regions,
@@ -184,6 +265,7 @@ public class AclToConfigLines {
       boolean hasImplicitDeny,
       boolean printMore) {
 
+    StringBuilder ret = new StringBuilder();
     List<IpAccessListLine> relevantAclLines = new ArrayList<>();
     int prevPrint = 0;
     for (IpAccessListLine aclLine : acl.getLines()) {
@@ -219,15 +301,15 @@ public class AclToConfigLines {
       boolean done = false;
       if (text.contains("ip access-list extended")) {
         prevPrint = lineNum;
-        System.out.format("%-6d %s\n", lineNum, text);
+        ret.append(String.format("%-6d %s\n", lineNum, text));
       } else {
         for (String lastLine : lastLineTexts) {
           if (text.contains(lastLine)) {
             if (prevPrint != 0 && prevPrint < lineNum - 1) {
-              System.out.println("      ...");
+              ret.append("      ...\n");
             }
             prevPrint = lineNum;
-            System.out.format("*%-5d %s\n", lineNum, text);
+            ret.append(String.format("*%-5d %s\n", lineNum, text));
             done = true;
             lastLinesReached++;
           }
@@ -237,10 +319,10 @@ public class AclToConfigLines {
         for (String relLine : relevantLineTexts) {
           if (text.contains(relLine)) {
             if (prevPrint != 0 && prevPrint < lineNum - 1) {
-              System.out.println("      ...");
+              ret.append("      ...\n");
             }
             prevPrint = lineNum;
-            System.out.format("%-6d %s\n", lineNum, text);
+            ret.append(String.format("%-6d %s\n", lineNum, text));
           }
         }
       }
@@ -249,11 +331,24 @@ public class AclToConfigLines {
       }
     }
     if (hasImplicitDeny) {
-      System.out.println("*Implicit deny");
+      ret.append("*Implicit deny\n");
     }
+    return ret.toString();
   }
 
-  public void printRelevantLinesJuniper(
+  public void printRelevantLinesCisco(
+      SortedMap<Integer, String> lines,
+      IpAccessList acl,
+      Collection<PacketPrefixRegion> regions,
+      @Nullable List<IpAccessListLine> lastLines,
+      boolean hasImplicitDeny,
+      boolean printMore) {
+
+    System.out.print(
+        getRelevantLinesCisco(lines, acl, regions, lastLines, hasImplicitDeny, printMore));
+  }
+
+  public String getRelevantLinesJuniper(
       int firstLine,
       int lastLine,
       String router,
@@ -262,6 +357,7 @@ public class AclToConfigLines {
       @Nullable List<IpAccessListLine> lastAclLines,
       boolean hasImplicitDeny,
       boolean printMore) {
+    StringBuilder ret = new StringBuilder();
     int prevPrint = 0;
     List<IpAccessListLine> relevantAclLines = new ArrayList<>();
     for (IpAccessListLine aclLine : acl.getLines()) {
@@ -312,20 +408,20 @@ public class AclToConfigLines {
           }
           if (doPrint || currLine.contains("filter")) {
             if (prevPrint != 0 && prevPrint < currLineNum - 1) {
-              System.out.println("      ...");
+              ret.append("      ...").append(linesep);
             }
             prevPrint = currLineNum;
             boolean found = false;
             for (String lastAclLine : lastLineTexts) {
               if (currLine.contains(lastAclLine)) {
                 found = true;
-                System.out.format("*%-5d %s\n", currLineNum, currLine);
+                ret.append(String.format("*%-5d %s", currLineNum, currLine)).append(linesep);
                 lastLinesReached++;
                 break;
               }
             }
             if (!found) {
-              System.out.format("%-6d %s\n", currLineNum, currLine);
+              ret.append(String.format("%-6d %s", currLineNum, currLine)).append(linesep);
             }
             if (currLine.contains("{")) {
               currDepth++;
@@ -345,11 +441,26 @@ public class AclToConfigLines {
         currLine = reader.readLine();
       }
       if (hasImplicitDeny) {
-        System.out.println("*Implicit deny");
+        ret.append("*Implicit deny").append(linesep);
       }
       reader.close();
     } catch (IOException e) {
       e.printStackTrace();
     }
+    return ret.toString();
+  }
+
+  public void printRelevantLinesJuniper(
+      int firstLine,
+      int lastLine,
+      String router,
+      IpAccessList acl,
+      Collection<PacketPrefixRegion> regions,
+      @Nullable List<IpAccessListLine> lastAclLines,
+      boolean hasImplicitDeny,
+      boolean printMore) {
+
+    System.out.print(
+        getRelevantLinesJuniper(firstLine, lastLine, router, acl, regions, lastAclLines, hasImplicitDeny, printMore));
   }
 }
