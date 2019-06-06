@@ -212,21 +212,7 @@ public class AclToConfigLines {
     } else {
       format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
     }
-    if (format.getVendorString().equals("cisco")) {
-      /*    CISCO PARSE TEST
-            Settings settings = new Settings();
-            CiscoCombinedParser parser = new CiscoCombinedParser(getConfigText(router), settings, format);
-            CiscoControlPlaneExtractor extractor =
-                new CiscoControlPlaneExtractor(getConfigText(router), parser, format, new Warnings());
-            ParserRuleContext tree =
-                Batfish.parse(
-                    parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
-            extractor.processParseTree(tree);
-            CiscoConfiguration vendorConfiguration =
-                (CiscoConfiguration) extractor.getVendorConfiguration();
-      */
-      printRelevantLinesCisco(lines, acl, regions, lastLines, hasImplicitDeny, printMore);
-    } else if (format.getVendorString().equals("juniper")) {
+    if (format.getVendorString().equals("juniper")) {
       /*    JUNIPER PARSE TEST
             Settings settings = new Settings();
 
@@ -252,8 +238,23 @@ public class AclToConfigLines {
       */
       printRelevantLinesJuniper(
           lines.firstKey(), lines.lastKey(), router, acl, regions, lastLines, hasImplicitDeny, printMore);
+    } else if (format.getVendorString().equals("cisco")) {
+      /*    CISCO PARSE TEST
+            Settings settings = new Settings();
+            CiscoCombinedParser parser = new CiscoCombinedParser(getConfigText(router), settings, format);
+            CiscoControlPlaneExtractor extractor =
+                new CiscoControlPlaneExtractor(getConfigText(router), parser, format, new Warnings());
+            ParserRuleContext tree =
+                Batfish.parse(
+                    parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+            extractor.processParseTree(tree);
+            CiscoConfiguration vendorConfiguration =
+                (CiscoConfiguration) extractor.getVendorConfiguration();
+      */
+      printRelevantLinesCisco(lines, acl, regions, lastLines, hasImplicitDeny, printMore);
     } else {
-      System.err.println("Does not support the format: " + format);
+      System.err.println("May not support the format: " + format);
+      printRelevantLinesCisco(lines, acl, regions, lastLines, hasImplicitDeny, printMore);
     }
   }
 
