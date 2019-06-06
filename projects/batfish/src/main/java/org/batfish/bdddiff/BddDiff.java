@@ -108,8 +108,9 @@ public class BddDiff {
     SortedMap<String, Configuration> configs = batfish.loadConfigurations();
     Map<String, Map<String, IpAccessList>> aclNameToAcls = new TreeMap<>();
     Map<IpAccessList, String> aclToRouterName = new HashMap<>();
-    System.out.println("NodeRegex = " + nodesSpecifier);
-    System.out.println("printMore = " + printMore);
+    System.out.println("Matched Routers:");
+    routerNames.stream().forEach(x -> System.out.println("    " + x));
+    System.out.println();
 
     //if (routerNames.size() == 2) {
     //  BddDiff.totalPairs++;
@@ -136,14 +137,16 @@ public class BddDiff {
       BDDPacketWithLines packet = new BDDPacketWithLines();
       try {
         if (accessLists.size() == 2) {
-          differences.addAll(compareAcls(batfish, packet, accessLists, printMore, false));
-        } else {
-          /*
-          System.out.print(entry.getKey() + " is present in ");
+          System.out.print("Comparing " + aclName + " for: ");
           accessLists.keySet()
               .forEach(x -> System.out.print(x + " " ));
           System.out.println();
-          */
+          differences.addAll(compareAcls(batfish, packet, accessLists, printMore, false));
+        } else {
+          System.out.print(entry.getKey() + " is present in " + accessLists.size() + " router(s): ");
+          accessLists.keySet()
+              .forEach(x -> System.out.print(x + " " ));
+          System.out.println();
         }
 
       } catch (Exception e) {
@@ -191,7 +194,7 @@ public class BddDiff {
     BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
 
     if (notEquivalent.isZero()) {
-      // System.out.println(entry.getKey() + " is consistent");
+       System.out.println("No Difference");
     } else {
       // BddDiff.totalDiffs++;
       System.out.println("**************************");
@@ -240,7 +243,7 @@ public class BddDiff {
         diffToPrefix.printDifferenceInPrefix();
         AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
         report.print(batfish, printMore, differential);
-        differences.add(report.toLineDifference(batfish, printMore, differential));
+        //differences.add(report.toLineDifference(batfish, printMore, differential));
         /*boolean merged = false;
         for (AclDiffReport r : reportList) {
           System.out.println(AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()));
