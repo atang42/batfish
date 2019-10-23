@@ -192,7 +192,7 @@ public class PacketPrefixRegion {
       }
       if (space.getIpProtocols() == null || space.getIpProtocols().size() == 0) {
         protocols = new ArrayList<>();
-        protocols.add(IpProtocol.IP);
+        protocols.add(IpProtocol.ISO_IP);
       } else {
         protocols = new ArrayList<>(space.getIpProtocols());
       }
@@ -293,7 +293,7 @@ public class PacketPrefixRegion {
 
   public static PacketPrefixRegion getUniverseSpace() {
     return new PacketPrefixRegion(
-        Prefix.ZERO, Prefix.ZERO, DEFAULT_PORT_RANGE, DEFAULT_PORT_RANGE, IpProtocol.IP);
+        Prefix.ZERO, Prefix.ZERO, DEFAULT_PORT_RANGE, DEFAULT_PORT_RANGE, IpProtocol.ISO_IP);
   }
 
   public boolean contains(PacketPrefixRegion other) {
@@ -301,7 +301,7 @@ public class PacketPrefixRegion {
         && this._dstIp.containsPrefix(other._dstIp)
         && this._dstPort.contains(other._dstPort)
         && this._srcPort.contains(other._srcPort)
-        && (this._protocol.equals(other._protocol) || this._protocol.equals(IpProtocol.IP))) {
+        && (this._protocol.equals(other._protocol) || this._protocol.equals(IpProtocol.ISO_IP))) {
       return true;
     }
     return false;
@@ -327,9 +327,9 @@ public class PacketPrefixRegion {
     }
 
     IpProtocol proto;
-    if (this._protocol.equals(IpProtocol.IP) || this._protocol.equals(other._protocol)) {
+    if (this._protocol.equals(IpProtocol.ISO_IP) || this._protocol.equals(other._protocol)) {
       proto = other._protocol;
-    } else if (other._protocol.equals(IpProtocol.IP)) {
+    } else if (other._protocol.equals(IpProtocol.ISO_IP)) {
       proto = this._protocol;
     } else {
       return Optional.empty();
@@ -389,7 +389,7 @@ public class PacketPrefixRegion {
   }
 
   private String protoToStr() {
-    if (_protocol.equals(IpProtocol.IP)) {
+    if (_protocol.equals(IpProtocol.ISO_IP)) {
       return "";
     }
     return ", " + _protocol;
