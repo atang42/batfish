@@ -8,9 +8,15 @@ import org.batfish.datamodel.routing_policy.statement.Statements;
 
 public class RouteMapSetCommunityNoneLine extends RouteMapSetLine {
 
+  public RouteMapSetCommunityNoneLine(String text) {
+    setText(text);
+  }
+
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(Statements.DeleteAllCommunities.toStaticStatement());
+    Statement stmt = Statements.DeleteAllCommunities.toStaticStatement();
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 }

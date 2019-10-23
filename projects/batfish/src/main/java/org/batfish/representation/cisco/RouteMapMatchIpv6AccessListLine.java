@@ -19,7 +19,8 @@ public class RouteMapMatchIpv6AccessListLine extends RouteMapMatchLine {
 
   private boolean _routing;
 
-  public RouteMapMatchIpv6AccessListLine(Set<String> names) {
+  public RouteMapMatchIpv6AccessListLine(Set<String> names, String text) {
+    super(text);
     _listNames = names;
   }
 

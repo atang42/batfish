@@ -12,7 +12,8 @@ public class RouteMapSetNextHopLine extends RouteMapSetLine {
 
   private List<Ip> _nextHops;
 
-  public RouteMapSetNextHopLine(List<Ip> nextHops) {
+  public RouteMapSetNextHopLine(List<Ip> nextHops, String text) {
+    setText(text);
     _nextHops = nextHops;
   }
 
@@ -20,7 +21,9 @@ public class RouteMapSetNextHopLine extends RouteMapSetLine {
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
     // TODO: something with destination-vrf
-    statements.add(new SetNextHop(new IpNextHop(_nextHops)));
+    Statement stmt = new SetNextHop(new IpNextHop(_nextHops));
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 
   public List<Ip> getNextHops() {

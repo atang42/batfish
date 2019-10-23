@@ -12,7 +12,8 @@ public class RouteMapSetDeleteCommunityLine extends RouteMapSetLine {
 
   private final String _listName;
 
-  public RouteMapSetDeleteCommunityLine(String listName) {
+  public RouteMapSetDeleteCommunityLine(String listName, String text) {
+    setText(text);
     _listName = listName;
   }
 
@@ -21,7 +22,9 @@ public class RouteMapSetDeleteCommunityLine extends RouteMapSetLine {
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
     CommunityList list = c.getCommunityLists().get(_listName);
     if (list != null) {
-      statements.add(new DeleteCommunity(new NamedCommunitySet(_listName)));
+      Statement stmt = new DeleteCommunity(new NamedCommunitySet(_listName));
+      stmt.setText(getText());
+      statements.add(stmt);
     }
   }
 

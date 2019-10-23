@@ -15,7 +15,8 @@ public final class RouteMapSetAdditiveCommunityListLine extends RouteMapSetLine 
 
   private final Set<String> _communityLists;
 
-  public RouteMapSetAdditiveCommunityListLine(Set<String> communityLists) {
+  public RouteMapSetAdditiveCommunityListLine(Set<String> communityLists, String text) {
+    setText(text);
     _communityLists = communityLists;
   }
 

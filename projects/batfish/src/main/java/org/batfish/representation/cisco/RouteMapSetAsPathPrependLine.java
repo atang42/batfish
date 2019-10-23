@@ -12,14 +12,17 @@ public class RouteMapSetAsPathPrependLine extends RouteMapSetLine {
 
   private List<AsExpr> _asList;
 
-  public RouteMapSetAsPathPrependLine(List<AsExpr> asList) {
+  public RouteMapSetAsPathPrependLine(List<AsExpr> asList, String text) {
+    setText(text);
     _asList = asList;
   }
 
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(new PrependAsPath(new LiteralAsList(_asList)));
+    Statement stmt = new PrependAsPath(new LiteralAsList(_asList));
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 
   public List<AsExpr> getAsList() {

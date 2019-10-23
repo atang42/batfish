@@ -13,13 +13,16 @@ import org.batfish.datamodel.routing_policy.statement.Statement;
 public final class RouteMapSetMetricEigrpLine extends RouteMapSetLine {
   private final EigrpMetricValues _metric;
 
-  public RouteMapSetMetricEigrpLine(EigrpMetricValues metric) {
+  public RouteMapSetMetricEigrpLine(EigrpMetricValues metric, String text) {
+    setText(text);
     _metric = metric;
   }
 
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(new SetEigrpMetric(new LiteralEigrpMetric(_metric)));
+    Statement stmt = new SetEigrpMetric(new LiteralEigrpMetric(_metric));
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 }

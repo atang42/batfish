@@ -13,7 +13,8 @@ public class RouteMapMatchAsPathAccessListLine extends RouteMapMatchLine {
 
   private final Set<String> _listNames;
 
-  public RouteMapMatchAsPathAccessListLine(Set<String> names) {
+  public RouteMapMatchAsPathAccessListLine(Set<String> names, String text) {
+    super(text);
     _listNames = names;
   }
 

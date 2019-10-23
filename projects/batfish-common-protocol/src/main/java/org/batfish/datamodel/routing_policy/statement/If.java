@@ -33,15 +33,15 @@ public class If extends Statement {
 
   @JsonCreator
   public If() {
-    this(null, null, new ArrayList<>(), new ArrayList<>());
+    this(null, null, new ArrayList<>(), new ArrayList<>(), null);
   }
 
   public If(BooleanExpr guard, List<Statement> trueStatements) {
-    this(null, guard, trueStatements, ImmutableList.of());
+    this(null, guard, trueStatements, ImmutableList.of(), null);
   }
 
   public If(BooleanExpr guard, List<Statement> trueStatements, List<Statement> falseStatements) {
-    this(null, guard, trueStatements, falseStatements);
+    this(null, guard, trueStatements, falseStatements, null);
   }
 
   public If(
@@ -49,10 +49,20 @@ public class If extends Statement {
       @Nullable BooleanExpr guard,
       List<Statement> trueStatements,
       List<Statement> falseStatements) {
+    this(comment, guard, trueStatements, falseStatements, null);
+  }
+
+  public If(
+      @Nullable String comment,
+      @Nullable BooleanExpr guard,
+      List<Statement> trueStatements,
+      List<Statement> falseStatements,
+      @Nullable String text) {
     setComment(comment);
     _guard = guard;
     _trueStatements = trueStatements;
     _falseStatements = falseStatements;
+    setText(text);
   }
 
   @Override
@@ -182,7 +192,7 @@ public class If extends Statement {
     } else if (simpleTrueStatements.isEmpty() && simpleFalseStatements.isEmpty()) {
       _simplified = Collections.emptyList();
     } else {
-      If simple = new If(getComment(), simpleGuard, simpleTrueStatements, simpleFalseStatements);
+      If simple = new If(getComment(), simpleGuard, simpleTrueStatements, simpleFalseStatements, getText());
       _simplified = ImmutableList.of(simple);
       simple._simplified = _simplified;
     }

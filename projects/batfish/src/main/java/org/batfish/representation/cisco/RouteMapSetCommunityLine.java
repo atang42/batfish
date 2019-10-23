@@ -13,19 +13,22 @@ public class RouteMapSetCommunityLine extends RouteMapSetLine {
 
   private List<Long> _communities;
 
-  public RouteMapSetCommunityLine(List<Long> communities) {
+  public RouteMapSetCommunityLine(List<Long> communities, String text) {
+    setText(text);
     _communities = communities;
   }
 
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(
+    Statement stmt =
         new SetCommunity(
             new LiteralCommunitySet(
                 _communities.stream()
                     .map(StandardCommunity::of)
-                    .collect(ImmutableSet.toImmutableSet()))));
+                    .collect(ImmutableSet.toImmutableSet())));
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 
   public List<Long> getCommunities() {

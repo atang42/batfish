@@ -14,7 +14,8 @@ public class RouteMapMatchSourceProtocolLine extends RouteMapMatchLine {
 
   private Set<RoutingProtocol> _protocols;
 
-  public RouteMapMatchSourceProtocolLine(Collection<RoutingProtocol> protocols) {
+  public RouteMapMatchSourceProtocolLine(Collection<RoutingProtocol> protocols, String text) {
+    super(text);
     _protocols = ImmutableSet.copyOf(protocols);
   }
 

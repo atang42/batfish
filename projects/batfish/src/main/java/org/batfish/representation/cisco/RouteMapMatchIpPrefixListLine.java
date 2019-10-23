@@ -14,7 +14,8 @@ public class RouteMapMatchIpPrefixListLine extends RouteMapMatchLine {
 
   private Set<String> _listNames;
 
-  public RouteMapMatchIpPrefixListLine(Set<String> names) {
+  public RouteMapMatchIpPrefixListLine(Set<String> names, String text) {
+    super(text);
     _listNames = names;
   }
 

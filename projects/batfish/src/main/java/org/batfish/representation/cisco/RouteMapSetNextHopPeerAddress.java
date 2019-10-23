@@ -9,9 +9,15 @@ import org.batfish.datamodel.routing_policy.statement.Statement;
 
 public class RouteMapSetNextHopPeerAddress extends RouteMapSetLine {
 
+  public RouteMapSetNextHopPeerAddress(String text) {
+    setText(text);
+  }
+
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(new SetNextHop(BgpPeerAddressNextHop.getInstance()));
+    Statement stmt = new SetNextHop(PeerAddressNextHop.getInstance());
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 }

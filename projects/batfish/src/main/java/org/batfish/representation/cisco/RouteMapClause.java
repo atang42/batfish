@@ -21,12 +21,15 @@ public class RouteMapClause implements Serializable {
 
   private List<RouteMapSetLine> _setList;
 
-  public RouteMapClause(LineAction action, String name, int num) {
+  private String _text;
+
+  public RouteMapClause(LineAction action, String name, int num, String text) {
     _action = action;
     _mapName = name;
     _seqNum = num;
     _matchList = new ArrayList<>();
     _setList = new ArrayList<>();
+    _text = text;
   }
 
   public void addMatchLine(RouteMapMatchLine line) {
@@ -71,5 +74,13 @@ public class RouteMapClause implements Serializable {
 
   public void setIgnore(boolean b) {
     _ignore = b;
+  }
+
+  public String getText() {
+    return _text;
+  }
+
+  public void setText(String text) {
+    this._text = text;
   }
 }

@@ -12,14 +12,17 @@ public class RouteMapSetAdditiveCommunityLine extends RouteMapSetLine {
 
   private List<StandardCommunity> _communities;
 
-  public RouteMapSetAdditiveCommunityLine(List<StandardCommunity> communities) {
+  public RouteMapSetAdditiveCommunityLine(List<StandardCommunity> communities, String text) {
+    setText(text);
     _communities = communities;
   }
 
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(new AddCommunity(new LiteralCommunitySet(_communities)));
+    Statement stmt = new AddCommunity(new LiteralCommunitySet(_communities));
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 
   public List<StandardCommunity> getCommunities() {

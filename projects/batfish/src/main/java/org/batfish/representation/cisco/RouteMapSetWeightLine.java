@@ -12,13 +12,16 @@ public class RouteMapSetWeightLine extends RouteMapSetLine {
 
   private int _weight;
 
-  public RouteMapSetWeightLine(int weight) {
+  public RouteMapSetWeightLine(int weight, String text) {
+    setText(text);
     _weight = weight;
   }
 
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(new SetWeight(new LiteralInt(_weight)));
+    Statement stmt = new SetWeight(new LiteralInt(_weight));
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 }

@@ -11,14 +11,17 @@ public class RouteMapSetOriginTypeLine extends RouteMapSetLine {
 
   private OriginExpr _originExpr;
 
-  public RouteMapSetOriginTypeLine(OriginExpr originExpr) {
+  public RouteMapSetOriginTypeLine(OriginExpr originExpr, String text) {
+    setText(text);
     _originExpr = originExpr;
   }
 
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(new SetOrigin(_originExpr));
+    Statement stmt = new SetOrigin(_originExpr);
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 
   public OriginExpr getOriginExpr() {

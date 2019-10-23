@@ -8,7 +8,8 @@ public class RouteMapMatchNeighborLine extends RouteMapMatchLine {
 
   private String _neighborIp;
 
-  public RouteMapMatchNeighborLine(String neighborIP) {
+  public RouteMapMatchNeighborLine(String neighborIP, String text) {
+    super(text);
     _neighborIp = neighborIP;
   }
 

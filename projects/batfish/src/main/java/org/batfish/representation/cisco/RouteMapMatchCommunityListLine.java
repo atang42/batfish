@@ -18,7 +18,8 @@ public class RouteMapMatchCommunityListLine extends RouteMapMatchLine {
 
   private final Set<String> _listNames;
 
-  public RouteMapMatchCommunityListLine(Set<String> names) {
+  public RouteMapMatchCommunityListLine(Set<String> names, String text) {
+    super(text);
     _listNames = names;
   }
 

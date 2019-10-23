@@ -14,7 +14,8 @@ public class RouteMapMatchTagLine extends RouteMapMatchLine {
 
   private Set<Integer> _tags;
 
-  public RouteMapMatchTagLine(Set<Integer> tags) {
+  public RouteMapMatchTagLine(Set<Integer> tags, String text) {
+    super(text);
     _tags = tags;
   }
 

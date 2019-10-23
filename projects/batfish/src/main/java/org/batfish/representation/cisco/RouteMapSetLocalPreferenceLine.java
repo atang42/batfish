@@ -11,14 +11,17 @@ public class RouteMapSetLocalPreferenceLine extends RouteMapSetLine {
 
   private LongExpr _localPreference;
 
-  public RouteMapSetLocalPreferenceLine(LongExpr localPreference) {
+  public RouteMapSetLocalPreferenceLine(LongExpr localPreference, String text) {
+    setText(text);
     _localPreference = localPreference;
   }
 
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(new SetLocalPreference(_localPreference));
+    Statement stmt = new SetLocalPreference(_localPreference);
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 
   public LongExpr getLocalPreference() {

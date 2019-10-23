@@ -3046,7 +3046,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     LineAction action = toLineAction(ctx.rmt);
     RouteMapClause clause = _currentRouteMap.getClauses().get(num);
     if (clause == null) {
-      clause = new RouteMapClause(action, name, num);
+      clause = new RouteMapClause(action, name, num, getFullText(ctx).trim());
       routeMap.getClauses().put(num, clause);
     } else {
       warn(
@@ -6444,7 +6444,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
           AS_PATH_ACCESS_LIST, name.getText(),
           ROUTE_MAP_MATCH_AS_PATH_ACCESS_LIST, name.getStart().getLine());
     }
-    RouteMapMatchAsPathAccessListLine line = new RouteMapMatchAsPathAccessListLine(names);
+    RouteMapMatchAsPathAccessListLine line = new RouteMapMatchAsPathAccessListLine(names, "match " + getFullText(ctx).trim());
     _currentRouteMapClause.addMatchLine(line);
   }
 
@@ -6459,7 +6459,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
           ROUTE_MAP_MATCH_COMMUNITY_LIST,
           name.getStart().getLine());
     }
-    RouteMapMatchCommunityListLine line = new RouteMapMatchCommunityListLine(names);
+    RouteMapMatchCommunityListLine line = new RouteMapMatchCommunityListLine(names, "match " + getFullText(ctx).trim());
     _currentRouteMapClause.addMatchLine(line);
   }
 
@@ -6472,7 +6472,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
           IPV4_ACCESS_LIST, v.getText(),
           ROUTE_MAP_MATCH_IPV4_ACCESS_LIST, v.getStart().getLine());
     }
-    RouteMapMatchIpAccessListLine line = new RouteMapMatchIpAccessListLine(names);
+    RouteMapMatchIpAccessListLine line = new RouteMapMatchIpAccessListLine(names, "match " + getFullText(ctx).trim());
     _currentRouteMapClause.addMatchLine(line);
   }
 
@@ -6484,7 +6484,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       _configuration.referenceStructure(
           PREFIX_LIST, t.getText(), ROUTE_MAP_MATCH_IPV4_PREFIX_LIST, t.getStart().getLine());
     }
-    RouteMapMatchIpPrefixListLine line = new RouteMapMatchIpPrefixListLine(names);
+    RouteMapMatchIpPrefixListLine line = new RouteMapMatchIpPrefixListLine(names, "match " + getFullText(ctx).trim());
     _currentRouteMapClause.addMatchLine(line);
   }
 
@@ -6496,7 +6496,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       _configuration.referenceStructure(
           IPV6_ACCESS_LIST, v.getText(), ROUTE_MAP_MATCH_IPV6_ACCESS_LIST, v.getStart().getLine());
     }
-    RouteMapMatchIpv6AccessListLine line = new RouteMapMatchIpv6AccessListLine(names);
+    RouteMapMatchIpv6AccessListLine line = new RouteMapMatchIpv6AccessListLine(names, "match " + getFullText(ctx).trim());
     _currentRouteMapClause.addMatchLine(line);
   }
 
@@ -6508,7 +6508,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       _configuration.referenceStructure(
           PREFIX6_LIST, t.getText(), ROUTE_MAP_MATCH_IPV6_PREFIX_LIST, t.getStart().getLine());
     }
-    RouteMapMatchIpv6PrefixListLine line = new RouteMapMatchIpv6PrefixListLine(names);
+    RouteMapMatchIpv6PrefixListLine line = new RouteMapMatchIpv6PrefixListLine(names, "match " + getFullText(ctx).trim());
     _currentRouteMapClause.addMatchLine(line);
   }
 
@@ -6541,7 +6541,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       warn(ctx, "Unexpected: empty routing protocol list to match against.");
       return;
     }
-    _currentRouteMapClause.addMatchLine(new RouteMapMatchSourceProtocolLine(rps));
+    _currentRouteMapClause.addMatchLine(new RouteMapMatchSourceProtocolLine(rps, "match " + getFullText(ctx).trim()));
   }
 
   @Override
@@ -6550,7 +6550,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     for (Token t : ctx.tag_list) {
       tags.add(toInteger(t));
     }
-    RouteMapMatchTagLine line = new RouteMapMatchTagLine(tags);
+    RouteMapMatchTagLine line = new RouteMapMatchTagLine(tags, "match " + getFullText(ctx).trim());
     _currentRouteMapClause.addMatchLine(line);
   }
 
@@ -8498,14 +8498,14 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       AsExpr as = toAsExpr(asx);
       asList.add(as);
     }
-    RouteMapSetAsPathPrependLine line = new RouteMapSetAsPathPrependLine(asList);
+    RouteMapSetAsPathPrependLine line = new RouteMapSetAsPathPrependLine(asList, getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
   @Override
   public void exitSet_comm_list_delete_rm_stanza(Set_comm_list_delete_rm_stanzaContext ctx) {
     String name = ctx.name.getText();
-    RouteMapSetDeleteCommunityLine line = new RouteMapSetDeleteCommunityLine(name);
+    RouteMapSetDeleteCommunityLine line = new RouteMapSetDeleteCommunityLine(name, getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
     _configuration.referenceStructure(
         COMMUNITY_LIST, name, ROUTE_MAP_DELETE_COMMUNITY, ctx.getStart().getLine());
@@ -8522,7 +8522,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       }
       builder.add(StandardCommunity.of(community));
     }
-    RouteMapSetAdditiveCommunityLine line = new RouteMapSetAdditiveCommunityLine(builder.build());
+    RouteMapSetAdditiveCommunityLine line = new RouteMapSetAdditiveCommunityLine(builder.build(), getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
@@ -8540,7 +8540,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
           communityListCtx.getStart().getLine());
     }
     RouteMapSetAdditiveCommunityListLine line =
-        new RouteMapSetAdditiveCommunityListLine(communityLists);
+        new RouteMapSetAdditiveCommunityListLine(communityLists, getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
@@ -8556,13 +8556,13 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
           ROUTE_MAP_SET_COMMUNITY,
           communityListCtx.getStart().getLine());
     }
-    RouteMapSetCommunityListLine line = new RouteMapSetCommunityListLine(communityLists);
+    RouteMapSetCommunityListLine line = new RouteMapSetCommunityListLine(communityLists, getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
   @Override
   public void exitSet_community_none_rm_stanza(Set_community_none_rm_stanzaContext ctx) {
-    RouteMapSetCommunityNoneLine line = new RouteMapSetCommunityNoneLine();
+    RouteMapSetCommunityNoneLine line = new RouteMapSetCommunityNoneLine(getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
@@ -8577,27 +8577,27 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       }
       commList.add(community);
     }
-    RouteMapSetCommunityLine line = new RouteMapSetCommunityLine(commList);
+    RouteMapSetCommunityLine line = new RouteMapSetCommunityLine(commList, getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
   @Override
   public void exitSet_local_preference_rm_stanza(Set_local_preference_rm_stanzaContext ctx) {
     LongExpr localPreference = toLocalPreferenceLongExpr(ctx.pref);
-    RouteMapSetLocalPreferenceLine line = new RouteMapSetLocalPreferenceLine(localPreference);
+    RouteMapSetLocalPreferenceLine line = new RouteMapSetLocalPreferenceLine(localPreference, getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
   @Override
   public void enterSet_metric_eigrp_rm_stanza(Set_metric_eigrp_rm_stanzaContext ctx) {
     EigrpMetricValues metric = toEigrpMetricValues(ctx.metric);
-    _currentRouteMapClause.addSetLine(new RouteMapSetMetricEigrpLine(metric));
+    _currentRouteMapClause.addSetLine(new RouteMapSetMetricEigrpLine(metric, getFullText(ctx).trim()));
   }
 
   @Override
   public void exitSet_metric_rm_stanza(Set_metric_rm_stanzaContext ctx) {
     LongExpr metric = toMetricLongExpr(ctx.metric);
-    RouteMapSetMetricLine line = new RouteMapSetMetricLine(metric);
+    RouteMapSetMetricLine line = new RouteMapSetMetricLine(metric, getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
@@ -8608,7 +8608,7 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
 
   @Override
   public void exitSet_next_hop_peer_address_stanza(Set_next_hop_peer_address_stanzaContext ctx) {
-    RouteMapSetNextHopPeerAddress line = new RouteMapSetNextHopPeerAddress();
+    RouteMapSetNextHopPeerAddress line = new RouteMapSetNextHopPeerAddress(getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
@@ -8619,20 +8619,20 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       Ip nextHop = toIp(t);
       nextHops.add(nextHop);
     }
-    RouteMapSetNextHopLine line = new RouteMapSetNextHopLine(nextHops);
+    RouteMapSetNextHopLine line = new RouteMapSetNextHopLine(nextHops, getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
   @Override
   public void exitSet_origin_rm_stanza(Set_origin_rm_stanzaContext ctx) {
     OriginExpr originExpr = toOriginExpr(ctx.origin_expr_literal());
-    RouteMapSetLine line = new RouteMapSetOriginTypeLine(originExpr);
+    RouteMapSetLine line = new RouteMapSetOriginTypeLine(originExpr, getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 
   @Override
   public void exitSet_weight_rm_stanza(Set_weight_rm_stanzaContext ctx) {
-    RouteMapSetWeightLine line = new RouteMapSetWeightLine(toInteger(ctx.DEC()));
+    RouteMapSetWeightLine line = new RouteMapSetWeightLine(toInteger(ctx.DEC()), getFullText(ctx).trim());
     _currentRouteMapClause.addSetLine(line);
   }
 

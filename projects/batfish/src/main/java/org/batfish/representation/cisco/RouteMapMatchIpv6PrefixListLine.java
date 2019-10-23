@@ -14,7 +14,8 @@ public class RouteMapMatchIpv6PrefixListLine extends RouteMapMatchLine {
 
   private final Set<String> _listNames;
 
-  public RouteMapMatchIpv6PrefixListLine(Set<String> names) {
+  public RouteMapMatchIpv6PrefixListLine(Set<String> names, String text) {
+    super(text);
     _listNames = names;
   }
 

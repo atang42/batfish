@@ -11,14 +11,17 @@ public class RouteMapSetMetricLine extends RouteMapSetLine {
 
   private LongExpr _metric;
 
-  public RouteMapSetMetricLine(LongExpr metric) {
+  public RouteMapSetMetricLine(LongExpr metric, String text) {
+    setText(text);
     _metric = metric;
   }
 
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    statements.add(new SetMetric(_metric));
+    Statement stmt = new SetMetric(_metric);
+    stmt.setText(getText());
+    statements.add(stmt);
   }
 
   public LongExpr getMetric() {

@@ -18,7 +18,8 @@ public final class RouteMapMatchIpAccessListLine extends RouteMapMatchLine {
 
   @Nonnull private final Set<String> _listNames;
 
-  public RouteMapMatchIpAccessListLine(Set<String> listNames) {
+  public RouteMapMatchIpAccessListLine(Set<String> listNames, String text) {
+    super(text);
     _listNames = listNames;
   }
 

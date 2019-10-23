@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.Result;
@@ -39,8 +41,10 @@ import org.batfish.datamodel.routing_policy.RoutingPolicy;
 })
 public abstract class Statement implements Serializable {
   private static final String PROP_COMMENT = "comment";
+  private static final String PROP_TEXT = "text";
 
   private String _comment;
+  private String _text;
 
   protected transient List<Statement> _simplified;
 
@@ -71,8 +75,18 @@ public abstract class Statement implements Serializable {
   public abstract int hashCode();
 
   @JsonProperty(PROP_COMMENT)
-  public final void setComment(String comment) {
+  public final void setComment(@Nullable String comment) {
     _comment = comment;
+  }
+
+  @JsonProperty(PROP_TEXT)
+  public final String getText() {
+    return _text;
+  }
+
+  @JsonProperty(PROP_TEXT)
+  public final void setText(@Nullable String text) {
+    _text = text;
   }
 
   public List<Statement> simplify() {
