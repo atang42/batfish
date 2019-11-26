@@ -12,7 +12,8 @@ import org.batfish.datamodel.routing_policy.statement.Statement;
 
 public final class PsThenCommunityDelete extends PsThen {
 
-  public PsThenCommunityDelete(String name) {
+  public PsThenCommunityDelete(String name, String text) {
+    super(text);
     _name = name;
   }
 
@@ -26,10 +27,12 @@ public final class PsThenCommunityDelete extends PsThen {
       // undefined reference
       return;
     }
-    statements.add(
+    Statement statement =
         new SetCommunities(
             new CommunitySetDifference(
-                InputCommunities.instance(), new CommunityMatchExprReference(_name))));
+                InputCommunities.instance(), new CommunityMatchExprReference(_name)));
+    statement.setText(getText());
+    statements.add(statement);
   }
 
   public @Nonnull String getName() {

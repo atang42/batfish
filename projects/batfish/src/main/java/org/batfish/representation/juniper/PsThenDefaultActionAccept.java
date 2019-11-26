@@ -8,12 +8,18 @@ import org.batfish.datamodel.routing_policy.statement.Statements;
 
 public class PsThenDefaultActionAccept extends PsThen {
 
+  public PsThenDefaultActionAccept(String text) {
+    super(text);
+  }
+
   @Override
   public void applyTo(
       List<Statement> statements,
       JuniperConfiguration juniperVendorConfiguration,
       Configuration c,
       Warnings warnings) {
-    statements.add(Statements.SetDefaultActionAccept.toStaticStatement());
+    Statement statement = Statements.SetDefaultActionAccept.toStaticStatement();
+    statement.setText(getText());
+    statements.add(statement);
   }
 }

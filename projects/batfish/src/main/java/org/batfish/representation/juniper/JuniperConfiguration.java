@@ -2671,6 +2671,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
       if (term.hasAtLeastOneFrom()) {
         If ifStatement = new If();
         ifStatement.setComment(term.getName());
+        ifStatement.setText(term.getText());
         PsFroms froms = term.getFroms();
 
         for (PsFromRouteFilter fromRouteFilter : froms.getFromRouteFilters()) {

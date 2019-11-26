@@ -12,7 +12,8 @@ public class PsFromMetric extends PsFrom {
 
   private final int _metric;
 
-  public PsFromMetric(int metric) {
+  public PsFromMetric(int metric, String text) {
+    super(text);
     _metric = metric;
   }
 

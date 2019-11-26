@@ -12,7 +12,8 @@ public class PsFromTag extends PsFrom {
 
   private final int _tag;
 
-  public PsFromTag(int tag) {
+  public PsFromTag(int tag, String text) {
+    super(text);
     _tag = tag;
   }
 

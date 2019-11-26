@@ -12,7 +12,8 @@ public final class PsThenExternal extends PsThen {
 
   private final OspfMetricType _type;
 
-  public PsThenExternal(OspfMetricType type) {
+  public PsThenExternal(OspfMetricType type, String text) {
+    super(text);
     _type = type;
   }
 
@@ -22,7 +23,9 @@ public final class PsThenExternal extends PsThen {
       JuniperConfiguration juniperVendorConfiguration,
       Configuration c,
       Warnings warnings) {
-    statements.add(new SetOspfMetricType(_type));
+    Statement statement = new SetOspfMetricType(_type);
+    statement.setText(getText());
+    statements.add(statement);
   }
 
   public OspfMetricType getType() {

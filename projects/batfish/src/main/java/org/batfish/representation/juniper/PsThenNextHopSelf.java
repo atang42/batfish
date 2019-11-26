@@ -12,7 +12,9 @@ public final class PsThenNextHopSelf extends PsThen {
 
   public static final PsThenNextHopSelf INSTANCE = new PsThenNextHopSelf();
 
-  private PsThenNextHopSelf() {}
+  private PsThenNextHopSelf() {
+    super("then next-hop self");
+  }
 
   @Override
   public void applyTo(
@@ -20,6 +22,7 @@ public final class PsThenNextHopSelf extends PsThen {
       JuniperConfiguration juniperVendorConfiguration,
       Configuration c,
       Warnings w) {
-    statements.add(new SetNextHop(SelfNextHop.getInstance()));
+    Statement statement = new SetNextHop(SelfNextHop.getInstance());
+    statements.add(statement);
   }
 }

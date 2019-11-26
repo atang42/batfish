@@ -2687,14 +2687,14 @@ public final class CiscoConfiguration extends VendorConfiguration {
       int clauseNumber = e.getKey();
       RouteMapClause rmClause = e.getValue();
       String clausePolicyName = getRouteMapClausePolicyName(map, clauseNumber);
-      String clauseText = rmClause.getText().split("\n")[0] + "\n";
+      String clauseText = rmClause.getText().split("\n")[0];
       Conjunction conj = new Conjunction();
       // match ipv4s must be disjoined with match ipv6
       Disjunction matchIpOrPrefix = new Disjunction();
       StringBuilder matchStringBuilder = new StringBuilder();
       for (RouteMapMatchLine rmMatch : rmClause.getMatchList()) {
         BooleanExpr matchExpr = rmMatch.toBooleanExpr(c, this, _w);
-        matchStringBuilder.append(rmMatch.getText() + "\n");
+        matchStringBuilder.append("\n" + rmMatch.getText());
         if (rmMatch instanceof RouteMapMatchIpAccessListLine
             || rmMatch instanceof RouteMapMatchIpPrefixListLine
             || rmMatch instanceof RouteMapMatchIpv6AccessListLine

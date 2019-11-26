@@ -19,7 +19,8 @@ public final class PsFromRouteFilter extends PsFrom {
 
   private String _routeFilterName;
 
-  public PsFromRouteFilter(String routeFilterName) {
+  public PsFromRouteFilter(String routeFilterName, String text) {
+    super(text);
     _routeFilterName = routeFilterName;
   }
 

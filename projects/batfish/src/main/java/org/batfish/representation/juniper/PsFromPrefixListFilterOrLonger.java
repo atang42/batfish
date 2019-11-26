@@ -18,7 +18,8 @@ public final class PsFromPrefixListFilterOrLonger extends PsFrom {
 
   private String _prefixList;
 
-  public PsFromPrefixListFilterOrLonger(String prefixList) {
+  public PsFromPrefixListFilterOrLonger(String prefixList, String text) {
+    super(text);
     _prefixList = prefixList;
   }
 

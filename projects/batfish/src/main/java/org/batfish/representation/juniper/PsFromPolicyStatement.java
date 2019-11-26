@@ -10,7 +10,8 @@ public final class PsFromPolicyStatement extends PsFrom {
 
   private final String _policyStatement;
 
-  public PsFromPolicyStatement(String policyStatement) {
+  public PsFromPolicyStatement(String policyStatement, String text) {
+    super(text);
     _policyStatement = policyStatement;
   }
 

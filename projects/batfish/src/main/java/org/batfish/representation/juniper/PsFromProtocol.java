@@ -11,7 +11,8 @@ public final class PsFromProtocol extends PsFrom {
 
   private final RoutingProtocol _protocol;
 
-  public PsFromProtocol(RoutingProtocol protocol) {
+  public PsFromProtocol(RoutingProtocol protocol, String text) {
+    super(text);
     _protocol = protocol;
   }
 

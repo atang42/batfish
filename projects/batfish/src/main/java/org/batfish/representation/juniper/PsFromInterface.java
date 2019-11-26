@@ -22,7 +22,8 @@ public final class PsFromInterface extends PsFrom {
 
   private final String _name;
 
-  public PsFromInterface(String name) {
+  public PsFromInterface(String name, String text) {
+    super(text);
     _name = name;
   }
 

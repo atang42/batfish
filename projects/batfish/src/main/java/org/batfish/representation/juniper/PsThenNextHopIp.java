@@ -13,7 +13,8 @@ public final class PsThenNextHopIp extends PsThen {
 
   private final Ip _nextHopIp;
 
-  public PsThenNextHopIp(Ip nextHopIp) {
+  public PsThenNextHopIp(Ip nextHopIp, String text) {
+    super(text);
     _nextHopIp = nextHopIp;
   }
 
@@ -24,7 +25,9 @@ public final class PsThenNextHopIp extends PsThen {
       Configuration c,
       Warnings warnings) {
     // todo: something with destination-vrf
-    statements.add(new SetNextHop(new IpNextHop(Collections.singletonList(_nextHopIp))));
+    Statement statement = new SetNextHop(new IpNextHop(Collections.singletonList(_nextHopIp)));
+    statement.setText(getText());
+    statements.add(statement);
   }
 
   public Ip getNextHopIp() {

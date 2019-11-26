@@ -13,7 +13,8 @@ public final class PsThenLocalPreference extends PsThen {
 
   private final long _localPreference;
 
-  public PsThenLocalPreference(long localPreference) {
+  public PsThenLocalPreference(long localPreference, String text) {
+    super(text);
     _localPreference = localPreference;
   }
 
@@ -23,7 +24,8 @@ public final class PsThenLocalPreference extends PsThen {
       JuniperConfiguration juniperVendorConfiguration,
       Configuration c,
       Warnings warnings) {
-    statements.add(new SetLocalPreference(new LiteralLong(_localPreference)));
+    Statement statement = new SetLocalPreference(new LiteralLong(_localPreference));
+    statements.add(statement);
   }
 
   public long getLocalPreference() {

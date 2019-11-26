@@ -11,7 +11,8 @@ public class PsFromInstance extends PsFrom {
 
   private String _routingInstanceName;
 
-  public PsFromInstance(@Nonnull String routingInstanceName) {
+  public PsFromInstance(@Nonnull String routingInstanceName, String text) {
+    super(text);
     _routingInstanceName = routingInstanceName;
   }
 

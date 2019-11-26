@@ -13,7 +13,8 @@ public class PsFromFamily extends PsFrom {
 
   private final AddressFamily _family;
 
-  public PsFromFamily(@Nonnull AddressFamily family) {
+  public PsFromFamily(@Nonnull AddressFamily family, String text) {
+    super(text);
     _family = family;
   }
 

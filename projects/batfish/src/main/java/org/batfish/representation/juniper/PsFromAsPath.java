@@ -16,7 +16,8 @@ public final class PsFromAsPath extends PsFrom {
 
   private String _asPathName;
 
-  public PsFromAsPath(String asPathName) {
+  public PsFromAsPath(String asPathName, String text) {
+    super(text);
     _asPathName = asPathName;
   }
 

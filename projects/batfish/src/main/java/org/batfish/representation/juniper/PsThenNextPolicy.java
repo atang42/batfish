@@ -10,7 +10,9 @@ public final class PsThenNextPolicy extends PsThen {
 
   public static final PsThenNextPolicy INSTANCE = new PsThenNextPolicy();
 
-  private PsThenNextPolicy() {}
+  private PsThenNextPolicy() {
+    super("then next policy;");
+  }
 
   @Override
   public void applyTo(
@@ -18,6 +20,7 @@ public final class PsThenNextPolicy extends PsThen {
       JuniperConfiguration juniperVendorConfiguration,
       Configuration c,
       Warnings w) {
-    statements.add(Statements.FallThrough.toStaticStatement());
+    Statement statement = Statements.FallThrough.toStaticStatement();
+    statements.add(statement);
   }
 }

@@ -12,7 +12,8 @@ public final class PsFromPrefixList extends PsFrom {
 
   private final String _name;
 
-  public PsFromPrefixList(String name) {
+  public PsFromPrefixList(String name, String text) {
+    super(text);
     _name = name;
   }
 

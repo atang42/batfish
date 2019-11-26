@@ -15,7 +15,8 @@ public final class PsThenPreference extends PsThen {
 
   private final int _preference;
 
-  public PsThenPreference(int preference) {
+  public PsThenPreference(int preference, String text) {
+    super(text);
     _preference = preference;
   }
 
@@ -25,7 +26,9 @@ public final class PsThenPreference extends PsThen {
       JuniperConfiguration juniperVendorConfiguration,
       Configuration c,
       Warnings warnings) {
-    statements.add(new SetAdministrativeCost(new LiteralInt(_preference)));
+    Statement statement = new SetAdministrativeCost(new LiteralInt(_preference));
+    statement.setText(getText());
+    statements.add(statement);
   }
 
   public int getPreference() {

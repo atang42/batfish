@@ -23,6 +23,8 @@ public class StaticRoute implements Serializable {
 
   @Nullable private Integer _track;
 
+  private String _text;
+
   public StaticRoute(
       Prefix prefix,
       Ip nextHopIp,
@@ -30,7 +32,8 @@ public class StaticRoute implements Serializable {
       int distance,
       @Nullable Long tag,
       @Nullable Integer track,
-      boolean permanent) {
+      boolean permanent,
+      String text) {
     _prefix = prefix;
     _nextHopIp = nextHopIp;
     _nextHopInterface = nextHopInterface;
@@ -38,6 +41,7 @@ public class StaticRoute implements Serializable {
     _tag = tag;
     _track = track;
     _permanent = permanent;
+    _text = text;
   }
 
   @Override
@@ -91,6 +95,8 @@ public class StaticRoute implements Serializable {
   public Integer getTrack() {
     return _track;
   }
+
+  public String getText() { return _text; }
 
   @Override
   public int hashCode() {

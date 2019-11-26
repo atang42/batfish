@@ -11,7 +11,8 @@ public final class PsThenMetric extends PsThen {
 
   private final long _metric;
 
-  public PsThenMetric(long metric) {
+  public PsThenMetric(long metric, String text) {
+    super(text);
     _metric = metric;
   }
 
@@ -21,7 +22,9 @@ public final class PsThenMetric extends PsThen {
       JuniperConfiguration juniperVendorConfiguration,
       Configuration c,
       Warnings warnings) {
-    statements.add(new SetMetric(new LiteralLong(_metric)));
+    Statement statement = new SetMetric(new LiteralLong(_metric));
+    statement.setText(getText());
+    statements.add(statement);
   }
 
   public long getMetric() {

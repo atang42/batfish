@@ -13,6 +13,7 @@ public final class PsFromPolicyStatementConjunction extends PsFrom {
   private final Set<String> _conjuncts;
 
   public PsFromPolicyStatementConjunction(Set<String> conjuncts) {
+    super("from policy statement conjunction");
     _conjuncts = conjuncts;
   }
 
@@ -33,4 +34,5 @@ public final class PsFromPolicyStatementConjunction extends PsFrom {
     }
     return conj;
   }
+
 }

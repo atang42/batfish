@@ -14,7 +14,8 @@ import org.batfish.datamodel.routing_policy.statement.Statement;
 @ParametersAreNonnullByDefault
 public final class PsThenCommunityAdd extends PsThen {
 
-  public PsThenCommunityAdd(String name, JuniperConfiguration configuration) {
+  public PsThenCommunityAdd(String name, JuniperConfiguration configuration, String text) {
+    super(text);
     _name = name;
     _configuration = configuration;
   }
@@ -30,9 +31,10 @@ public final class PsThenCommunityAdd extends PsThen {
       return;
     }
     _configuration.getOrCreateNamedCommunitiesUsedForSet().add(_name);
-    statements.add(
-        new SetCommunities(
-            CommunitySetUnion.of(InputCommunities.instance(), new CommunitySetReference(_name))));
+    Statement statement = new SetCommunities(
+        CommunitySetUnion.of(InputCommunities.instance(), new CommunitySetReference(_name)));
+    statement.setText(getText());
+    statements.add(statement);
   }
 
   public @Nonnull String getName() {

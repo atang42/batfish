@@ -12,7 +12,8 @@ public final class PsFromLocalPreference extends PsFrom {
 
   private final int _localPreference;
 
-  public PsFromLocalPreference(int localPreference) {
+  public PsFromLocalPreference(int localPreference, String text) {
+    super(text);
     _localPreference = localPreference;
   }
 

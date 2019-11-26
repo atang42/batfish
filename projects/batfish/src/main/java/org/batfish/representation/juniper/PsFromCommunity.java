@@ -13,7 +13,8 @@ public final class PsFromCommunity extends PsFrom {
 
   private final String _name;
 
-  public PsFromCommunity(String name) {
+  public PsFromCommunity(String name, String text) {
+    super(text);
     _name = name;
   }
 

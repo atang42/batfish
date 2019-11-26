@@ -1493,6 +1493,7 @@ public class CiscoConversions {
         .setNextHopInterface(nextHopInterface)
         .setAdministrativeCost(staticRoute.getDistance())
         .setTag(firstNonNull(staticRoute.getTag(), -1L))
+        .setText(staticRoute.getText())
         .build();
   }
 

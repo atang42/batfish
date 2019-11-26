@@ -10,7 +10,8 @@ public final class PsFromColor extends PsFrom {
 
   private final int _color;
 
-  public PsFromColor(int color) {
+  public PsFromColor(int color, String text) {
+    super(text);
     _color = color;
   }
 

@@ -15,7 +15,8 @@ public final class PsThenAsPathPrepend extends PsThen {
 
   private final List<Long> _asPath;
 
-  public PsThenAsPathPrepend(Iterable<Long> asPath) {
+  public PsThenAsPathPrepend(Iterable<Long> asPath, String text) {
+    super(text);
     _asPath = ImmutableList.copyOf(asPath);
   }
 
@@ -27,6 +28,8 @@ public final class PsThenAsPathPrepend extends PsThen {
       Warnings w) {
     List<AsExpr> asList =
         _asPath.stream().map(ExplicitAs::new).collect(ImmutableList.toImmutableList());
-    statements.add(new PrependAsPath(new LiteralAsList(asList)));
+    Statement statement = new PrependAsPath(new LiteralAsList(asList));
+    statement.setText(getText());
+    statements.add(statement);
   }
 }

@@ -13,7 +13,8 @@ public final class PsThenOrigin extends PsThen {
 
   private final OriginType _originType;
 
-  public PsThenOrigin(OriginType originType) {
+  public PsThenOrigin(OriginType originType, String text) {
+    super(text);
     _originType = originType;
   }
 
@@ -23,7 +24,9 @@ public final class PsThenOrigin extends PsThen {
       JuniperConfiguration juniperVendorConfiguration,
       Configuration c,
       Warnings warnings) {
-    statements.add(new SetOrigin(new LiteralOrigin(_originType, null)));
+    Statement statement = new SetOrigin(new LiteralOrigin(_originType, null));
+    statement.setText(getText());
+    statements.add(statement);
   }
 
   public OriginType getOriginType() {

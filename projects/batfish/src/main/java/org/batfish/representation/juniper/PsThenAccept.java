@@ -13,7 +13,9 @@ public final class PsThenAccept extends PsThen {
 
   public static final PsThenAccept INSTANCE = new PsThenAccept();
 
-  private PsThenAccept() {}
+  private PsThenAccept() {
+    super("accept");
+  }
 
   @Override
   public void applyTo(
@@ -26,6 +28,7 @@ public final class PsThenAccept extends PsThen {
             BooleanExprs.CALL_EXPR_CONTEXT,
             ImmutableList.of(Statements.ReturnTrue.toStaticStatement()),
             ImmutableList.of(Statements.ExitAccept.toStaticStatement()));
+    ifStatement.setText(getText());
     statements.add(ifStatement);
   }
 }
