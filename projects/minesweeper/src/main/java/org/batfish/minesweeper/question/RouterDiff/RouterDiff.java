@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.findroutefilterlines;
+package org.batfish.minesweeper.question.RouterDiff;
 
 import com.google.auto.service.AutoService;
 import org.batfish.common.Answerer;
@@ -8,15 +8,15 @@ import org.batfish.datamodel.questions.Question;
 import org.batfish.question.QuestionPlugin;
 
 @AutoService(Plugin.class)
-public class FindRouteFilterLinesPlugin extends QuestionPlugin {
+public class RouterDiff extends QuestionPlugin {
 
   @Override
   protected Answerer createAnswerer(Question question, IBatfish batfish) {
-    return new FindRouteFilterLinesAnswerer(question, batfish);
+    return new RouterDiffAnswerer(question, batfish);
   }
 
   @Override
   protected Question createQuestion() {
-    return new FindRouteFilterLinesQuestion(null, null, null, null, null, null);
+    return new RouterDiffQuestion(null);
   }
 }

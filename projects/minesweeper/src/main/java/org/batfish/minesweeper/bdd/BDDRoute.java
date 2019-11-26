@@ -30,7 +30,7 @@ import org.batfish.minesweeper.Protocol;
  */
 public class BDDRoute implements IDeepCopy<BDDRoute> {
 
-  static BDDFactory factory;
+  private static BDDFactory factory;
 
   private static List<Protocol> allProtos;
 
@@ -90,6 +90,10 @@ public class BDDRoute implements IDeepCopy<BDDRoute> {
   private final BDDInteger _prefixLength;
 
   private final BDDDomain<Protocol> _protocolHistory;
+
+  public static BDDFactory getFactory() {
+    return factory;
+  }
 
   /*
    * Creates a collection of BDD variables representing the

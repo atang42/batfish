@@ -45,7 +45,11 @@ import org.batfish.datamodel.bgp.AddressFamily;
 import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.ospf.OspfArea;
 import org.batfish.datamodel.ospf.OspfProcess;
+import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.datamodel.routing_policy.communities.CommunityContext;
+import org.batfish.datamodel.routing_policy.communities.CommunityMatchExpr;
+import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchExpr;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
 import org.batfish.datamodel.routing_policy.expr.CommunitySetExpr;
 import org.batfish.datamodel.routing_policy.expr.Conjunction;
@@ -942,6 +946,17 @@ public class Graph {
               comms.addAll(collectCommunityVars(conf, ce));
             }
           });
+    }
+
+    CommunityContext ctx = CommunityContext.fromEnvironment(Environment.builder(conf).build());
+    for (CommunityMatchExpr matchExpr : conf.getCommunityMatchExprs().values()) {
+      comms.addAll(CommunityVarExprCollector.collectMatchExpr(matchExpr, ctx));
+    }
+    for (org.batfish.datamodel.routing_policy.communities.CommunitySetExpr setExpr : conf.getCommunitySetExprs().values()) {
+      comms.addAll(CommunityVarExprCollector.collectSetExpr(setExpr, ctx));
+    }
+    for (CommunitySetMatchExpr setMatchExpr : conf.getCommunitySetMatchExprs().values()) {
+      comms.addAll(CommunityVarExprCollector.collectSetMatchExpr(setMatchExpr, ctx));
     }
 
     return comms;

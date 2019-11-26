@@ -31,6 +31,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
   @Nonnull private final String _nextHopInterface;
   @Nonnull private final Ip _nextHopIp;
   @Nullable private String _nextVrf;
+  @Nullable private String _text;
 
   private transient int _hashCode;
 
@@ -42,7 +43,8 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
       @Nullable @JsonProperty(PROP_NEXT_VRF) String nextVrf,
       @JsonProperty(PROP_ADMINISTRATIVE_COST) int administrativeCost,
       @JsonProperty(PROP_METRIC) long metric,
-      @JsonProperty(PROP_TAG) long tag) {
+      @JsonProperty(PROP_TAG) long tag,
+      @JsonProperty(PROP_TEXT) String text) {
     return new StaticRoute(
         requireNonNull(network),
         nextHopIp,
@@ -51,6 +53,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
         administrativeCost,
         metric,
         tag,
+        text,
         false,
         false);
   }
@@ -63,6 +66,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
       int administrativeCost,
       long metric,
       long tag,
+      String text,
       boolean nonForwarding,
       boolean nonRouting) {
     super(network, administrativeCost, tag, nonRouting, nonForwarding);
@@ -70,6 +74,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
     _nextHopInterface = firstNonNull(nextHopInterface, Route.UNSET_NEXT_HOP_INTERFACE);
     _nextHopIp = firstNonNull(nextHopIp, Route.UNSET_ROUTE_NEXT_HOP_IP);
     _nextVrf = nextVrf;
+    _text = text;
   }
 
   @Override
@@ -101,6 +106,12 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
     return _nextVrf;
   }
 
+  @Nullable
+  @JsonProperty(PROP_TEXT)
+  public String getText() {
+    return _text;
+  }
+
   @Override
   public RoutingProtocol getProtocol() {
     return RoutingProtocol.STATIC;
@@ -122,6 +133,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
 
     private String _nextHopInterface = Route.UNSET_NEXT_HOP_INTERFACE;
     @Nullable private String _nextVrf;
+    @Nullable private String _text;
 
     private Builder() {
       // Tmp hack until parent builder is fixed and doesn't default to primitives
@@ -143,6 +155,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
           getAdmin(),
           getMetric(),
           getTag(),
+          _text,
           getNonForwarding(),
           getNonRouting());
     }
@@ -171,6 +184,12 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
       _nextVrf = nextVrf;
       return this;
     }
+
+    @Nonnull
+    public Builder setText(@Nullable String text) {
+      _text = text;
+      return this;
+    }
   }
 
   /////// Keep COMPARATOR, #toBuilder, #equals, and #hashCode in sync ////////
@@ -196,6 +215,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
         .setNextVrf(_nextVrf)
         .setMetric(_metric)
         .setTag(_tag)
+        .setText(_text)
         .setAdmin(getAdministrativeCost())
         .setNonRouting(getNonRouting())
         .setNonForwarding(getNonForwarding());

@@ -32,6 +32,7 @@ public abstract class AbstractRoute implements AbstractRouteDecorator, Serializa
   static final String PROP_NON_FORWARDING = "nonForwarding";
   static final String PROP_PROTOCOL = "protocol";
   static final String PROP_TAG = "tag";
+  static final String PROP_TEXT = "text";
 
   @Nonnull protected final Prefix _network;
   protected final int _admin;

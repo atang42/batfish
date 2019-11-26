@@ -30,8 +30,13 @@ import org.batfish.datamodel.RouteFilterLine;
 import org.batfish.datamodel.RouteFilterList;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.SubRange;
+import org.batfish.datamodel.bgp.community.Community;
 import org.batfish.datamodel.ospf.OspfMetricType;
+import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.datamodel.routing_policy.communities.CommunityContext;
+import org.batfish.datamodel.routing_policy.communities.MatchCommunities;
+import org.batfish.datamodel.routing_policy.communities.SetCommunities;
 import org.batfish.datamodel.routing_policy.expr.AsPathListExpr;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
 import org.batfish.datamodel.routing_policy.expr.BooleanExprs;
@@ -86,12 +91,15 @@ import org.batfish.minesweeper.Protocol;
 import org.batfish.minesweeper.TransferParam;
 import org.batfish.minesweeper.TransferResult;
 import org.batfish.minesweeper.collections.Table2;
+import org.batfish.minesweeper.policylocalize.RouteToBDD;
+import org.batfish.minesweeper.policylocalize.StatementBDDPair;
+import org.batfish.minesweeper.policylocalize.SymbolicResult;
 import org.batfish.minesweeper.utils.PrefixUtils;
 
 /** @author Ryan Beckett */
 public class TransferBDD {
 
-  private static BDDFactory factory = BDDRoute.factory;
+  private static BDDFactory factory = BDDRoute.getFactory();
 
   private static Table2<String, String, TransferResult<TransferReturn, BDD>> CACHE = new Table2<>();
 
@@ -109,7 +117,11 @@ public class TransferBDD {
 
   private List<Statement> _statements;
 
-  private Map<Statement, BDD> _statementToGuards = new HashMap<>();
+  private List<StatementBDDPair> _statementToGuards = new ArrayList<>();
+
+  private List<StatementBDDPair> _statementToMatched = new ArrayList<>();
+
+  private TransferResult<TransferReturn, BDD> _transferResult;
 
   public TransferBDD(Graph g, Configuration conf, List<Statement> statements, PolicyQuotient pq) {
     _graph = g;
@@ -392,6 +404,17 @@ public class TransferBDD {
       p.debug("Warning: use of unimplemented feature MatchAsPath");
       TransferReturn ret = new TransferReturn(p.getData(), factory.one());
       return fromExpr(ret);
+
+    } else if (expr instanceof MatchCommunities) {
+      p.debug("MatchCommunities");
+      p.debug("Warning: use of unimplemented feature MatchCommunities");
+      MatchCommunities matchCommunities = (MatchCommunities) expr;
+      CommunityContext commContext =
+          CommunityContext.fromEnvironment(Environment.builder(_conf).build());
+      BDD result = matchCommunities.getCommunitySetMatchExpr().accept(
+          new MatchCommunitiesToBDD(this, p, _conf, p.getData()), commContext);
+      TransferReturn ret = new TransferReturn(p.getData(), result);
+      return fromExpr(ret);
     }
 
     throw new BatfishException("TODO: compute expr transfer function: " + expr);
@@ -405,15 +428,26 @@ public class TransferBDD {
     TransferParam<BDDRoute> curP = p;
     boolean doesReturn = false;
 
-    TransferResult<TransferReturn, BDD> result = new TransferResult<>();
-    result =
-        result
+    TransferResult<TransferReturn, BDD> totalResult = new TransferResult<>();
+    totalResult =
+        totalResult
             .setReturnValue(new TransferReturn(curP.getData(), factory.zero()))
             .setFallthroughValue(factory.zero())
             .setReturnAssignedValue(factory.zero());
 
     for (Statement stmt : statements) {
-      _statementToGuards.put(stmt, guardAcc);
+      _statementToGuards.add(new StatementBDDPair(stmt, guardAcc));
+      TransferResult<TransferReturn, BDD> result = new TransferResult<>();
+      result =
+          result
+              .setReturnValue(new TransferReturn(curP.getData(), factory.zero()))
+              .setFallthroughValue(factory.zero())
+              .setReturnAssignedValue(factory.zero());
+      BDD nextGuardAcc = guardAcc;
+
+      if (!(stmt instanceof If)) {
+        _statementToMatched.add(new StatementBDDPair(stmt, guardAcc));
+      }
 
       if (stmt instanceof StaticStatement) {
         StaticStatement ss = (StaticStatement) stmt;
@@ -502,6 +536,7 @@ public class TransferBDD {
         TransferResult<TransferReturn, BDD> r = compute(i.getGuard(), curP.indent());
         BDD guard = r.getReturnValue().getSecond();
         curP.debug("guard: ");
+        _statementToMatched.add(new StatementBDDPair(stmt, guardAcc.and(guard)));
 
         BDDRoute current = result.getReturnValue().getFirst();
 
@@ -515,6 +550,7 @@ public class TransferBDD {
         TransferResult<TransferReturn, BDD> falseBranch =
             compute(i.getFalseStatements(), pFalse, guardAcc.and(guard.not()));
         curP.debug("False Branch: " + trueBranch.getReturnValue().getFirst().hashCode());
+        nextGuardAcc = guard.not().and(guardAcc);
 
         BDDRoute r1 = trueBranch.getReturnValue().getFirst();
         BDDRoute r2 = falseBranch.getReturnValue().getFirst();
@@ -666,9 +702,35 @@ public class TransferBDD {
         // System.out.println("Warning: use of unimplemented feature SetNextHop");
         // TODO: implement me
 
+      } else if (stmt instanceof SetCommunities) {
+        curP.debug("SetCommunities");
+        // System.out.println("Warning: use of unimplemented feature SetNextHop");
+        // TODO: implement me
+
       } else {
         throw new BatfishException("TODO: statement transfer function: " + stmt);
       }
+
+      // update overall return value
+      BDDRoute recordVal =
+          ite(guardAcc,
+              result.getReturnValue().getFirst(),
+              totalResult.getReturnValue().getFirst());
+      BDD returnVal =
+          ite(
+              guardAcc,
+              result.getReturnValue().getSecond(),
+              totalResult.getReturnValue().getSecond());
+      BDD returnAss =
+          ite(guardAcc, result.getReturnAssignedValue(), totalResult.getReturnAssignedValue());
+      BDD fallThrough =
+          ite(guardAcc, result.getFallthroughValue(), totalResult.getFallthroughValue());
+      totalResult =
+          totalResult
+              .setReturnValue(new TransferReturn(recordVal, returnVal))
+              .setReturnAssignedValue(returnAss)
+              .setFallthroughValue(fallThrough);
+      guardAcc = nextGuardAcc;
     }
 
     // If this is the outermost call, then we relate the variables
@@ -678,18 +740,19 @@ public class TransferBDD {
       if (!doesReturn) {
         curP.debug("Applying default action: " + curP.getDefaultAccept());
         if (curP.getDefaultAccept()) {
-          result = returnValue(result, true);
+          totalResult = returnValue(totalResult, true);
         } else {
-          result = returnValue(result, false);
+          totalResult = returnValue(totalResult, false);
         }
       }
 
       // Set all the values to 0 if the return is not true;
-      TransferReturn ret = result.getReturnValue();
+      TransferReturn ret = totalResult.getReturnValue();
       BDDRoute retVal = ite(ret.getSecond(), ret.getFirst(), zeroedRecord());
-      result = result.setReturnValue(new TransferReturn(retVal, ret.getSecond()));
+      totalResult = totalResult.setReturnValue(new TransferReturn(retVal, ret.getSecond()));
+      _transferResult = totalResult;
     }
-    return result;
+    return totalResult;
   }
 
   private TransferResult<TransferReturn, BDD> fallthrough(TransferResult<TransferReturn, BDD> r) {
@@ -812,12 +875,19 @@ public class TransferBDD {
       if (_policyQuotient.getCommsMatchedButNotAssigned().contains(cvar)) {
         continue;
       }
-      List<CommunityVar> deps = _commDeps.get(cvar);
-      for (CommunityVar dep : deps) {
-        p.debug("Test for: " + dep);
-        BDD c = other.getCommunities().get(dep);
-        acc = ite(c, mkBDD(action), acc);
-      }
+      matchSingleCommunityVar(p, cvar, action, other);
+    }
+    return acc;
+  }
+
+  public BDD matchSingleCommunityVar(
+      TransferParam<BDDRoute> p, CommunityVar cvar, boolean action, BDDRoute other) {
+    List<CommunityVar> deps = _commDeps.get(cvar);
+    BDD acc = factory.zero();
+    for (CommunityVar dep : deps) {
+      p.debug("Test for: " + dep);
+      BDD c = other.getCommunities().get(dep);
+      acc = ite(c, mkBDD(action), acc);
     }
     return acc;
   }
@@ -825,7 +895,7 @@ public class TransferBDD {
   /*
    * Converts a community set to a boolean expression
    */
-  private BDD matchCommunitySet(
+  public BDD matchCommunitySet(
       TransferParam<BDDRoute> p, Configuration conf, CommunitySetExpr e, BDDRoute other) {
 
     if (e instanceof CommunityList) {
@@ -986,17 +1056,19 @@ public class TransferBDD {
    * Create a BDDRecord representing the symbolic output of
    * the RoutingPolicy given the input variables.
    */
-  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks) {
+  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks, BDDRoute route) {
     _ignoredNetworks = ignoredNetworks;
     _commDeps = _graph.getCommunityDependencies();
     _comms = _graph.getAllCommunities();
-    BDDRoute o = new BDDRoute(_comms);
-    addCommunityAssumptions(o);
-    TransferParam<BDDRoute> p = new TransferParam<>(o, false);
+    addCommunityAssumptions(route);
+    TransferParam<BDDRoute> p = new TransferParam<>(route, false);
     TransferResult<TransferReturn, BDD> result = compute(_statements, p, factory.one());
-    // BDDRoute route = result.getReturnValue().getFirst();
-    // System.out.println("DOT: \n" + route.dot(route.getLocalPref().getBitvec()[31]));
     return result;
+  }
+
+  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks) {
+    _comms = _graph.getAllCommunities();
+    return compute(ignoredNetworks, new BDDRoute(_comms));
   }
 
   /*
@@ -1016,15 +1088,64 @@ public class TransferBDD {
 
   public List<Statement> getStatementsActingOnPrefix(Prefix prefix, BDDRoute record) {
     List<Statement> result = new ArrayList<>();
-    BDD matches = isRelevantFor(record, PrefixRange.fromPrefix(prefix));
-    for (Entry<Statement, BDD> entry : _statementToGuards.entrySet()) {
-      Statement stmt = entry.getKey();
-      BDD guard = entry.getValue();
+    BDD matches = new RouteToBDD(factory, record).buildPrefixBDD(PrefixRange.fromPrefix(prefix));
+    for (StatementBDDPair entry : _statementToMatched) {
+      Statement stmt = entry.getStatement();
+      BDD guard = entry.getBdd();
 
       if (!guard.and(matches).isZero()) {
         result.add(stmt);
       }
     }
     return result;
+  }
+
+  /*
+  Return pairs of bdd and list of statements, where the list of statements are the statements that
+  act on the route announcements matched by the bdd
+   */
+  public Map<BDD, List<Statement>> getStatementsActingOnRouteSet(BDD inputSpace, BDDRoute record) {
+    Map<BDD, List<Statement>> actingStatements = new HashMap<>();
+    actingStatements.put(inputSpace, new ArrayList<>());
+    for (StatementBDDPair entry : _statementToMatched) {
+      Statement stmt = entry.getStatement();
+      BDD guard = entry.getBdd();
+
+      Map<BDD, List<Statement>> updatedActingStatements = new HashMap<>();
+
+      for (Entry<BDD, List<Statement>> prevEntry : actingStatements.entrySet()) {
+        BDD inputSubspace = prevEntry.getKey();
+        List<Statement> statementsSoFar = prevEntry.getValue();
+        // Check if some parts of inputSpace are matched
+        if (!inputSubspace.and(guard).isZero()) {
+          List<Statement> updatedList = new ArrayList<>(statementsSoFar);
+          updatedList.add(stmt);
+          updatedActingStatements.put(inputSubspace.and(guard), updatedList);
+        }
+        // Check if some parts of inputSpace are not matched
+        if (!inputSubspace.and(guard.not()).isZero()) {
+          updatedActingStatements.put(inputSubspace.and(guard.not()), statementsSoFar);
+        }
+      }
+      actingStatements = updatedActingStatements;
+    }
+
+    return actingStatements;
+  }
+
+  public SymbolicResult getAccepted(BDD inputSpace) {
+    BDD accepted = _transferResult.getReturnValue().getSecond();
+    if (inputSpace.and(accepted.not()).isZero()) {
+      return SymbolicResult.ACCEPT;
+    }
+    if (inputSpace.and(accepted).isZero()) {
+      return SymbolicResult.REJECT;
+    }
+    return SymbolicResult.MIX;
+  }
+
+  public SymbolicResult getAccepted(Prefix prefix, BDDRoute record) {
+    BDD matches = new RouteToBDD(factory, record).buildPrefixBDD(PrefixRange.fromPrefix(prefix));
+    return getAccepted(matches);
   }
 }
