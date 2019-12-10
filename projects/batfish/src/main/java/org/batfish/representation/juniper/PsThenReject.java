@@ -14,7 +14,7 @@ public final class PsThenReject extends PsThen {
   public static final PsThenReject INSTANCE = new PsThenReject();
 
   private PsThenReject() {
-    super("reject");
+    super("");
   }
 
   @Override

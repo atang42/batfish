@@ -215,7 +215,7 @@ public class FindRouteFilterLinesAnswerer extends Answerer {
     if (_accepted && transferBDD.getAccepted(routeSpace) != SymbolicResult.ACCEPT) {
       return false;
     }
-    BDD matches = new RouteToBDD(BDDRoute.getFactory(), record).buildPrefixBDD(_prefixRange);
+    BDD matches = new RouteToBDD(record).buildPrefixBDD(_prefixRange);
     if (matches.and(routeSpace).isZero()) {
       return false;
     }

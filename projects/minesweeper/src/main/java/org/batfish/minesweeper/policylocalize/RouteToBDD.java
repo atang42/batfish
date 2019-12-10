@@ -1,5 +1,6 @@
 package org.batfish.minesweeper.policylocalize;
 
+import java.util.List;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import org.batfish.common.bdd.BDDInteger;
@@ -18,8 +19,8 @@ public class RouteToBDD {
   private static final long DEFAULT_LOCAL_PREF = 100;
   private static final long DEFAULT_MED = 100;
 
-  public RouteToBDD(BDDFactory factory, BDDRoute record) {
-    _factory = factory;
+  public RouteToBDD(BDDRoute record) {
+    _factory = BDDRoute.getFactory();
     _record = record;
   }
 
@@ -54,11 +55,28 @@ public class RouteToBDD {
     BDD defaultMetric = _record.getMetric().value(DEFAULT_METRIC);
     BDD defaultMed = _record.getMed().value(DEFAULT_MED);
     BDD defaultLocalPref = _record.getLocalPref().value(DEFAULT_LOCAL_PREF);
-    BDD communities =
-        _record.getCommunities().values().stream().reduce(BDD::and).get().not();
+    BDD communities = _record.getCommunities().values().stream().reduce(BDD::and).get().not();
 
     BDD prefixBDD = isRelevantFor(_record, range);
 
     return prefixBDD.and(defaultMetric).and(defaultMed).and(defaultLocalPref).and(communities);
+  }
+
+  /*
+   Returns BDD representing all packets matching one of the prefix ranges
+  */
+  public BDD buildPrefixRangesBDD(List<PrefixRange> prefixRanges) {
+    BDD acc = allRoutes();
+    return acc.and(
+        prefixRanges
+            .stream()
+            .map(range -> isRelevantFor(_record, range))
+            .reduce(BDD::or)
+            .orElse(BDDRoute.getFactory().zero()));
+  }
+
+  public BDD allRoutes() {
+    BDDInteger prefixLength = _record.getPrefixLength();
+    return prefixLength.range(0, 32);
   }
 }

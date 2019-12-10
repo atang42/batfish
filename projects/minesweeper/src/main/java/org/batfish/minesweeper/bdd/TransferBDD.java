@@ -30,7 +30,6 @@ import org.batfish.datamodel.RouteFilterLine;
 import org.batfish.datamodel.RouteFilterList;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.SubRange;
-import org.batfish.datamodel.bgp.community.Community;
 import org.batfish.datamodel.ospf.OspfMetricType;
 import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
@@ -189,7 +188,7 @@ public class TransferBDD {
    * Convert a Batfish AST boolean expression to a symbolic Z3 boolean expression
    * by performing inlining of stateful side effects.
    */
-  private TransferResult<TransferReturn, BDD> compute(BooleanExpr expr, TransferParam<BDDRoute> p) {
+  private TransferResult<TransferReturn, BDD> compute(BooleanExpr expr, TransferParam<BDDRoute> p, BDD guardAcc) {
 
     // TODO: right now everything is IPV4
     if (expr instanceof MatchIpv4) {
@@ -210,7 +209,7 @@ public class TransferBDD {
       BDD acc = factory.one();
       TransferResult<TransferReturn, BDD> result = new TransferResult<>();
       for (BooleanExpr be : c.getConjuncts()) {
-        TransferResult<TransferReturn, BDD> r = compute(be, p.indent());
+        TransferResult<TransferReturn, BDD> r = compute(be, p.indent(), guardAcc);
         acc = acc.and(r.getReturnValue().getSecond());
       }
       TransferReturn ret = new TransferReturn(p.getData(), acc);
@@ -224,7 +223,7 @@ public class TransferBDD {
       BDD acc = factory.zero();
       TransferResult<TransferReturn, BDD> result = new TransferResult<>();
       for (BooleanExpr be : d.getDisjuncts()) {
-        TransferResult<TransferReturn, BDD> r = compute(be, p.indent());
+        TransferResult<TransferReturn, BDD> r = compute(be, p.indent(), guardAcc);
         result = result.addChangedVariables(r);
         acc = acc.or(r.getReturnValue().getSecond());
       }
@@ -256,7 +255,7 @@ public class TransferBDD {
                   .setDefaultPolicy(null)
                   .setChainContext(TransferParam.ChainContext.CONJUNCTION)
                   .indent();
-          TransferResult<TransferReturn, BDD> r = compute(conjunct, param);
+          TransferResult<TransferReturn, BDD> r = compute(conjunct, param, guardAcc);
           record = record.setData(r.getReturnValue().getFirst());
           acc = ite(r.getFallthroughValue(), acc, r.getReturnValue().getSecond());
         }
@@ -287,7 +286,8 @@ public class TransferBDD {
                 .setDefaultPolicy(null)
                 .setChainContext(TransferParam.ChainContext.CONJUNCTION)
                 .indent();
-        TransferResult<TransferReturn, BDD> r = compute(policyMatcher, param);
+        TransferResult<TransferReturn, BDD> r = compute(policyMatcher, param, guardAcc);
+        guardAcc = guardAcc.and(r.getReturnValue().getSecond().not());
         record = record.setData(r.getReturnValue().getFirst());
         acc = ite(r.getFallthroughValue(), acc, r.getReturnValue().getSecond());
       }
@@ -298,7 +298,7 @@ public class TransferBDD {
     if (expr instanceof Not) {
       p.debug("mkNot");
       Not n = (Not) expr;
-      TransferResult<TransferReturn, BDD> result = compute(n.getExpr(), p);
+      TransferResult<TransferReturn, BDD> result = compute(n.getExpr(), p, guardAcc);
       TransferReturn r = result.getReturnValue();
       TransferReturn ret = new TransferReturn(r.getFirst(), r.getSecond().not());
       return result.setReturnValue(ret);
@@ -310,7 +310,7 @@ public class TransferBDD {
       if (rps.size() > 1) {
         // Hack: Minesweeper doesn't support MatchProtocol with multiple arguments.
         List<BooleanExpr> mps = rps.stream().map(MatchProtocol::new).collect(Collectors.toList());
-        return compute(new Disjunction(mps), p);
+        return compute(new Disjunction(mps), p, guardAcc);
       }
       RoutingProtocol rp = Iterables.getOnlyElement(rps);
       Protocol proto = Protocol.fromRoutingProtocol(rp);
@@ -344,17 +344,20 @@ public class TransferBDD {
       CallExpr c = (CallExpr) expr;
       String router = _conf.getHostname();
       String name = c.getCalledPolicyName();
+      // TODO: Make BDD statement to lines work with cache
+      /*
       TransferResult<TransferReturn, BDD> r = CACHE.get(router, name);
       if (r != null) {
         return r;
       }
+      */
       RoutingPolicy pol = _conf.getRoutingPolicies().get(name);
       p.debug("Guards not properly checked for CallExpr");
-      r =
+      TransferResult<TransferReturn, BDD> r =
           compute(
               pol.getStatements(),
               p.setCallContext(TransferParam.CallContext.EXPR_CALL).indent().enterScope(name),
-              factory.one());
+              guardAcc);
       CACHE.put(router, name, r);
       return r;
 
@@ -363,7 +366,7 @@ public class TransferBDD {
       // TODO: this is not correct
       WithEnvironmentExpr we = (WithEnvironmentExpr) expr;
       // TODO: postStatements() and preStatements()
-      return compute(we.getExpr(), p.deepCopy());
+      return compute(we.getExpr(), p.deepCopy(), guardAcc);
 
     } else if (expr instanceof MatchCommunitySet) {
       p.debug("MatchCommunitySet");
@@ -533,7 +536,7 @@ public class TransferBDD {
       } else if (stmt instanceof If) {
         curP.debug("If");
         If i = (If) stmt;
-        TransferResult<TransferReturn, BDD> r = compute(i.getGuard(), curP.indent());
+        TransferResult<TransferReturn, BDD> r = compute(i.getGuard(), curP.indent(), guardAcc);
         BDD guard = r.getReturnValue().getSecond();
         curP.debug("guard: ");
         _statementToMatched.add(new StatementBDDPair(stmt, guardAcc.and(guard)));
@@ -1088,7 +1091,7 @@ public class TransferBDD {
 
   public List<Statement> getStatementsActingOnPrefix(Prefix prefix, BDDRoute record) {
     List<Statement> result = new ArrayList<>();
-    BDD matches = new RouteToBDD(factory, record).buildPrefixBDD(PrefixRange.fromPrefix(prefix));
+    BDD matches = new RouteToBDD(record).buildPrefixBDD(PrefixRange.fromPrefix(prefix));
     for (StatementBDDPair entry : _statementToMatched) {
       Statement stmt = entry.getStatement();
       BDD guard = entry.getBdd();
@@ -1145,7 +1148,7 @@ public class TransferBDD {
   }
 
   public SymbolicResult getAccepted(Prefix prefix, BDDRoute record) {
-    BDD matches = new RouteToBDD(factory, record).buildPrefixBDD(PrefixRange.fromPrefix(prefix));
+    BDD matches = new RouteToBDD(record).buildPrefixBDD(PrefixRange.fromPrefix(prefix));
     return getAccepted(matches);
   }
 }

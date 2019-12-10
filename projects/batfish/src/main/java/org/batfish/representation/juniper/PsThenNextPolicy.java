@@ -11,7 +11,7 @@ public final class PsThenNextPolicy extends PsThen {
   public static final PsThenNextPolicy INSTANCE = new PsThenNextPolicy();
 
   private PsThenNextPolicy() {
-    super("then next policy;");
+    super("next policy;");
   }
 
   @Override

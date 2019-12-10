@@ -17,6 +17,6 @@ public class RouterDiff extends QuestionPlugin {
 
   @Override
   protected Question createQuestion() {
-    return new RouterDiffQuestion(null);
+    return new RouterDiffQuestion(null, null);
   }
 }

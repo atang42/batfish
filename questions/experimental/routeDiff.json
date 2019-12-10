@@ -1,0 +1,28 @@
+{
+    "class": "org.batfish.minesweeper.question.RouterDiff.RouterDiffQuestion",
+    "differential": false,
+    "nodes": "${nodes}",
+    "ignored": "${ignored}",
+    "instance": {
+        "description": "Find route policy differences between router pairs",
+        "instanceName": "routerdiff",
+        "longDescription": "Find route policy differences between router pairs",
+        "tags": [
+            "routing policy"
+        ],
+        "variables": {
+            "ignored": {
+                "description": "ignore prefixes matching a prefix range in this list",
+                "type": "string",
+                "optional": true,
+                "displayName": "ignored"
+            },
+            "nodes": {
+                "description": "Only evaluate filters present on nodes matching this specifier",
+                "type": "nodeSpec",
+                "optional": true,
+                "displayName": "nodes"
+            }
+        }
+    }
+}

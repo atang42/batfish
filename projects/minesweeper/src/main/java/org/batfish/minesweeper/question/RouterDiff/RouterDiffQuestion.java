@@ -3,37 +3,52 @@ package org.batfish.minesweeper.question.RouterDiff;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import org.batfish.datamodel.PacketHeaderConstraints;
+import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.questions.Question;
-import org.batfish.question.findmatchingfilterlines.FindMatchingFilterLinesQuestion.Action;
 import org.batfish.specifier.AllNodesNodeSpecifier;
 import org.batfish.specifier.NodeSpecifier;
-import org.batfish.specifier.RoutingPolicySpecifier;
 import org.batfish.specifier.SpecifierFactories;
-import org.batfish.specifier.parboiled.ParboiledRoutingPolicySpecifier;
 
 public class RouterDiffQuestion extends Question {
 
   private static final String PROP_NODES = "nodes";
+  private static final String PROP_IGNORED_PREFIX_RANGES = "ignored";
 
   @Nonnull private final String _nodes;
   @Nonnull private final NodeSpecifier _nodeSpecifier;
+  @Nonnull private final String _ignored;
+  @Nonnull private final List<PrefixRange> _ignoredPrefixRanges;
 
   //@Nullable private final Action _action;
   //@Nonnull private final PacketHeaderConstraints _headerConstraints;
 
   @JsonCreator
   private static RouterDiffQuestion create(
-      @JsonProperty(PROP_NODES) @Nullable String nodes) {
-    return new RouterDiffQuestion(nodes);
+      @JsonProperty(PROP_NODES) @Nullable String nodes,
+      @JsonProperty(PROP_IGNORED_PREFIX_RANGES) @Nullable String ignored) {
+    return new RouterDiffQuestion(nodes, ignored);
   }
 
-  public RouterDiffQuestion(@Nullable String nodes) {
+  public RouterDiffQuestion(@Nullable String nodes, @Nullable String ignored) {
     _nodes = (nodes != null) ? nodes : ".*";
     _nodeSpecifier =
         SpecifierFactories.getNodeSpecifierOrDefault(nodes, AllNodesNodeSpecifier.INSTANCE);
+    if (ignored == null || ignored.isEmpty()) {
+      _ignored = "";
+      _ignoredPrefixRanges = new ArrayList<>();
+    } else {
+      _ignored = ignored;
+      _ignoredPrefixRanges =
+          Arrays.stream(_ignored.split(","))
+              .map(PrefixRange::fromString)
+              .collect(Collectors.toList());
+    }
   }
 
   @Override public boolean getDataPlane() {
@@ -46,14 +61,27 @@ public class RouterDiffQuestion extends Question {
 
   @JsonProperty(PROP_NODES)
   @Nonnull
-  private String getNodes() {
+  public String getNodes() {
     return _nodes;
   }
 
   @Nonnull
   @JsonIgnore
-  NodeSpecifier getNodeSpecifier() {
+  public NodeSpecifier getNodeSpecifier() {
     return _nodeSpecifier;
   }
+
+  @JsonProperty(PROP_IGNORED_PREFIX_RANGES)
+  @Nonnull
+  public String getIgnored() {
+    return _ignored;
+  }
+
+  @Nonnull
+  public List<PrefixRange> getIgnoredPrefixRanges() {
+    return _ignoredPrefixRanges;
+  }
+
+
 
 }

@@ -13,7 +13,7 @@ public final class PsThenNextHopSelf extends PsThen {
   public static final PsThenNextHopSelf INSTANCE = new PsThenNextHopSelf();
 
   private PsThenNextHopSelf() {
-    super("then next-hop self");
+    super("next-hop self");
   }
 
   @Override
