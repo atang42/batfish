@@ -91,6 +91,8 @@ public class BDDRoute implements IDeepCopy<BDDRoute> {
 
   private final BDDDomain<Protocol> _protocolHistory;
 
+  private int _variablesUsed;
+
   public static BDDFactory getFactory() {
     return factory;
   }
@@ -127,7 +129,7 @@ public class BDDRoute implements IDeepCopy<BDDRoute> {
     idx += 32;
     // need 6 bits for prefix length because there are 33 possible values, 0 - 32
     _prefixLength = BDDInteger.makeFromIndex(factory, 6, idx, true);
-    addBitNames("pfxLen", 5, idx, true);
+    addBitNames("pfxLen", 6, idx, true);
     idx += 6;
     _prefix = BDDInteger.makeFromIndex(factory, 32, idx, true);
     addBitNames("pfx", 32, idx, true);
@@ -145,6 +147,7 @@ public class BDDRoute implements IDeepCopy<BDDRoute> {
     _ospfMetric = new BDDDomain<>(factory, allMetricTypes, idx);
     len = _ospfMetric.getInteger().getBitvec().length;
     addBitNames("ospfMetric", len, idx, false);
+    _variablesUsed = idx;
   }
 
   /*
@@ -401,5 +404,9 @@ public class BDDRoute implements IDeepCopy<BDDRoute> {
       r.orWith(x);
     }
     return r;
+  }
+
+  public int getVariablesUsed() {
+    return _variablesUsed;
   }
 }
