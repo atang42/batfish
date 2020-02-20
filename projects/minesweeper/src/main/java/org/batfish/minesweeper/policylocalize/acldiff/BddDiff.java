@@ -1,4 +1,4 @@
-package org.batfish.bdddiff;
+package org.batfish.minesweeper.policylocalize.acldiff;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableMultimap;
@@ -40,11 +40,10 @@ import org.batfish.specifier.SpecifierFactories;
 
 public class BddDiff {
 
-  //public static long totalTime = 0;
-  //public static int totalPairs = 0;
-  //public static int totalFilters = 0;
-  //public static int totalDiffs = 0;
-
+  // public static long totalTime = 0;
+  // public static int totalPairs = 0;
+  // public static int totalFilters = 0;
+  // public static int totalDiffs = 0;
 
   private BDD getPacketHeaderFields(BDDPacket packet) {
     BDD headerVars = packet.getFactory().one();
@@ -60,9 +59,11 @@ public class BddDiff {
         Arrays.stream(packet.getIpProtocol().getBDDInteger().getBitvec())
             .reduce(packet.getFactory().one(), BDD::and);
     BDD bddIcmpType =
-        Arrays.stream(packet.getIcmpType().getBDDInteger().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+        Arrays.stream(packet.getIcmpType().getBDDInteger().getBitvec())
+            .reduce(packet.getFactory().one(), BDD::and);
     BDD bddIcmpCode =
-        Arrays.stream(packet.getIcmpCode().getBDDInteger().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
+        Arrays.stream(packet.getIcmpCode().getBDDInteger().getBitvec())
+            .reduce(packet.getFactory().one(), BDD::and);
     BDD bddDscp =
         Arrays.stream(packet.getDscp().getBitvec()).reduce(packet.getFactory().one(), BDD::and);
     BDD bddEcn =
@@ -98,10 +99,7 @@ public class BddDiff {
   Check differences between ACLs with same name on two routers
    */
   public SortedSet<LineDifference> findDiffWithLines(
-      IBatfish batfish,
-      NodesSpecifier nodesSpecifier,
-      String aclRegex,
-      boolean printMore) {
+      IBatfish batfish, NodesSpecifier nodesSpecifier, String aclRegex, boolean printMore) {
 
     SortedSet<LineDifference> differences = new TreeSet<>();
     Set<String> routerNames = nodesSpecifier.getMatchingNodes(batfish);
@@ -109,12 +107,12 @@ public class BddDiff {
     Map<String, Map<String, IpAccessList>> aclNameToAcls = new TreeMap<>();
     Map<IpAccessList, String> aclToRouterName = new HashMap<>();
     System.out.println("Matched Routers:");
-    routerNames.stream().forEach(x -> System.out.println("    " + x));
+    routerNames.forEach(x -> System.out.println("    " + x));
     System.out.println();
 
-    //if (routerNames.size() == 2) {
+    // if (routerNames.size() == 2) {
     //  BddDiff.totalPairs++;
-    //}
+    // }
 
     for (String rr : routerNames) {
       Configuration cc = configs.get(rr);
@@ -138,14 +136,13 @@ public class BddDiff {
       try {
         if (accessLists.size() == 2) {
           System.out.print("Comparing " + aclName + " for: ");
-          accessLists.keySet()
-              .forEach(x -> System.out.print(x + " " ));
+          accessLists.keySet().forEach(x -> System.out.print(x + " "));
           System.out.println();
           differences.addAll(compareAcls(batfish, packet, accessLists, printMore, false));
         } else {
-          System.out.print(entry.getKey() + " is present in " + accessLists.size() + " router(s): ");
-          accessLists.keySet()
-              .forEach(x -> System.out.print(x + " " ));
+          System.out.print(
+              entry.getKey() + " is present in " + accessLists.size() + " router(s): ");
+          accessLists.keySet().forEach(x -> System.out.print(x + " "));
           System.out.println();
         }
 
@@ -176,7 +173,7 @@ public class BddDiff {
       Map<String, IpAccessList> accessLists,
       boolean printMore,
       boolean differential) {
-    assert(accessLists.size() == 2);
+    assert (accessLists.size() == 2);
     // BddDiff.totalFilters++;
     SortedSet<LineDifference> differences = new TreeSet<>();
     List<String> routers = new ArrayList<>(accessLists.keySet());
@@ -194,7 +191,7 @@ public class BddDiff {
     BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
 
     if (notEquivalent.isZero()) {
-       System.out.println("No Difference");
+      System.out.println("No Difference");
     } else {
       // BddDiff.totalDiffs++;
       System.out.println("**************************");
@@ -243,7 +240,7 @@ public class BddDiff {
         diffToPrefix.printDifferenceInPrefix();
         AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
         report.print(batfish, printMore, differential);
-        //differences.add(report.toLineDifference(batfish, printMore, differential));
+        // differences.add(report.toLineDifference(batfish, printMore, differential));
         /*boolean merged = false;
         for (AclDiffReport r : reportList) {
           System.out.println(AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()));
@@ -269,7 +266,8 @@ public class BddDiff {
     return differences;
   }
 
-  public SortedSet<LineDifference> getTimeDiff(IBatfish batfish, NodesSpecifier nodesSpecifier, String aclRegex, boolean printMore) {
+  public SortedSet<LineDifference> getTimeDiff(
+      IBatfish batfish, NodesSpecifier nodesSpecifier, String aclRegex, boolean printMore) {
     batfish.pushBaseSnapshot();
     SpecifierContext currentContext = batfish.specifierContext();
     batfish.popSnapshot();
@@ -282,21 +280,26 @@ public class BddDiff {
     Set<String> routers = new TreeSet<>(nodesSpecifier.getMatchingNodes(currentContext));
     routers.retainAll(nodesSpecifier.getMatchingNodes(referenceContext));
 
-    Set<String> onlyFirst = nodesSpecifier.getMatchingNodes(currentContext).stream()
-        .filter(s -> !routers.contains(s))
-        .collect(Collectors.toCollection(TreeSet::new));
-    Set<String> onlySecond = nodesSpecifier.getMatchingNodes(referenceContext).stream()
-        .filter(s -> !routers.contains(s))
-        .collect(Collectors.toCollection(TreeSet::new));
+    Set<String> onlyFirst =
+        nodesSpecifier.getMatchingNodes(currentContext).stream()
+            .filter(s -> !routers.contains(s))
+            .collect(Collectors.toCollection(TreeSet::new));
+    Set<String> onlySecond =
+        nodesSpecifier.getMatchingNodes(referenceContext).stream()
+            .filter(s -> !routers.contains(s))
+            .collect(Collectors.toCollection(TreeSet::new));
     for (String router : routers) {
-      Set<String> currentInterfaces = currentContext.getConfigs().get(router).getAllInterfaces().keySet();
-      Set<String> referenceInterfaces = referenceContext.getConfigs().get(router).getAllInterfaces().keySet();
+      Set<String> currentInterfaces =
+          currentContext.getConfigs().get(router).getAllInterfaces().keySet();
+      Set<String> referenceInterfaces =
+          referenceContext.getConfigs().get(router).getAllInterfaces().keySet();
 
       Set<String> intersection = new HashSet<>(currentInterfaces);
       intersection.retainAll(referenceInterfaces);
       for (String intfName : intersection) {
         Interface intf1 = currentContext.getConfigs().get(router).getAllInterfaces().get(intfName);
-        Interface intf2 = referenceContext.getConfigs().get(router).getAllInterfaces().get(intfName);
+        Interface intf2 =
+            referenceContext.getConfigs().get(router).getAllInterfaces().get(intfName);
 
         IpAccessList inAcl1 = intf1.getIncomingFilter();
         IpAccessList inAcl2 = intf2.getIncomingFilter();
@@ -313,9 +316,9 @@ public class BddDiff {
           pair.add(inAcl2);
           aclPairs.put(router, pair);
         } else if (inAcl1 != null && inAcl1.getName().matches(aclRegex)) {
-          onlyFirst.add(router+":"+inAcl1.getName());
+          onlyFirst.add(router + ":" + inAcl1.getName());
         } else if (inAcl2 != null && inAcl2.getName().matches(aclRegex)) {
-          onlySecond.add(router+":"+inAcl2.getName());
+          onlySecond.add(router + ":" + inAcl2.getName());
         }
 
         if (outAcl1 != null
@@ -327,9 +330,9 @@ public class BddDiff {
           pair.add(outAcl2);
           aclPairs.put(router, pair);
         } else if (outAcl1 != null && outAcl1.getName().matches(aclRegex)) {
-          onlyFirst.add(router+":"+outAcl1.getName());
+          onlyFirst.add(router + ":" + outAcl1.getName());
         } else if (outAcl2 != null && outAcl2.getName().matches(aclRegex)) {
-          onlySecond.add(router+":"+outAcl2.getName());
+          onlySecond.add(router + ":" + outAcl2.getName());
         }
       }
     }
@@ -343,8 +346,7 @@ public class BddDiff {
 
     SortedSet<LineDifference> differences = new TreeSet<>();
     BDDPacketWithLines packet = new BDDPacketWithLines();
-    for (Entry<String, List<IpAccessList>> entry : aclPairs.entries())
-    {
+    for (Entry<String, List<IpAccessList>> entry : aclPairs.entries()) {
       String router = entry.getKey();
 
       IpAccessList acl1 = entry.getValue().get(0);
@@ -360,12 +362,21 @@ public class BddDiff {
 
     Map<String, SortedSet<String>> diffToFilters = new TreeMap<>();
     Map<String, SortedSet<String>> filterToDiffs = new TreeMap<>();
-    for(LineDifference diff : differences) {
-      for(String region : diff.getDifference()) {
+    for (LineDifference diff : differences) {
+      for (String region : diff.getDifference()) {
         if (!diffToFilters.containsKey(region)) {
           diffToFilters.put(region, new TreeSet<>());
         }
-        diffToFilters.get(region).add(diff.getRouter1() + ":" + diff.getFilter1() + "--" + diff.getRouter2() + ":" + diff.getFilter2());
+        diffToFilters
+            .get(region)
+            .add(
+                diff.getRouter1()
+                    + ":"
+                    + diff.getFilter1()
+                    + "--"
+                    + diff.getRouter2()
+                    + ":"
+                    + diff.getFilter2());
       }
     }
 
@@ -382,23 +393,21 @@ public class BddDiff {
 
   /** Get filters specified by the given filter specifier. */
   public static Multimap<String, String> getSpecifiedFilters(
-      SpecifierContext specifierContext,
-      NodesSpecifier nodesSpecifier,
-      String aclRegex) {
+      SpecifierContext specifierContext, NodesSpecifier nodesSpecifier, String aclRegex) {
     Set<String> nodes = nodesSpecifier.getMatchingNodes(specifierContext);
     ImmutableMultimap.Builder<String, String> filters = ImmutableMultimap.builder();
     Map<String, Configuration> configs = specifierContext.getConfigs();
-    FilterSpecifier filterSpecifier = SpecifierFactories.getFilterSpecifierOrDefault(aclRegex,
-        AllFiltersFilterSpecifier.INSTANCE);
+    FilterSpecifier filterSpecifier =
+        SpecifierFactories.getFilterSpecifierOrDefault(
+            aclRegex, AllFiltersFilterSpecifier.INSTANCE);
     nodes.stream()
         .map(configs::get)
         .forEach(
             config ->
-                filterSpecifier.resolve(config.getHostname(), specifierContext).stream()
+                filterSpecifier.resolve(config.getHostname(), specifierContext)
                     .forEach(filter -> filters.put(config.getHostname(), filter.getName())));
     return filters.build();
   }
-
 
   public void doTest(IBatfish batfish, NodesSpecifier nodeRegex) {
     BDDPacket packet = new BDDPacket();

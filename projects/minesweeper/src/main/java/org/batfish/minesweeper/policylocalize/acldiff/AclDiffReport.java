@@ -1,4 +1,4 @@
-package org.batfish.bdddiff;
+package org.batfish.minesweeper.policylocalize.acldiff;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.batfish.common.bdd.PacketPrefixRegion;
 import org.batfish.common.plugin.IBatfish;
@@ -72,17 +71,9 @@ public class AclDiffReport {
     }
   }
 
-  public AclDiffReport(
-      Set<PacketPrefixRegion> regions,
-      Set<PacketPrefixRegion> subtractedRegions,
-      String r1,
-      IpAccessList acl1,
-      List<IpAccessListLine> last1,
-      Set<IpAccessListLine> all1,
-      String r2,
-      IpAccessList acl2,
-      List<IpAccessListLine> last2,
-      Set<IpAccessListLine> all2) {
+  AclDiffReport(Set<PacketPrefixRegion> regions, Set<PacketPrefixRegion> subtractedRegions,
+      String r1, IpAccessList acl1, List<IpAccessListLine> last1, Set<IpAccessListLine> all1,
+      String r2, IpAccessList acl2, List<IpAccessListLine> last2, Set<IpAccessListLine> all2) {
     _regions = new HashSet<>(regions);
     _subtractedRegions = new HashSet<>(subtractedRegions);
     _report1 = new SingleRouterReport(r1, acl1, last1, all1);
@@ -104,11 +95,11 @@ public class AclDiffReport {
     return bitVector;
   }
 
-  public BitSet getAcl1BitVector() {
+  private BitSet getAcl1BitVector() {
     return getAclBitVector(_report1);
   }
 
-  public BitSet getAcl2BitVector() {
+  private BitSet getAcl2BitVector() {
     return getAclBitVector(_report2);
   }
 
@@ -154,8 +145,14 @@ public class AclDiffReport {
 
   public LineDifference toLineDifference(IBatfish batfish, boolean printMore, boolean differential) {
     AclToConfigLines aclToConfig = new AclToConfigLines(batfish, differential);
-    String rel1 = aclToConfig.getRelevantLines(
-        _report1._router, _report1._acl, _regions, _report1._lastDiffs, _report1._implicitDeny, printMore);
+    String rel1 =
+        aclToConfig.getRelevantLines(
+            _report1._router,
+            _report1._acl,
+            _regions,
+            _report1._lastDiffs,
+            _report1._implicitDeny,
+            printMore);
     String rel2 = aclToConfig.getRelevantLines(
             _report2._router, _report2._acl, _regions, _report2._lastDiffs, _report2._implicitDeny, printMore);
     SortedSet<String> difference = _regions

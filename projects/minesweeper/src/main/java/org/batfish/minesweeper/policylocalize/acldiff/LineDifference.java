@@ -1,4 +1,4 @@
-package org.batfish.bdddiff;
+package org.batfish.minesweeper.policylocalize.acldiff;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -34,9 +34,8 @@ public final class LineDifference implements Comparable<LineDifference> {
       @Nonnull @JsonProperty(PROP_SNIPPET1) String snippet1,
       @Nonnull @JsonProperty(PROP_SNIPPET2) String snippet2,
       @Nonnull @JsonProperty(PROP_SNIPPET2) SortedSet<String> difference,
-      @Nonnull @JsonProperty(PROP_SNIPPET2) SortedSet<String> diffSub
-      ) {
-    if ((router1+filter1).compareTo(router2+filter2) <= 0) {
+      @Nonnull @JsonProperty(PROP_SNIPPET2) SortedSet<String> diffSub) {
+    if ((router1 + filter1).compareTo(router2 + filter2) <= 0) {
       this._router1 = router1;
       this._router2 = router2;
       this._filter1 = filter1;
@@ -56,7 +55,8 @@ public final class LineDifference implements Comparable<LineDifference> {
   }
 
   @JsonProperty(PROP_ROUTER1)
-  @Nonnull public String getRouter1() {
+  @Nonnull
+  public String getRouter1() {
     return _router1;
   }
 
@@ -66,7 +66,8 @@ public final class LineDifference implements Comparable<LineDifference> {
   }
 
   @JsonProperty(PROP_ROUTER2)
-  @Nonnull public String getRouter2() {
+  @Nonnull
+  public String getRouter2() {
     return _router2;
   }
 
@@ -76,7 +77,8 @@ public final class LineDifference implements Comparable<LineDifference> {
   }
 
   @JsonProperty(PROP_FILTER1)
-  @Nonnull public String getFilter1() {
+  @Nonnull
+  public String getFilter1() {
     return _filter1;
   }
 
@@ -86,7 +88,8 @@ public final class LineDifference implements Comparable<LineDifference> {
   }
 
   @JsonProperty(PROP_FILTER2)
-  @Nonnull public String getFilter2() {
+  @Nonnull
+  public String getFilter2() {
     return _filter2;
   }
 
@@ -96,7 +99,8 @@ public final class LineDifference implements Comparable<LineDifference> {
   }
 
   @JsonProperty(PROP_SNIPPET1)
-  @Nonnull public String getSnippet1() {
+  @Nonnull
+  public String getSnippet1() {
     return _snippet1;
   }
 
@@ -106,7 +110,8 @@ public final class LineDifference implements Comparable<LineDifference> {
   }
 
   @JsonProperty(PROP_SNIPPET2)
-  @Nonnull public String getSnippet2() {
+  @Nonnull
+  public String getSnippet2() {
     return _snippet2;
   }
 
@@ -126,7 +131,8 @@ public final class LineDifference implements Comparable<LineDifference> {
   }
 
   @JsonProperty(PROP_DIFF_SUB)
-  @Nonnull public SortedSet<String> getDiffSub() {
+  @Nonnull
+  public SortedSet<String> getDiffSub() {
     return _diffSub;
   }
 
