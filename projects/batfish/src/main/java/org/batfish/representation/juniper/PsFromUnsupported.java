@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.TreeSet;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
@@ -9,7 +10,7 @@ import org.batfish.datamodel.routing_policy.expr.BooleanExprs;
 public final class PsFromUnsupported extends PsFrom {
 
   public PsFromUnsupported() {
-    super("UNSUPPORTED FROM");
+    super("UNSUPPORTED FROM", new TreeSet<>());
   }
 
   @Override

@@ -2672,6 +2672,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
         If ifStatement = new If();
         ifStatement.setComment(term.getName());
         ifStatement.setText(term.getText());
+        ifStatement.setLineNumbers(term.getLineNumbers());
         PsFroms froms = term.getFroms();
 
         for (PsFromRouteFilter fromRouteFilter : froms.getFromRouteFilters()) {
@@ -2828,6 +2829,8 @@ public final class JuniperConfiguration extends VendorConfiguration {
             .setAdministrativeCost(route.getDistance())
             .setMetric(route.getMetric())
             .setTag(firstNonNull(route.getTag(), Route.UNSET_ROUTE_TAG))
+            .setText(route.getText())
+            .setLineNumbers(route.getLineNumbers())
             .setNonForwarding(firstNonNull(route.getNoInstall(), Boolean.FALSE))
             .build());
 

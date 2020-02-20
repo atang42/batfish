@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchExprReference;
@@ -13,8 +14,8 @@ public final class PsFromCommunity extends PsFrom {
 
   private final String _name;
 
-  public PsFromCommunity(String name, String text) {
-    super(text);
+  public PsFromCommunity(String name, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _name = name;
   }
 

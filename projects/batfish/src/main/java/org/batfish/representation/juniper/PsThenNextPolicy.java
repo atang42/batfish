@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.List;
+import java.util.TreeSet;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.statement.Statement;
@@ -11,7 +12,8 @@ public final class PsThenNextPolicy extends PsThen {
   public static final PsThenNextPolicy INSTANCE = new PsThenNextPolicy();
 
   private PsThenNextPolicy() {
-    super("next policy;");
+    // TODO: Add line numbers for next policy
+    super("next policy;", new TreeSet<>());
   }
 
   @Override

@@ -1,6 +1,7 @@
 package org.batfish.representation.cisco;
 
 import java.io.Serializable;
+import java.util.Set;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.Ip;
@@ -25,6 +26,8 @@ public class StaticRoute implements Serializable {
 
   private String _text;
 
+  private Set<Integer> _lineNums;
+
   public StaticRoute(
       Prefix prefix,
       Ip nextHopIp,
@@ -33,7 +36,8 @@ public class StaticRoute implements Serializable {
       @Nullable Long tag,
       @Nullable Integer track,
       boolean permanent,
-      String text) {
+      String text,
+      Set<Integer> lineNums) {
     _prefix = prefix;
     _nextHopIp = nextHopIp;
     _nextHopInterface = nextHopInterface;
@@ -42,6 +46,7 @@ public class StaticRoute implements Serializable {
     _track = track;
     _permanent = permanent;
     _text = text;
+    _lineNums = lineNums;
   }
 
   @Override
@@ -97,6 +102,10 @@ public class StaticRoute implements Serializable {
   }
 
   public String getText() { return _text; }
+
+  public Set<Integer> getLineNumbers() {
+    return _lineNums;
+  }
 
   @Override
   public int hashCode() {

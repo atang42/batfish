@@ -2,6 +2,7 @@ package org.batfish.representation.juniper;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
@@ -22,8 +23,8 @@ public final class PsFromInterface extends PsFrom {
 
   private final String _name;
 
-  public PsFromInterface(String name, String text) {
-    super(text);
+  public PsFromInterface(String name, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _name = name;
   }
 

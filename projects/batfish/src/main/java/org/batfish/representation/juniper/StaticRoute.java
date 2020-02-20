@@ -41,6 +41,10 @@ public class StaticRoute implements Serializable {
 
   private Long _tag;
 
+  private StringBuilder _text;
+
+  private Set<Integer> _lineNums;
+
   private Boolean _noInstall;
 
   public StaticRoute(Prefix prefix) {
@@ -50,6 +54,8 @@ public class StaticRoute implements Serializable {
     // default admin costs for static routes in Juniper
     _distance = DEFAULT_ADMIN_DISTANCE;
     _qualifiedNextHops = new HashMap<>();
+    _text = new StringBuilder();
+    _lineNums = new TreeSet<>();
   }
 
   public Set<Community> getCommunities() {
@@ -101,6 +107,14 @@ public class StaticRoute implements Serializable {
     return _tag;
   }
 
+  public String getText() {
+    return _text.toString().trim();
+  }
+
+  public Set<Integer> getLineNumbers() {
+    return _lineNums;
+  }
+
   public void setDistance(int distance) {
     _distance = distance;
   }
@@ -127,5 +141,13 @@ public class StaticRoute implements Serializable {
 
   public void setTag(long tag) {
     _tag = tag;
+  }
+
+  public void addText(String text) {
+    _text.append(text).append("\n");
+  }
+
+  public void addLineNumbers(Set<Integer> lineNumbers) {
+    _lineNums.addAll(lineNumbers);
   }
 }

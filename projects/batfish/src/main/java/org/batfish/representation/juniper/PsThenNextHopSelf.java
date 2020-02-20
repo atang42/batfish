@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.List;
+import java.util.TreeSet;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.SelfNextHop;
@@ -13,7 +14,8 @@ public final class PsThenNextHopSelf extends PsThen {
   public static final PsThenNextHopSelf INSTANCE = new PsThenNextHopSelf();
 
   private PsThenNextHopSelf() {
-    super("next-hop self");
+    // TODO: Add line numbers for next hop self
+    super("next-hop self", new TreeSet<>());
   }
 
   @Override

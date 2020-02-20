@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.List;
+import java.util.Set;
 import javax.annotation.Nonnull;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
@@ -12,8 +13,8 @@ import org.batfish.datamodel.routing_policy.statement.Statement;
 
 public final class PsThenCommunityDelete extends PsThen {
 
-  public PsThenCommunityDelete(String name, String text) {
-    super(text);
+  public PsThenCommunityDelete(String name, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _name = name;
   }
 

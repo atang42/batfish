@@ -2694,7 +2694,7 @@ public final class CiscoConfiguration extends VendorConfiguration {
       StringBuilder matchStringBuilder = new StringBuilder();
       for (RouteMapMatchLine rmMatch : rmClause.getMatchList()) {
         BooleanExpr matchExpr = rmMatch.toBooleanExpr(c, this, _w);
-        matchStringBuilder.append("\n" + rmMatch.getText());
+        matchStringBuilder.append("\n").append(rmMatch.getText());
         if (rmMatch instanceof RouteMapMatchIpAccessListLine
             || rmMatch instanceof RouteMapMatchIpPrefixListLine
             || rmMatch instanceof RouteMapMatchIpv6AccessListLine
@@ -2711,11 +2711,14 @@ public final class CiscoConfiguration extends VendorConfiguration {
       clauses.put(clauseNumber, ifExpr);
       ifExpr.setComment(clausePolicyName);
       ifExpr.setGuard(conj);
-      ifExpr.setText(clauseText + matchStringBuilder);
       List<Statement> matchStatements = ifExpr.getTrueStatements();
+      StringBuilder setStringBuilder = new StringBuilder();
       for (RouteMapSetLine rmSet : rmClause.getSetList()) {
         rmSet.applyTo(matchStatements, this, c, _w);
+        setStringBuilder.append("\n").append(rmSet.getText());
       }
+      ifExpr.setText(clauseText + matchStringBuilder + setStringBuilder);
+      ifExpr.setLineNumbers(rmClause.getLineNumbers());
       switch (rmClause.getAction()) {
         case PERMIT:
           matchStatements.add(Statements.ReturnTrue.toStaticStatement());

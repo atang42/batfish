@@ -192,7 +192,9 @@ public class If extends Statement {
     } else if (simpleTrueStatements.isEmpty() && simpleFalseStatements.isEmpty()) {
       _simplified = Collections.emptyList();
     } else {
-      If simple = new If(getComment(), simpleGuard, simpleTrueStatements, simpleFalseStatements, getText());
+      If simple =
+          new If(getComment(), simpleGuard, simpleTrueStatements, simpleFalseStatements, getText());
+      simple.setLineNumbers(getLineNumbers());
       _simplified = ImmutableList.of(simple);
       simple._simplified = _simplified;
     }

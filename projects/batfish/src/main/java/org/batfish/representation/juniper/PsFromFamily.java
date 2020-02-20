@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.Set;
 import javax.annotation.Nonnull;
 import org.batfish.common.VendorConversionException;
 import org.batfish.common.Warnings;
@@ -13,8 +14,8 @@ public class PsFromFamily extends PsFrom {
 
   private final AddressFamily _family;
 
-  public PsFromFamily(@Nonnull AddressFamily family, String text) {
-    super(text);
+  public PsFromFamily(@Nonnull AddressFamily family, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _family = family;
   }
 

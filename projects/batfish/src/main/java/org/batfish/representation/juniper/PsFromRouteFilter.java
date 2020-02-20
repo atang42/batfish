@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.Set;
 import org.batfish.common.VendorConversionException;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
@@ -19,8 +20,8 @@ public final class PsFromRouteFilter extends PsFrom {
 
   private String _routeFilterName;
 
-  public PsFromRouteFilter(String routeFilterName, String text) {
-    super(text);
+  public PsFromRouteFilter(String routeFilterName, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _routeFilterName = routeFilterName;
   }
 

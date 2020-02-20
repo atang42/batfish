@@ -3,6 +3,9 @@ package org.batfish.representation.cisco;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import org.batfish.datamodel.LineAction;
 
 public class RouteMapClause implements Serializable {
@@ -23,13 +26,16 @@ public class RouteMapClause implements Serializable {
 
   private String _text;
 
-  public RouteMapClause(LineAction action, String name, int num, String text) {
+  private SortedSet<Integer> _lineNums;
+
+  public RouteMapClause(LineAction action, String name, int num, String text, Set<Integer> lineNums) {
     _action = action;
     _mapName = name;
     _seqNum = num;
     _matchList = new ArrayList<>();
     _setList = new ArrayList<>();
     _text = text;
+    _lineNums = new TreeSet<>(lineNums);
   }
 
   public void addMatchLine(RouteMapMatchLine line) {
@@ -82,5 +88,9 @@ public class RouteMapClause implements Serializable {
 
   public void setText(String text) {
     this._text = text;
+  }
+
+  public SortedSet<Integer> getLineNumbers() {
+    return _lineNums;
   }
 }

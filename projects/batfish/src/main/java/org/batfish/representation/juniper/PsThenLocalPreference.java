@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.List;
+import java.util.Set;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
@@ -13,8 +14,8 @@ public final class PsThenLocalPreference extends PsThen {
 
   private final long _localPreference;
 
-  public PsThenLocalPreference(long localPreference, String text) {
-    super(text);
+  public PsThenLocalPreference(long localPreference, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _localPreference = localPreference;
   }
 

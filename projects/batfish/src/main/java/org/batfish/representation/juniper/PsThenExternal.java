@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.List;
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ospf.OspfMetricType;
@@ -12,8 +13,8 @@ public final class PsThenExternal extends PsThen {
 
   private final OspfMetricType _type;
 
-  public PsThenExternal(OspfMetricType type, String text) {
-    super(text);
+  public PsThenExternal(OspfMetricType type, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _type = type;
   }
 

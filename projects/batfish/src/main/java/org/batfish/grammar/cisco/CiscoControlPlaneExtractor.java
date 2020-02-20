@@ -287,6 +287,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.antlr.v4.runtime.ParserRuleContext;
@@ -3045,8 +3046,10 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     int num = toInteger(ctx.num);
     LineAction action = toLineAction(ctx.rmt);
     RouteMapClause clause = _currentRouteMap.getClauses().get(num);
+    String text = getFullText(ctx).trim();
+    Set<Integer> lineNums = getLineNums(ctx);
     if (clause == null) {
-      clause = new RouteMapClause(action, name, num, getFullText(ctx).trim());
+      clause = new RouteMapClause(action, name, num, text, lineNums);
       routeMap.getClauses().put(num, clause);
     } else {
       warn(
@@ -6154,7 +6157,16 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
       track = toInteger(ctx.track);
     }
     StaticRoute route =
-        new StaticRoute(prefix, nextHopIp, nextHopInterface, distance, tag, track, permanent);
+        new StaticRoute(
+            prefix,
+            nextHopIp,
+            nextHopInterface,
+            distance,
+            tag,
+            track,
+            permanent,
+            "ip route " + getFullText(ctx).trim(),
+            getLineNums(ctx));
     currentVrf().getStaticRoutes().add(route);
   }
 
@@ -7978,7 +7990,16 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     }
 
     StaticRoute route =
-        new StaticRoute(prefix, nextHopIp, nextHopInterface, distance, null, track, false);
+        new StaticRoute(
+            prefix,
+            nextHopIp,
+            nextHopInterface,
+            distance,
+            null,
+            track,
+            false,
+            "ip route " + getFullText(ctx).trim(),
+            getLineNums(ctx));
     currentVrf().getStaticRoutes().add(route);
   }
 
@@ -8081,7 +8102,16 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
         // TODO: handle named instead of numbered track
       }
       StaticRoute route =
-          new StaticRoute(prefix, nextHopIp, nextHopInterface, distance, tag, track, permanent);
+          new StaticRoute(
+              prefix,
+              nextHopIp,
+              nextHopInterface,
+              distance,
+              tag,
+              track,
+              permanent,
+              "ip route " + getFullText(ctx).trim(),
+              getLineNums(ctx));
       currentVrf().getStaticRoutes().add(route);
     } else if (ctx.prefix6 != null) {
       // TODO: ipv6 static route

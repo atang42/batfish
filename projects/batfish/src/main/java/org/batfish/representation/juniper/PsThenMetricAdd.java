@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.List;
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.IncrementMetric;
@@ -12,8 +13,8 @@ public final class PsThenMetricAdd extends PsThen {
 
   private final long _metric;
 
-  public PsThenMetricAdd(long metric, String text) {
-    super(text);
+  public PsThenMetricAdd(long metric, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _metric = metric;
   }
 

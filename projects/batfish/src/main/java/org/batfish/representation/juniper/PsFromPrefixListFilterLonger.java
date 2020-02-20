@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.LineAction;
@@ -18,8 +19,8 @@ public final class PsFromPrefixListFilterLonger extends PsFrom {
 
   private String _prefixList;
 
-  public PsFromPrefixListFilterLonger(String prefixList, String text) {
-    super(text);
+  public PsFromPrefixListFilterLonger(String prefixList, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _prefixList = prefixList;
   }
 

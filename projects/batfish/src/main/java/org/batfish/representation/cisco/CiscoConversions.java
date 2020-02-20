@@ -1494,6 +1494,7 @@ public class CiscoConversions {
         .setAdministrativeCost(staticRoute.getDistance())
         .setTag(firstNonNull(staticRoute.getTag(), -1L))
         .setText(staticRoute.getText())
+        .setLineNumbers(staticRoute.getLineNumbers())
         .build();
   }
 

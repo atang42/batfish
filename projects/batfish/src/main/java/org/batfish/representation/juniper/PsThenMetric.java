@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.List;
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.LiteralLong;
@@ -11,8 +12,8 @@ public final class PsThenMetric extends PsThen {
 
   private final long _metric;
 
-  public PsThenMetric(long metric, String text) {
-    super(text);
+  public PsThenMetric(long metric, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _metric = metric;
   }
 

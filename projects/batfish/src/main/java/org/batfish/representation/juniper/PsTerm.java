@@ -3,6 +3,8 @@ package org.batfish.representation.juniper;
 import java.io.Serializable;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 public final class PsTerm implements Serializable {
 
@@ -35,16 +37,31 @@ public final class PsTerm implements Serializable {
   public String getText() {
     StringBuilder builder = new StringBuilder();
     builder.append(getName()).append(System.lineSeparator());
-    builder.append("FROM:").append(System.lineSeparator());
-    builder.append("\t")
-        .append(getFroms().getText()
-            .replace(System.lineSeparator(), System.lineSeparator() + "\t")
-            .trim())
+    builder.append(indent(_froms.getText()))
         .append(System.lineSeparator());
-    builder.append("THEN:").append(System.lineSeparator());
-    getThens().forEach(then -> builder.append("\t")
+
+    StringBuilder thenBuilder = new StringBuilder();
+    if (_thens.size() == 1) {
+      thenBuilder.append("then ");
+      getThens().forEach(then -> thenBuilder.append(then.getText()).append("\n"));
+    } else if (_thens.size() > 1) {
+      thenBuilder.append("then {\n");
+      getThens().forEach(then -> thenBuilder.append("\t")
         .append(then.getText())
-        .append(System.lineSeparator()));
+        .append("\n"));
+      thenBuilder.append("}");
+    }
+    builder.append(indent(thenBuilder.toString()));
     return builder.toString();
+  }
+
+  public SortedSet<Integer> getLineNumbers() {
+    SortedSet<Integer> result = new TreeSet<>(_froms.getLineNumbers());
+    _thens.forEach(then -> result.addAll(then.getLineNumbers()));
+    return result;
+  }
+
+  private String indent(String s) {
+    return "\t" + s.replaceAll("\n", "\n\t");
   }
 }

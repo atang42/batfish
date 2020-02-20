@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
@@ -12,8 +13,8 @@ public final class PsFromPrefixList extends PsFrom {
 
   private final String _name;
 
-  public PsFromPrefixList(String name, String text) {
-    super(text);
+  public PsFromPrefixList(String name, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _name = name;
   }
 

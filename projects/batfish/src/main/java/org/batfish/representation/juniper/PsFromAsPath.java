@@ -2,6 +2,7 @@ package org.batfish.representation.juniper;
 
 import com.google.common.annotations.VisibleForTesting;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
@@ -16,8 +17,8 @@ public final class PsFromAsPath extends PsFrom {
 
   private String _asPathName;
 
-  public PsFromAsPath(String asPathName, String text) {
-    super(text);
+  public PsFromAsPath(String asPathName, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _asPathName = asPathName;
   }
 

@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.Set;
+import java.util.TreeSet;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
@@ -13,7 +14,8 @@ public final class PsFromPolicyStatementConjunction extends PsFrom {
   private final Set<String> _conjuncts;
 
   public PsFromPolicyStatementConjunction(Set<String> conjuncts) {
-    super("from policy statement conjunction");
+    // TODO: Add support line numbers
+    super("from policy statement conjunction", new TreeSet<>());
     _conjuncts = conjuncts;
   }
 

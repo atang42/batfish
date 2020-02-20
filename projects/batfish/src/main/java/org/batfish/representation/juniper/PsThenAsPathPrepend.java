@@ -2,6 +2,7 @@ package org.batfish.representation.juniper;
 
 import com.google.common.collect.ImmutableList;
 import java.util.List;
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.AsExpr;
@@ -15,8 +16,8 @@ public final class PsThenAsPathPrepend extends PsThen {
 
   private final List<Long> _asPath;
 
-  public PsThenAsPathPrepend(Iterable<Long> asPath, String text) {
-    super(text);
+  public PsThenAsPathPrepend(Iterable<Long> asPath, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _asPath = ImmutableList.copyOf(asPath);
   }
 

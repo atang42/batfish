@@ -1,8 +1,12 @@
 package org.batfish.representation.juniper;
 
+import com.google.common.collect.Iterables;
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -28,7 +32,8 @@ public final class PsFroms implements Serializable {
   private final Set<PsFromRouteFilter> _fromRouteFilters;
   private final Set<PsFromTag> _fromTags;
   private PsFromUnsupported _fromUnsupported;
-  private String _text;
+
+  private SortedSet<Integer> _lineNums;
 
   PsFroms() {
     _fromAsPaths = new LinkedHashSet<>();
@@ -42,76 +47,64 @@ public final class PsFroms implements Serializable {
     _fromProtocols = new LinkedHashSet<>();
     _fromRouteFilters = new LinkedHashSet<>();
     _fromTags = new LinkedHashSet<>();
-    _text = "";
   }
 
   public void addFromAsPath(@Nonnull PsFromAsPath fromAsPath) {
     _atLeastOneFrom = true;
     _fromAsPaths.add(fromAsPath);
-    _text += fromAsPath.getText() + System.lineSeparator();
   }
 
   public void addFromCommunity(@Nonnull PsFromCommunity fromCommunity) {
     _atLeastOneFrom = true;
     _fromCommunities.add(fromCommunity);
-    _text += fromCommunity.getText() + System.lineSeparator();
   }
 
   public void addFromInterface(@Nonnull PsFromInterface fromInterface) {
     _atLeastOneFrom = true;
     _fromInterfaces.add(fromInterface);
-    _text += fromInterface.getText() + System.lineSeparator();
   }
 
   public void addFromPolicyStatement(@Nonnull PsFromPolicyStatement fromPolicyStatement) {
     _atLeastOneFrom = true;
     _fromPolicyStatements.add(fromPolicyStatement);
-    _text += fromPolicyStatement.getText() + System.lineSeparator();
   }
 
   public void addFromPolicyStatementConjunction(
       @Nonnull PsFromPolicyStatementConjunction fromPolicyStatementConjunction) {
     _atLeastOneFrom = true;
     _fromPolicyStatementConjunctions.add(fromPolicyStatementConjunction);
-    _text += fromPolicyStatementConjunction.getText() + System.lineSeparator();
   }
 
   public void addFromPrefixList(@Nonnull PsFromPrefixList fromPrefixList) {
     _atLeastOneFrom = true;
     _fromPrefixLists.add(fromPrefixList);
-    _text += fromPrefixList.getText() + System.lineSeparator();
   }
 
   public void addFromPrefixListFilterLonger(
       @Nonnull PsFromPrefixListFilterLonger fromPrefixListFilterLonger) {
     _atLeastOneFrom = true;
     _fromPrefixListFilterLongers.add(fromPrefixListFilterLonger);
-    _text += fromPrefixListFilterLonger.getText() + System.lineSeparator();
   }
 
   public void addFromPrefixListFilterOrLonger(
       @Nonnull PsFromPrefixListFilterOrLonger fromPrefixListFilterOrLonger) {
     _atLeastOneFrom = true;
     _fromPrefixListFilterOrLongers.add(fromPrefixListFilterOrLonger);
-    _text += fromPrefixListFilterOrLonger.getText() + System.lineSeparator();
   }
 
   public void addFromProtocol(@Nonnull PsFromProtocol fromProtocol) {
     _atLeastOneFrom = true;
     _fromProtocols.add(fromProtocol);
-    _text += fromProtocol.getText() + System.lineSeparator();
   }
 
   public void addFromRouteFilter(@Nonnull PsFromRouteFilter fromRouteFilter) {
     _atLeastOneFrom = true;
     _fromRouteFilters.add(fromRouteFilter);
-    _text += fromRouteFilter.getText() + System.lineSeparator();
   }
 
   public void addFromTag(@Nonnull PsFromTag fromTag) {
     _atLeastOneFrom = true;
     _fromTags.add(fromTag);
-    _text += fromTag.getText() + System.lineSeparator();
   }
 
   @Nonnull
@@ -205,40 +198,87 @@ public final class PsFroms implements Serializable {
   public void setFromColor(@Nonnull PsFromColor fromColor) {
     _atLeastOneFrom = true;
     _fromColor = fromColor;
-    _text += fromColor.getText() + System.lineSeparator();
   }
 
   public void setFromFamily(@Nonnull PsFromFamily fromFamily) {
     _atLeastOneFrom = true;
     _fromFamily = fromFamily;
-    _text += fromFamily.getText() + System.lineSeparator();
   }
 
   public void setFromInstance(@Nonnull PsFromInstance fromInstance) {
     _atLeastOneFrom = true;
     _fromInstance = fromInstance;
-    _text += fromInstance.getText() + System.lineSeparator();
   }
 
   public void setFromLocalPreference(@Nonnull PsFromLocalPreference fromLocalPreference) {
     _atLeastOneFrom = true;
     _fromLocalPreference = fromLocalPreference;
-    _text += fromLocalPreference.getText() + System.lineSeparator();
   }
 
   public void setFromMetric(@Nonnull PsFromMetric fromMetric) {
     _atLeastOneFrom = true;
     _fromMetric = fromMetric;
-    _text += fromMetric.getText() + System.lineSeparator();
   }
 
   public void setFromUnsupported(@Nonnull PsFromUnsupported fromUnsupported) {
     _atLeastOneFrom = true;
     _fromUnsupported = fromUnsupported;
-    _text += fromUnsupported.getText() + System.lineSeparator();
   }
 
   public String getText() {
-    return _text;
+    if (hasAtLeastOneFrom()) {
+      Iterable<PsFrom> fromIterable =
+          Iterables.concat(
+              Arrays.asList(_fromColor, _fromFamily, _fromInstance, _fromMetric),
+              _fromAsPaths,
+              _fromCommunities,
+              _fromInterfaces,
+              _fromPolicyStatements,
+              _fromPolicyStatementConjunctions,
+              _fromPrefixLists,
+              _fromPrefixListFilterLongers,
+              _fromPrefixListFilterOrLongers,
+              _fromProtocols,
+              _fromRouteFilters,
+              _fromTags);
+      StringBuilder builder = new StringBuilder();
+      int count = 0;
+      for (PsFrom from : fromIterable) {
+        if (from != null) {
+          count++;
+          builder.append(from.getText()).append("\n");
+        }
+      }
+      if (count == 1) {
+        return "from " + builder.toString().trim();
+      }
+      return String.format("from {\n\t%s}", builder);
+    }
+    return "";
+  }
+
+  public SortedSet<Integer> getLineNumbers() {
+    Iterable<PsFrom> fromIterable =
+        Iterables.concat(
+            Arrays.asList(_fromColor, _fromFamily, _fromInstance, _fromMetric),
+            _fromAsPaths,
+            _fromCommunities,
+            _fromInterfaces,
+            _fromPolicyStatements,
+            _fromPolicyStatementConjunctions,
+            _fromPrefixLists,
+            _fromPrefixListFilterLongers,
+            _fromPrefixListFilterOrLongers,
+            _fromProtocols,
+            _fromRouteFilters,
+            _fromTags);
+    SortedSet<Integer> lineNumbers = new TreeSet<>();
+    fromIterable.forEach(
+        from -> {
+          if (from != null) {
+            lineNumbers.addAll(from.getLineNumbers());
+          }
+        });
+    return lineNumbers;
   }
 }

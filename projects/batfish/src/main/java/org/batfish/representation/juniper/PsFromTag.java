@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
@@ -12,8 +13,8 @@ public class PsFromTag extends PsFrom {
 
   private final int _tag;
 
-  public PsFromTag(int tag, String text) {
-    super(text);
+  public PsFromTag(int tag, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _tag = tag;
   }
 

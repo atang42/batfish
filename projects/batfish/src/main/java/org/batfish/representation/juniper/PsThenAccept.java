@@ -2,6 +2,7 @@ package org.batfish.representation.juniper;
 
 import com.google.common.collect.ImmutableList;
 import java.util.List;
+import java.util.TreeSet;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.BooleanExprs;
@@ -14,7 +15,8 @@ public final class PsThenAccept extends PsThen {
   public static final PsThenAccept INSTANCE = new PsThenAccept();
 
   private PsThenAccept() {
-    super("");
+    // TODO: Add line numbers for accept
+    super("", new TreeSet<>());
   }
 
   @Override

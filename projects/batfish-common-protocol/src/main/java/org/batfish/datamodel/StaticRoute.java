@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Comparator;
 import java.util.Objects;
+import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -32,6 +33,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
   @Nonnull private final Ip _nextHopIp;
   @Nullable private String _nextVrf;
   @Nullable private String _text;
+  @Nullable private Set<Integer> _lineNums;
 
   private transient int _hashCode;
 
@@ -44,7 +46,8 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
       @JsonProperty(PROP_ADMINISTRATIVE_COST) int administrativeCost,
       @JsonProperty(PROP_METRIC) long metric,
       @JsonProperty(PROP_TAG) long tag,
-      @JsonProperty(PROP_TEXT) String text) {
+      @JsonProperty(PROP_TEXT) String text,
+      @JsonProperty(PROP_LINE_NUMBERS) Set<Integer> lineNums) {
     return new StaticRoute(
         requireNonNull(network),
         nextHopIp,
@@ -54,6 +57,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
         metric,
         tag,
         text,
+        lineNums,
         false,
         false);
   }
@@ -67,6 +71,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
       long metric,
       long tag,
       String text,
+      Set<Integer> lineNums,
       boolean nonForwarding,
       boolean nonRouting) {
     super(network, administrativeCost, tag, nonRouting, nonForwarding);
@@ -75,6 +80,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
     _nextHopIp = firstNonNull(nextHopIp, Route.UNSET_ROUTE_NEXT_HOP_IP);
     _nextVrf = nextVrf;
     _text = text;
+    _lineNums = lineNums;
   }
 
   @Override
@@ -112,6 +118,12 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
     return _text;
   }
 
+  @Nullable
+  @JsonProperty(PROP_LINE_NUMBERS)
+  public Set<Integer> getLineNumbers() {
+    return _lineNums;
+  }
+
   @Override
   public RoutingProtocol getProtocol() {
     return RoutingProtocol.STATIC;
@@ -134,6 +146,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
     private String _nextHopInterface = Route.UNSET_NEXT_HOP_INTERFACE;
     @Nullable private String _nextVrf;
     @Nullable private String _text;
+    @Nullable private Set<Integer> _lineNums;
 
     private Builder() {
       // Tmp hack until parent builder is fixed and doesn't default to primitives
@@ -156,6 +169,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
           getMetric(),
           getTag(),
           _text,
+          _lineNums,
           getNonForwarding(),
           getNonRouting());
     }
@@ -190,6 +204,12 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
       _text = text;
       return this;
     }
+
+    @Nonnull
+    public Builder setLineNumbers(@Nullable Set<Integer> lineNumbers) {
+      _lineNums = lineNumbers;
+      return this;
+    }
   }
 
   /////// Keep COMPARATOR, #toBuilder, #equals, and #hashCode in sync ////////
@@ -216,6 +236,7 @@ public class StaticRoute extends AbstractRoute implements Comparable<StaticRoute
         .setMetric(_metric)
         .setTag(_tag)
         .setText(_text)
+        .setLineNumbers(_lineNums)
         .setAdmin(getAdministrativeCost())
         .setNonRouting(getNonRouting())
         .setNonForwarding(getNonForwarding());

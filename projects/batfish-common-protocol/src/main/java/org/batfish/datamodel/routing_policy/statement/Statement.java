@@ -5,12 +5,13 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.google.common.collect.ImmutableList;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.routing_policy.Environment;
@@ -42,9 +43,11 @@ import org.batfish.datamodel.routing_policy.RoutingPolicy;
 public abstract class Statement implements Serializable {
   private static final String PROP_COMMENT = "comment";
   private static final String PROP_TEXT = "text";
+  private static final String PROP_LINE_NUMBERS = "lineNumbers";
 
-  private String _comment;
-  private String _text;
+  @Nullable private String _comment;
+  @Nullable private String _text;
+  @Nullable private List<Integer> _lineNums;
 
   protected transient List<Statement> _simplified;
 
@@ -66,6 +69,7 @@ public abstract class Statement implements Serializable {
 
   public abstract Result execute(Environment environment);
 
+  @Nullable
   @JsonProperty(PROP_COMMENT)
   public final String getComment() {
     return _comment;
@@ -79,6 +83,7 @@ public abstract class Statement implements Serializable {
     _comment = comment;
   }
 
+  @Nullable
   @JsonProperty(PROP_TEXT)
   public final String getText() {
     return _text;
@@ -94,6 +99,19 @@ public abstract class Statement implements Serializable {
       _simplified = ImmutableList.of(this);
     }
     return _simplified;
+  }
+
+  @Nullable
+  @JsonProperty(PROP_LINE_NUMBERS)
+  public final List<Integer> getLineNumbers() {
+    return _lineNums;
+  }
+
+  @JsonProperty(PROP_LINE_NUMBERS)
+  public final void setLineNumbers(@Nullable Collection<Integer> lineNumbers) {
+    if (lineNumbers != null) {
+      _lineNums = new ArrayList<>(lineNumbers);
+    }
   }
 
   @Override

@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
@@ -10,8 +11,8 @@ public final class PsFromPolicyStatement extends PsFrom {
 
   private final String _policyStatement;
 
-  public PsFromPolicyStatement(String policyStatement, String text) {
-    super(text);
+  public PsFromPolicyStatement(String policyStatement, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _policyStatement = policyStatement;
   }
 

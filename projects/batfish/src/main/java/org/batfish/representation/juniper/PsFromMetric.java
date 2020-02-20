@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
@@ -12,8 +13,8 @@ public class PsFromMetric extends PsFrom {
 
   private final int _metric;
 
-  public PsFromMetric(int metric, String text) {
-    super(text);
+  public PsFromMetric(int metric, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _metric = metric;
   }
 

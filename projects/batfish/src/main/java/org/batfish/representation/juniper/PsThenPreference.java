@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.List;
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.routing_policy.expr.LiteralInt;
@@ -15,8 +16,8 @@ public final class PsThenPreference extends PsThen {
 
   private final int _preference;
 
-  public PsThenPreference(int preference, String text) {
-    super(text);
+  public PsThenPreference(int preference, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _preference = preference;
   }
 

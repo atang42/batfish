@@ -1,5 +1,6 @@
 package org.batfish.representation.juniper;
 
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.RoutingProtocol;
@@ -11,8 +12,8 @@ public final class PsFromProtocol extends PsFrom {
 
   private final RoutingProtocol _protocol;
 
-  public PsFromProtocol(RoutingProtocol protocol, String text) {
-    super(text);
+  public PsFromProtocol(RoutingProtocol protocol, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _protocol = protocol;
   }
 

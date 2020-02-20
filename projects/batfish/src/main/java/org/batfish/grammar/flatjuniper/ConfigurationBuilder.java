@@ -110,6 +110,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.antlr.v4.runtime.ParserRuleContext;
@@ -810,6 +813,14 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   private int getLine(Token t) {
     return _parser.getLine(t);
   }
+
+  /** Return original line numbers from a context **/
+  private Set<Integer> getLines(ParserRuleContext ctx) {
+    int start = getLine(ctx.getStart());
+    int end = getLine(ctx.getStop());
+    return IntStream.rangeClosed(start, end).boxed().collect(Collectors.toSet());
+  }
+
 
   public static NamedPort getNamedPort(PortContext ctx) {
     if (ctx.AFS() != null) {
@@ -2740,10 +2751,12 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
     _currentRouteFilter = _termRouteFilters.get(_currentPsTerm);
     if (_currentRouteFilter == null) {
       String rfName = _currentPolicyStatement.getName() + ":" + _currentPsTerm.getName();
+      String text = getFullText(ctx);
+      Set<Integer> lineNums = getLines(ctx);
       _currentRouteFilter = new RouteFilter();
       _termRouteFilters.put(_currentPsTerm, _currentRouteFilter);
       _currentLogicalSystem.getRouteFilters().put(rfName, _currentRouteFilter);
-      PsFromRouteFilter from = new PsFromRouteFilter(rfName, getFullText(ctx));
+      PsFromRouteFilter from = new PsFromRouteFilter(rfName, text, lineNums);
       _currentPsTerm.getFroms().addFromRouteFilter(from);
     }
     if (ctx.IP_PREFIX() != null) {
@@ -2989,6 +3002,8 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
       Prefix prefix = Prefix.parse(ctx.IP_PREFIX().getText());
       Map<Prefix, StaticRoute> staticRoutes = _currentRib.getStaticRoutes();
       _currentStaticRoute = staticRoutes.computeIfAbsent(prefix, StaticRoute::new);
+      _currentStaticRoute.addText(getFullText(ctx));
+      _currentStaticRoute.addLineNumbers(getLines(ctx));
     } else if (ctx.IPV6_PREFIX() != null) {
       _currentStaticRoute = DUMMY_STATIC_ROUTE;
     }
@@ -4808,7 +4823,9 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   @Override
   public void exitPopsf_as_path(Popsf_as_pathContext ctx) {
     String name = ctx.name.getText();
-    _currentPsTerm.getFroms().addFromAsPath(new PsFromAsPath(name, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().addFromAsPath(new PsFromAsPath(name, text, lineNums));
     _configuration.referenceStructure(
         AS_PATH, name, POLICY_STATEMENT_FROM_AS_PATH, getLine(ctx.name.getStart()));
   }
@@ -4825,21 +4842,27 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   @Override
   public void exitPopsf_color(Popsf_colorContext ctx) {
     int color = toInt(ctx.color);
-    _currentPsTerm.getFroms().setFromColor(new PsFromColor(color, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().setFromColor(new PsFromColor(color, text, lineNums));
   }
 
   @Override
   public void exitPopsf_community(Popsf_communityContext ctx) {
     String name = ctx.name.getText();
-    _currentPsTerm.getFroms().addFromCommunity(new PsFromCommunity(name, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().addFromCommunity(new PsFromCommunity(name, text, lineNums));
   }
 
   @Override
   public void exitPopsf_family(Popsf_familyContext ctx) {
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
     if (ctx.INET() != null) {
-      _currentPsTerm.getFroms().setFromFamily(new PsFromFamily(AddressFamily.IPV4, getFullText(ctx)));
+      _currentPsTerm.getFroms().setFromFamily(new PsFromFamily(AddressFamily.IPV4, text, lineNums));
     } else if (ctx.INET6() != null) {
-      _currentPsTerm.getFroms().setFromFamily(new PsFromFamily(AddressFamily.IPV6, getFullText(ctx)));
+      _currentPsTerm.getFroms().setFromFamily(new PsFromFamily(AddressFamily.IPV6, text, lineNums));
     } else {
       _w.redFlag(
           String.format(
@@ -4852,18 +4875,22 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   @Override
   public void exitPopsf_instance(Popsf_instanceContext ctx) {
     String instanceName = ctx.name.getText();
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
     _configuration.referenceStructure(
         ROUTING_INSTANCE,
         instanceName,
         POLICY_STATEMENT_FROM_INSTANCE,
         getLine(ctx.name.getStart()));
-    _currentPsTerm.getFroms().setFromInstance(new PsFromInstance(instanceName, getFullText(ctx)));
+    _currentPsTerm.getFroms().setFromInstance(new PsFromInstance(instanceName, text, lineNums));
   }
 
   @Override
   public void exitPopsf_interface(Popsf_interfaceContext ctx) {
     String ifaceName = getInterfaceFullName(ctx.id);
-    _currentPsTerm.getFroms().addFromInterface(new PsFromInterface(ifaceName, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().addFromInterface(new PsFromInterface(ifaceName, text, lineNums));
     _configuration.referenceStructure(
         INTERFACE, ifaceName, POLICY_STATEMENT_FROM_INTERFACE, getLine(ctx.id.getStop()));
   }
@@ -4871,25 +4898,33 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   @Override
   public void exitPopsf_local_preference(Popsf_local_preferenceContext ctx) {
     int localPreference = toInt(ctx.localpref);
-    _currentPsTerm.getFroms().setFromLocalPreference(new PsFromLocalPreference(localPreference, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().setFromLocalPreference(new PsFromLocalPreference(localPreference, text, lineNums));
   }
 
   @Override
   public void exitPopsf_metric(Popsf_metricContext ctx) {
     int metric = toInt(ctx.metric);
-    _currentPsTerm.getFroms().setFromMetric(new PsFromMetric(metric, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().setFromMetric(new PsFromMetric(metric, text, lineNums));
   }
 
   @Override
   public void exitPopsf_policy(Popsf_policyContext ctx) {
     String policyName = toComplexPolicyStatement(ctx.policy_expression(), POLICY_STATEMENT_POLICY);
-    _currentPsTerm.getFroms().addFromPolicyStatement(new PsFromPolicyStatement(policyName, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().addFromPolicyStatement(new PsFromPolicyStatement(policyName, text, lineNums));
   }
 
   @Override
   public void exitPopsf_prefix_list(Popsf_prefix_listContext ctx) {
     String name = ctx.name.getText();
-    _currentPsTerm.getFroms().addFromPrefixList(new PsFromPrefixList(name, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().addFromPrefixList(new PsFromPrefixList(name, text, lineNums));
     _configuration.referenceStructure(
         PREFIX_LIST, name, POLICY_STATEMENT_PREFIX_LIST, getLine(ctx.name.start));
   }
@@ -4897,13 +4932,15 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   @Override
   public void exitPopsf_prefix_list_filter(Popsf_prefix_list_filterContext ctx) {
     String name = ctx.name.getText();
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
     PsFroms currentFroms = _currentPsTerm.getFroms();
     if (ctx.popsfpl_exact() != null) {
-      currentFroms.addFromPrefixList(new PsFromPrefixList(name, getFullText(ctx)));
+      currentFroms.addFromPrefixList(new PsFromPrefixList(name, text, lineNums));
     } else if (ctx.popsfpl_longer() != null) {
-      currentFroms.addFromPrefixListFilterLonger(new PsFromPrefixListFilterLonger(name, getFullText(ctx)));
+      currentFroms.addFromPrefixListFilterLonger(new PsFromPrefixListFilterLonger(name, text, lineNums));
     } else if (ctx.popsfpl_orlonger() != null) {
-      currentFroms.addFromPrefixListFilterOrLonger(new PsFromPrefixListFilterOrLonger(name, getFullText(ctx)));
+      currentFroms.addFromPrefixListFilterOrLonger(new PsFromPrefixListFilterOrLonger(name, text, lineNums));
     } else {
       throw new BatfishException("Invalid prefix-list-filter length specification");
     }
@@ -4914,7 +4951,9 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   @Override
   public void exitPopsf_protocol(Popsf_protocolContext ctx) {
     RoutingProtocol protocol = toRoutingProtocol(ctx.protocol);
-    _currentPsTerm.getFroms().addFromProtocol(new PsFromProtocol(protocol, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().addFromProtocol(new PsFromProtocol(protocol, text, lineNums));
   }
 
   @Override
@@ -4938,7 +4977,9 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   @Override
   public void exitPopsf_tag(Popsf_tagContext ctx) {
     int tag = toInt(ctx.DEC());
-    _currentPsTerm.getFroms().addFromTag(new PsFromTag(tag, getFullText(ctx)));
+    String text = getFullText(ctx);
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsTerm.getFroms().addFromTag(new PsFromTag(tag, text, lineNums));
   }
 
   @Override
@@ -4955,47 +4996,56 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   public void exitPopst_as_path_prepend(Popst_as_path_prependContext ctx) {
     List<Long> asPaths =
         ctx.bgp_asn().stream().map(this::toAsNum).collect(ImmutableList.toImmutableList());
-    _currentPsThens.add(new PsThenAsPathPrepend(asPaths, getFullText(ctx)));
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsThens.add(new PsThenAsPathPrepend(asPaths, getFullText(ctx), lineNums));
   }
 
   @Override
   public void exitPopst_community_add(Popst_community_addContext ctx) {
     String name = ctx.name.getText();
-    PsThenCommunityAdd then = new PsThenCommunityAdd(name, _configuration, getFullText(ctx));
+    Set<Integer> lineNums = getLines(ctx);
+    PsThenCommunityAdd then = new PsThenCommunityAdd(name, _configuration, getFullText(ctx),
+        lineNums);
     _currentPsThens.add(then);
   }
 
   @Override
   public void exitPopst_community_delete(Popst_community_deleteContext ctx) {
     String name = ctx.name.getText();
-    PsThenCommunityDelete then = new PsThenCommunityDelete(name, getFullText(ctx));
+    Set<Integer> lineNums = getLines(ctx);
+    PsThenCommunityDelete then = new PsThenCommunityDelete(name, getFullText(ctx), lineNums);
     _currentPsThens.add(then);
   }
 
   @Override
   public void exitPopst_community_set(Popst_community_setContext ctx) {
     String name = ctx.name.getText();
-    PsThenCommunitySet then = new PsThenCommunitySet(name, _configuration, getFullText(ctx));
+    Set<Integer> lineNums = getLines(ctx);
+    PsThenCommunitySet then = new PsThenCommunitySet(name, _configuration, getFullText(ctx),
+        lineNums);
     _currentPsThens.add(then);
   }
 
   @Override
   public void exitPopst_default_action_accept(Popst_default_action_acceptContext ctx) {
-    _currentPsThens.add(new PsThenDefaultActionAccept(getFullText(ctx)));
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsThens.add(new PsThenDefaultActionAccept(getFullText(ctx), lineNums));
   }
 
   @Override
   public void exitPopst_default_action_reject(Popst_default_action_rejectContext ctx) {
-    _currentPsThens.add(new PsThenDefaultActionReject(getFullText(ctx)));
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsThens.add(new PsThenDefaultActionReject(getFullText(ctx), lineNums));
   }
 
   @Override
   public void exitPopst_external(Popst_externalContext ctx) {
     int type = toInt(ctx.DEC());
+    Set<Integer> lineNums = getLines(ctx);
     if (type == 1) {
-      _currentPsThens.add(new PsThenExternal(OspfMetricType.E1, getFullText(ctx)));
+      _currentPsThens.add(new PsThenExternal(OspfMetricType.E1, getFullText(ctx), lineNums));
     } else if (type == 2) {
-      _currentPsThens.add(new PsThenExternal(OspfMetricType.E2, getFullText(ctx)));
+      _currentPsThens.add(new PsThenExternal(OspfMetricType.E2, getFullText(ctx), lineNums));
     } else {
       _w.redFlag(String.format("unimplemented: then %s", getFullText(ctx)));
     }
@@ -5004,29 +5054,34 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   @Override
   public void exitPopst_local_preference(Popst_local_preferenceContext ctx) {
     int localPreference = toInt(ctx.localpref);
-    PsThenLocalPreference then = new PsThenLocalPreference(localPreference, getFullText(ctx));
+    Set<Integer> lineNums = getLines(ctx);
+    PsThenLocalPreference then = new PsThenLocalPreference(localPreference, getFullText(ctx),
+        lineNums);
     _currentPsThens.add(then);
   }
 
   @Override
   public void exitPopst_metric(Popst_metricContext ctx) {
     int metric = toInt(ctx.metric);
-    PsThenMetric then = new PsThenMetric(metric, getFullText(ctx));
+    Set<Integer> lineNums = getLines(ctx);
+    PsThenMetric then = new PsThenMetric(metric, getFullText(ctx), lineNums);
     _currentPsThens.add(then);
   }
 
   @Override
   public void exitPopst_metric_add(Popst_metric_addContext ctx) {
     int metric = toInt(ctx.metric);
-    _currentPsThens.add(new PsThenMetricAdd(metric, getFullText(ctx)));
+    Set<Integer> lineNums = getLines(ctx);
+    _currentPsThens.add(new PsThenMetricAdd(metric, getFullText(ctx), lineNums));
   }
 
   @Override
   public void exitPopst_next_hop(Popst_next_hopContext ctx) {
     PsThen then;
+    Set<Integer> lineNums = getLines(ctx);
     if (ctx.IP_ADDRESS() != null) {
       Ip nextHopIp = Ip.parse(ctx.IP_ADDRESS().getText());
-      then = new PsThenNextHopIp(nextHopIp, getFullText(ctx));
+      then = new PsThenNextHopIp(nextHopIp, getFullText(ctx), lineNums);
     } else {
       todo(ctx);
       return;
@@ -5055,6 +5110,7 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
   @Override
   public void exitPopst_origin(Popst_originContext ctx) {
     OriginType origin;
+    Set<Integer> lineNums = getLines(ctx);
     if (ctx.EGP() != null) {
       origin = OriginType.EGP;
     } else if (ctx.IGP() != null) {
@@ -5065,13 +5121,14 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
       _w.redFlag(String.format("unimplemented origin type: %s", getFullText(ctx)));
       return;
     }
-    _currentPsThens.add(new PsThenOrigin(origin, getFullText(ctx)));
+    _currentPsThens.add(new PsThenOrigin(origin, getFullText(ctx), lineNums));
   }
 
   @Override
   public void exitPopst_preference(Popst_preferenceContext ctx) {
     int preference = toInt(ctx.preference);
-    PsThenPreference then = new PsThenPreference(preference, getFullText(ctx));
+    Set<Integer> lineNums = getLines(ctx);
+    PsThenPreference then = new PsThenPreference(preference, getFullText(ctx), lineNums);
     _currentPsThens.add(then);
   }
 
@@ -6362,7 +6419,7 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener {
       PolicyStatement disjunctionPolicy = new PolicyStatement(disjunctionPolicyName);
       PsTerm disjunctionPolicyTerm = disjunctionPolicy.getDefaultTerm();
       for (String disjunct : disjuncts) {
-        PsFromPolicyStatement from = new PsFromPolicyStatement(disjunct, "disjunct");
+        PsFromPolicyStatement from = new PsFromPolicyStatement(disjunct, "disjunct", new TreeSet<>());
         disjunctionPolicyTerm.getFroms().addFromPolicyStatement(from);
       }
       disjunctionPolicyTerm.getThens().add(PsThenAccept.INSTANCE);

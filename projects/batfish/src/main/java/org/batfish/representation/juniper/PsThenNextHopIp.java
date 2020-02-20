@@ -2,6 +2,7 @@ package org.batfish.representation.juniper;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
@@ -13,8 +14,8 @@ public final class PsThenNextHopIp extends PsThen {
 
   private final Ip _nextHopIp;
 
-  public PsThenNextHopIp(Ip nextHopIp, String text) {
-    super(text);
+  public PsThenNextHopIp(Ip nextHopIp, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _nextHopIp = nextHopIp;
   }
 

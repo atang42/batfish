@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.util.List;
+import java.util.Set;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.OriginType;
@@ -13,8 +14,8 @@ public final class PsThenOrigin extends PsThen {
 
   private final OriginType _originType;
 
-  public PsThenOrigin(OriginType originType, String text) {
-    super(text);
+  public PsThenOrigin(OriginType originType, String text, Set<Integer> lineNums) {
+    super(text, lineNums);
     _originType = originType;
   }
 
