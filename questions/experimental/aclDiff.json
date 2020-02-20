@@ -1,0 +1,28 @@
+{
+    "class": "org.batfish.minesweeper.question.acldiff.AclDiffQuestion",
+    "differential": false,
+    "nodes": "${nodes}",
+    "filters": "${filters}",
+    "instance": {
+        "description": "Find difference between router pairs",
+        "instanceName": "aclDiff",
+        "longDescription": "Find difference between router pairs",
+        "tags": [
+            "acl"
+        ],
+        "variables": {
+            "filters": {
+                "description": "Only evaluate filters matching this specifier",
+                "type": "string",
+                "optional": true,
+                "displayName": "filters"
+            },
+            "nodes": {
+                "description": "Only evaluate filters present on nodes matching this specifier",
+                "type": "nodeSpec",
+                "optional": true,
+                "displayName": "nodes"
+            }
+        }
+    }
+}

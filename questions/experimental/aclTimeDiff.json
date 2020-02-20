@@ -1,0 +1,28 @@
+{
+    "class": "org.batfish.minesweeper.question.acltimediff.AclTimeDiffQuestion",
+    "differential": true,
+    "nodes": "${nodes}",
+    "filters": "${filters}",
+    "instance": {
+        "description": "Find difference of a router across time",
+        "instanceName": "aclTimeDiff",
+        "longDescription": "Find difference of a router across time",
+        "tags": [
+            "acl"
+        ],
+        "variables": {
+            "filters": {
+                "description": "Only evaluate filters matching this specifier",
+                "type": "string",
+                "optional": true,
+                "displayName": "filters"
+            },
+            "nodes": {
+                "description": "Only evaluate filters present on nodes matching this specifier",
+                "type": "nodeSpec",
+                "optional": true,
+                "displayName": "nodes"
+            }
+        }
+    }
+}
