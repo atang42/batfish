@@ -2,9 +2,13 @@ package org.batfish.minesweeper.policylocalize;
 
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
@@ -20,46 +24,54 @@ import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixRange;
+import org.batfish.datamodel.RouteFilterList;
 import org.batfish.datamodel.answers.Schema;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
+import org.batfish.datamodel.ospf.OspfProcess;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.datamodel.table.ColumnMetadata;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.Row.TypedRowBuilder;
-import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.datamodel.table.TableMetadata;
 import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.Graph;
+import org.batfish.minesweeper.Protocol;
 import org.batfish.minesweeper.TransferResult;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.PolicyQuotient;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
-import org.batfish.specifier.NodeSpecifier;
-import org.batfish.specifier.SpecifierContext;
+import org.batfish.minesweeper.policylocalize.resultrepr.IncludedExcludedPrefixRanges;
+import org.batfish.minesweeper.policylocalize.resultrepr.PrefixExtractor;
 
 public class RoutePolicyDiff {
 
   private static final String COL_NEIGHBOR = "Neighbor";
-  private static final String COL_ROUTE_PREFIX = "Prefix";
+  private static final String COL_ROUTE_INCLUDED_PREFIXES = "Included_Prefixes";
+  private static final String COL_ROUTE_EXCLUDED_PREFIXES = "Excluded_Prefixes";
   private static final String COL_ROUTE_COMM = "Community";
+  private static final String COL_ROUTE_PROTOCOL = "Protocol";
   private static final String COL_NODE1 = "Node1";
   private static final String COL_FILTER1 = "Filter1";
   private static final String COL_TEXT1 = "Text1";
+  private static final String COL_LINES1 = "LINES1";
   private static final String COL_ACTION1 = "Action1";
   private static final String COL_NODE2 = "Node2";
   private static final String COL_FILTER2 = "Filter2";
   private static final String COL_TEXT2 = "Text2";
+  private static final String COL_LINES2 = "LINES2";
   private static final String COL_ACTION2 = "Action2";
   private static final String COL_BDD_BITS = "BDDBits";
 
-  private static final List<ColumnMetadata> COLUMN_METADATA =
+  public static final List<ColumnMetadata> COLUMN_METADATA =
       ImmutableList.of(
           new ColumnMetadata(COL_NEIGHBOR, Schema.STRING, "Neighbor IP", true, false),
-          new ColumnMetadata(COL_ROUTE_PREFIX, Schema.STRING, "Prefix", true, false),
+          new ColumnMetadata(COL_ROUTE_INCLUDED_PREFIXES, Schema.STRING, "Included Prefixes", true, false),
+          new ColumnMetadata(COL_ROUTE_EXCLUDED_PREFIXES, Schema.STRING, "Excluded Prefixes", true, false),
           new ColumnMetadata(COL_ROUTE_COMM, Schema.STRING, "Community", true, false),
+          new ColumnMetadata(COL_ROUTE_PROTOCOL, Schema.STRING, "Protocol", true, false),
           new ColumnMetadata(COL_NODE1, Schema.STRING, "Node", true, false),
           new ColumnMetadata(COL_FILTER1, Schema.STRING, "Filter name", true, false),
           new ColumnMetadata(COL_TEXT1, Schema.STRING, "Line text", true, false),
@@ -77,62 +89,53 @@ public class RoutePolicyDiff {
               Schema.STRING,
               "Action performed by the line (e.g., PERMIT or DENY)",
               true,
-              false),
-          new ColumnMetadata(COL_BDD_BITS, Schema.STRING, "BDD bits", true, false));
+              false));
 
-  private static final Map<String, ColumnMetadata> METADATA_MAP = TableMetadata.toColumnMap(COLUMN_METADATA);
+  private static final Map<String, ColumnMetadata> METADATA_MAP =
+      TableMetadata.toColumnMap(COLUMN_METADATA);
 
-  private final IBatfish _batfish;
-  private final NodeSpecifier _nodeSpecifier;
   private final Graph _graph;
   private final BDDRoute _record;
   private final Configuration _config1;
   private final Configuration _config2;
+  private final String _routerName1;
+  private final String _routerName2;
   private final PolicyQuotient _policyQuotient;
   private final List<PrefixRange> _ignoredPrefixRanges;
+  private final PrefixExtractor _prefixExtractor;
 
-  public RoutePolicyDiff(IBatfish batfish, NodeSpecifier specifier, List<PrefixRange> ranges) {
-    _batfish = batfish;
-    _nodeSpecifier = specifier;
+  public RoutePolicyDiff(
+      String router1,
+      String router2,
+      IBatfish batfish,
+      List<Configuration> configurations,
+      List<PrefixRange> ranges) {
     _ignoredPrefixRanges = ranges;
 
-    _graph = new Graph(_batfish);
-    SpecifierContext specifierContext = _batfish.specifierContext();
-    Set<String> nodeSet = _nodeSpecifier.resolve(specifierContext);
-
-    if (nodeSet.size() < 2) {
-      System.err.println("Fewer than 2 specified nodes: ");
-      nodeSet.forEach(System.out::println);
-      throw new IllegalArgumentException(
-          "Fewer than 2 specified nodes: "
-              + nodeSet.stream().reduce((a, b) -> a + "\n" + b).orElse(""));
-    } else if (nodeSet.size() > 2) {
-      System.err.println("More than 2 specified nodes: ");
-      nodeSet.forEach(System.out::println);
-      throw new IllegalArgumentException(
-          "More than 2 specified nodes: "
-              + nodeSet.stream().reduce((a, b) -> a + "\n" + b).orElse(""));
-    }
-
+    _graph = new Graph(batfish);
     Set<CommunityVar> comms = _graph.getAllCommunities();
     _record = new BDDRoute(comms);
     _policyQuotient = new PolicyQuotient();
 
-    List<Configuration> _configurations = nodeSet.stream()
-        .map(specifierContext.getConfigs()::get)
-        .collect(Collectors.toList());
-    _config1 = _configurations.get(0);
-    _config2 = _configurations.get(1);
-  }
+    _config1 = configurations.get(0);
+    _config2 = configurations.get(1);
 
-  public TableAnswerElement answer() {
-    TableAnswerElement answerElement = new TableAnswerElement(new TableMetadata(COLUMN_METADATA));
-    getBGPDiff().forEach(answerElement::addRow);
-    return answerElement;
+    _routerName1 = router1;
+    _routerName2 = router2;
+
+    Set<RouteFilterList> filterLists = new HashSet<>(_config1.getRouteFilterLists().values());
+    filterLists.addAll(_config2.getRouteFilterLists().values());
+
+    _prefixExtractor = new PrefixExtractor(filterLists, _record);
   }
 
   public List<Row> getBGPDiff() {
     List<Row> resultRows = new ArrayList<>();
+
+    if (_config1.getDefaultVrf().getBgpProcess() == null
+        && _config2.getDefaultVrf().getBgpProcess() == null) {
+      return new ArrayList<>();
+    }
 
     SortedMap<Prefix, BgpActivePeerConfig> neighbors1 =
         _config1.getDefaultVrf().getBgpProcess().getActiveNeighbors();
@@ -144,6 +147,7 @@ public class RoutePolicyDiff {
     for (Prefix neighbor : neighborPrefixes) {
       resultRows.addAll(getRowsForNeighbor(neighbor, neighbors1, neighbors2));
     }
+    resultRows = combineRows(resultRows);
     return resultRows;
   }
 
@@ -169,6 +173,116 @@ public class RoutePolicyDiff {
     extractor
         .extractCalledPolicies(r2Export, _config2)
         .forEach(p -> System.out.println("\t\t" + p));
+  }
+
+  public List<Row> getOspfDiff() {
+    Map<String, OspfProcess> ospf1 = _config1.getDefaultVrf().getOspfProcesses();
+    Map<String, OspfProcess> ospf2 = _config2.getDefaultVrf().getOspfProcesses();
+
+    List<Row> resultRows = new ArrayList<>();
+
+    Set<String> ospfSet = new TreeSet<>(ospf1.keySet());
+    ospfSet.addAll(ospf2.keySet());
+
+    for (String key : ospfSet) {
+      if (!ospf1.containsKey(key) || !ospf2.containsKey(key)) {
+        resultRows.add(createUnequalOspfRow(ospf1, ospf2, key));
+      } else {
+        OspfProcess process1 = ospf1.get(key);
+        OspfProcess process2 = ospf2.get(key);
+
+        String policyName1 = process1.getExportPolicy();
+        String policyName2 = process2.getExportPolicy();
+
+        RoutingPolicy policy1 = _config1.getRoutingPolicies().get(policyName1);
+        RoutingPolicy policy2 = _config2.getRoutingPolicies().get(policyName2);
+
+        resultRows.addAll(computeRoutePolicyDiff("OSPF process " + key, policy1, policy2));
+      }
+    }
+    return resultRows;
+  }
+
+  private Map<RoutingPolicy, Map<RoutingPolicy, List<Prefix>>> getCorrespondingFilters(
+      SortedMap<Prefix, BgpActivePeerConfig> neighbors1,
+      SortedMap<Prefix, BgpActivePeerConfig> neighbors2) {
+    Map<RoutingPolicy, Map<RoutingPolicy, List<Prefix>>> result = new HashMap<>();
+
+    Set<Prefix> neighborPrefixes = new TreeSet<>(neighbors1.keySet());
+    neighborPrefixes.retainAll(neighbors2.keySet());
+
+    for (Prefix neighbor : neighborPrefixes) {
+      BgpActivePeerConfig bgpConfig1 = neighbors1.get(neighbor);
+      BgpActivePeerConfig bgpConfig2 = neighbors2.get(neighbor);
+
+      String r1ImportName =
+          Optional.ofNullable(bgpConfig1)
+              .map(BgpActivePeerConfig::getIpv4UnicastAddressFamily)
+              .map(Ipv4UnicastAddressFamily::getImportPolicy)
+              .orElse(null);
+      String r1ExportName =
+          Optional.ofNullable(bgpConfig1)
+              .map(BgpActivePeerConfig::getIpv4UnicastAddressFamily)
+              .map(Ipv4UnicastAddressFamily::getExportPolicy)
+              .orElse(null);
+      String r2ImportName =
+          Optional.ofNullable(bgpConfig2)
+              .map(BgpActivePeerConfig::getIpv4UnicastAddressFamily)
+              .map(Ipv4UnicastAddressFamily::getImportPolicy)
+              .orElse(null);
+      String r2ExportName =
+          Optional.ofNullable(bgpConfig2)
+              .map(BgpActivePeerConfig::getIpv4UnicastAddressFamily)
+              .map(Ipv4UnicastAddressFamily::getExportPolicy)
+              .orElse(null);
+
+      RoutingPolicy r1Import = _config1.getRoutingPolicies().getOrDefault(r1ImportName, null);
+      RoutingPolicy r1Export = _config1.getRoutingPolicies().getOrDefault(r1ExportName, null);
+      RoutingPolicy r2Import = _config2.getRoutingPolicies().getOrDefault(r2ImportName, null);
+      RoutingPolicy r2Export = _config2.getRoutingPolicies().getOrDefault(r2ExportName, null);
+
+      RoutePolicyNamesExtractor extractor = new RoutePolicyNamesExtractor();
+      if (r1Import != null || r2Import != null) {
+        // Compare import policies
+        r1Import = ObjectUtils.defaultIfNull(r1Import, getDefaultImportPolicy(_config1));
+        r2Import = ObjectUtils.defaultIfNull(r2Import, getDefaultImportPolicy(_config2));
+        if (extractor.hasNonDefaultPolicy(r1Import, _config1)
+            || extractor.hasNonDefaultPolicy(r2Import, _config2)) {
+          result
+              .computeIfAbsent(r1Import, k -> new HashMap<>())
+              .computeIfAbsent(r2Import, k -> new ArrayList<>())
+              .add(neighbor);
+        }
+      }
+
+      if (r1Export != null || r2Export != null) {
+        // Compare export policies
+        r1Export = ObjectUtils.defaultIfNull(r1Export, getDefaultExportPolicy(_config1));
+        r2Export = ObjectUtils.defaultIfNull(r2Export, getDefaultExportPolicy(_config2));
+        if (extractor.hasNonDefaultPolicy(r1Export, _config1)
+            || extractor.hasNonDefaultPolicy(r2Export, _config2)) {
+          result
+              .computeIfAbsent(r1Export, k -> new HashMap<>())
+              .computeIfAbsent(r2Export, k -> new ArrayList<>())
+              .add(neighbor);
+        }
+      }
+    }
+    return result;
+  }
+
+  private List<Row> getUnequalNeighborRows(
+      SortedMap<Prefix, BgpActivePeerConfig> neighbors1,
+      SortedMap<Prefix, BgpActivePeerConfig> neighbors2) {
+    List<Row> resultRows = new ArrayList<>();
+    Set<Prefix> neighborSet = new HashSet<>(neighbors1.keySet());
+    neighborSet.addAll(neighbors2.keySet());
+    for (Prefix neighbor : neighborSet) {
+      if (!neighbors1.keySet().contains(neighbor) || !neighbors2.keySet().contains(neighbor)) {
+        resultRows.add(createUnequalNeighborRow(neighbors1, neighbors2, neighbor));
+      }
+    }
+    return resultRows;
   }
 
   private List<Row> getRowsForNeighbor(
@@ -210,39 +324,27 @@ public class RoutePolicyDiff {
     RoutingPolicy r2Export = _config2.getRoutingPolicies().getOrDefault(r2ExportName, null);
 
     RoutePolicyNamesExtractor extractor = new RoutePolicyNamesExtractor();
-    System.out.println("TO NEIGHBOR " + neighbor);
-    printPolicyNames(extractor, r1Import, r2Import, r1Export, r2Export);
 
-    if (r1Import == null && r2Import == null) {
-      System.out.println("NO IMPORT POLICIES");
-    } else {
+    if (r1Import != null || r2Import != null) {
       // Compare import policies
       r1Import = ObjectUtils.defaultIfNull(r1Import, getDefaultImportPolicy(_config1));
       r2Import = ObjectUtils.defaultIfNull(r2Import, getDefaultImportPolicy(_config2));
       if (extractor.hasNonDefaultPolicy(r1Import, _config1)
           || extractor.hasNonDefaultPolicy(r2Import, _config2)) {
-        System.out.println("IMPORT POLICIES:");
         resultRows.addAll(
             computeRoutePolicyDiff(neighbor.getStartIp().toString(), r1Import, r2Import));
-      } else {
-        System.out.println("ONLY DEFAULT IMPORT POLICIES");
       }
     }
 
-    if (r1Export == null && r2Export == null) {
-      System.out.println("NO EXPORT POLICIES");
-    } else {
+    if (r1Export != null || r2Export != null) {
       // Compare export policies
       r1Export = ObjectUtils.defaultIfNull(r1Export, getDefaultExportPolicy(_config1));
       r2Export = ObjectUtils.defaultIfNull(r2Export, getDefaultExportPolicy(_config2));
 
       if (extractor.hasNonDefaultPolicy(r1Export, _config1)
           || extractor.hasNonDefaultPolicy(r2Export, _config2)) {
-        System.out.println("EXPORT POLICIES:");
         resultRows.addAll(
             computeRoutePolicyDiff(neighbor.getStartIp().toString(), r1Export, r2Export));
-      } else {
-        System.out.println("ONLY DEFAULT EXPORT POLICIES");
       }
     }
     return resultRows;
@@ -258,12 +360,36 @@ public class RoutePolicyDiff {
     TypedRowBuilder builder =
         Row.builder(METADATA_MAP)
             .put(COL_NEIGHBOR, neighbor.getStartIp().toString())
-            .put(COL_NODE1, _config1.getHostname())
-            .put(COL_NODE2, _config2.getHostname())
+            .put(COL_NODE1, _routerName1)
+            .put(COL_NODE2, _routerName2)
             .put(COL_FILTER1, "")
             .put(COL_FILTER2, "")
-            .put(COL_ROUTE_PREFIX, "")
+            .put(COL_ROUTE_INCLUDED_PREFIXES, "")
+            .put(COL_ROUTE_EXCLUDED_PREFIXES, "")
             .put(COL_ROUTE_COMM, "")
+            .put(COL_ROUTE_PROTOCOL, "")
+            .put(COL_TEXT1, n1Present)
+            .put(COL_TEXT2, n2Present)
+            .put(COL_ACTION1, "")
+            .put(COL_ACTION2, "");
+    return builder.build();
+  }
+
+  private Row createUnequalOspfRow(
+      Map<String, OspfProcess> ospf1, Map<String, OspfProcess> ospf2, String id) {
+
+    String n1Present = ospf1.keySet().contains(id) ? "PRESENT" : "ABSENT";
+    String n2Present = ospf2.keySet().contains(id) ? "PRESENT" : "ABSENT";
+    TypedRowBuilder builder =
+        Row.builder(METADATA_MAP)
+            .put(COL_NEIGHBOR, "OSPF Process " + id)
+            .put(COL_NODE1, _routerName1)
+            .put(COL_NODE2, _routerName2)
+            .put(COL_FILTER1, "")
+            .put(COL_FILTER2, "")
+            .put(COL_ROUTE_INCLUDED_PREFIXES, "")
+            .put(COL_ROUTE_COMM, "")
+            .put(COL_ROUTE_PROTOCOL, "")
             .put(COL_TEXT1, n1Present)
             .put(COL_TEXT2, n2Present)
             .put(COL_ACTION1, "")
@@ -300,15 +426,11 @@ public class RoutePolicyDiff {
     BDD difference = accepted1.and(accepted2.not()).or(accepted1.not().and(accepted2));
     BDD ignored = new RouteToBDD(_record).buildPrefixRangesBDD(_ignoredPrefixRanges);
     difference = difference.and(ignored.not());
-    System.out.println("HAS DIFF: " + !difference.isZero());
     if (!difference.isZero()) {
       List<BDD> bddList =
           getBDDEquivalenceClasses(difference, actionMap1.getBDDKeys(), actionMap2.getBDDKeys());
       ret.addAll(
           createRowFromDiff(neighbor, bddList, r1Policy, transferBDD1, r2Policy, transferBDD2));
-      printStatements(_config1, transferBDD1, r1Policy, difference);
-      printStatements(_config2, transferBDD2, r2Policy, difference);
-      System.out.println();
     }
     return ret;
   }
@@ -389,53 +511,68 @@ public class RoutePolicyDiff {
 
     for (BDD bdd : diffs) {
       BDD example = bdd.fullSatOne();
-      // Prefix
-      Long prefix = _record.getPrefix().getValueSatisfying(example).get();
-      Long prefixLen = _record.getPrefixLength().getValueSatisfying(example).get();
-      String prefixStr = Prefix.create(Ip.create(prefix), Math.toIntExact(prefixLen)).toString();
+      // Prefix : if sets of prefix ranges is not simple, it is divided into multiple rows
+      List<IncludedExcludedPrefixRanges> ranges =
+          _prefixExtractor.getIncludedExcludedPrefixRanges(bdd);
+      for (IncludedExcludedPrefixRanges range : ranges) {
+        String includedPrefixStr = range.getIncludedPrefixString();
+        String excludedPrefixStr = range.getExcludedPrefixString();
 
-      // Communities
-      StringBuilder commString = new StringBuilder();
-      for (Entry<CommunityVar, BDD> commEntry : _record.getCommunities().entrySet()) {
-        CommunityVar commVar = commEntry.getKey();
-        BDD commBDD = commEntry.getValue();
-        if (!commBDD.and(example).isZero()) {
-          commString.append(commVar.getRegex()).append(" ");
+        // Protocol
+        StringBuilder protoString = new StringBuilder();
+        Protocol[] allProtos =
+            new Protocol[] {Protocol.CONNECTED, Protocol.STATIC, Protocol.OSPF, Protocol.BGP};
+        for (Protocol protocol : allProtos) {
+          BDD protoBdd = _record.getProtocolHistory().value(protocol);
+          if (bdd.andSat(protoBdd)) {
+            protoString.append(protocol.name()).append("\n");
+          }
         }
+
+        // Communities
+        StringBuilder commString = new StringBuilder();
+        for (Entry<CommunityVar, BDD> commEntry : _record.getCommunities().entrySet()) {
+          CommunityVar commVar = commEntry.getKey();
+          BDD commBDD = commEntry.getValue();
+          if (!commBDD.and(example).isZero()) {
+            commString.append(commVar.getRegex()).append("\n");
+          }
+        }
+
+        // Texts
+        String stmtText1 = transferBDD1.getBDDPolicyActionMap().getCombinedStatementTexts(bdd);
+        String stmtText2 = transferBDD2.getBDDPolicyActionMap().getCombinedStatementTexts(bdd);
+        if (stmtText1.length() == 0) {
+          stmtText1 = "DEFAULT BEHAVIOR";
+        }
+        if (stmtText2.length() == 0) {
+          stmtText2 = "DEFAULT BEHAVIOR";
+        }
+
+        // Action
+        String action1 = transferBDD1.getBDDPolicyActionMap().getAction(bdd).toString();
+        String action2 = transferBDD2.getBDDPolicyActionMap().getAction(bdd).toString();
+
+        action1 += "\n" + transferBDD1.getAccepted(bdd);
+        action2 += "\n" + transferBDD2.getAccepted(bdd);
+
+        TypedRowBuilder builder =
+            Row.builder(METADATA_MAP)
+                .put(COL_NEIGHBOR, neighbor)
+                .put(COL_NODE1, _routerName1)
+                .put(COL_NODE2, _routerName2)
+                .put(COL_FILTER1, policy1Names)
+                .put(COL_FILTER2, policy2Names)
+                .put(COL_ROUTE_INCLUDED_PREFIXES, includedPrefixStr)
+                .put(COL_ROUTE_EXCLUDED_PREFIXES, excludedPrefixStr)
+                .put(COL_ROUTE_COMM, commString.toString().trim())
+                .put(COL_ROUTE_PROTOCOL, protoString.toString().trim())
+                .put(COL_TEXT1, stmtText1)
+                .put(COL_TEXT2, stmtText2)
+                .put(COL_ACTION1, action1)
+                .put(COL_ACTION2, action2);
+        ret.add(builder.build());
       }
-
-      // Texts
-      String stmtText1 = transferBDD1.getBDDPolicyActionMap().getCombinedStatementTexts(bdd);
-      String stmtText2 = transferBDD2.getBDDPolicyActionMap().getCombinedStatementTexts(bdd);
-      if (stmtText1.length() == 0) {
-        stmtText1 = "DEFAULT BEHAVIOR";
-      }
-      if (stmtText2.length() == 0) {
-        stmtText2 = "DEFAULT BEHAVIOR";
-      }
-
-      // Action
-      String action1 = transferBDD1.getBDDPolicyActionMap().getAction(bdd).toString();
-      String action2 = transferBDD2.getBDDPolicyActionMap().getAction(bdd).toString();
-
-      action1 += "\n" + transferBDD1.getAccepted(bdd);
-      action2 += "\n" + transferBDD2.getAccepted(bdd);
-
-      TypedRowBuilder builder =
-          Row.builder(METADATA_MAP)
-              .put(COL_NEIGHBOR, neighbor)
-              .put(COL_NODE1, _config1.getHostname())
-              .put(COL_NODE2, _config2.getHostname())
-              .put(COL_FILTER1, policy1Names)
-              .put(COL_FILTER2, policy2Names)
-              .put(COL_ROUTE_PREFIX, prefixStr)
-              .put(COL_ROUTE_COMM, commString.toString())
-              .put(COL_TEXT1, stmtText1)
-              .put(COL_TEXT2, stmtText2)
-              .put(COL_ACTION1, action1)
-              .put(COL_ACTION2, action2)
-              .put(COL_BDD_BITS, fullSatBDDToString(example));
-      ret.add(builder.build());
     }
     return ret;
   }
@@ -493,10 +630,71 @@ public class RoutePolicyDiff {
         builder.append("1");
       }
       if (i % 16 == 15) {
-        builder.append(" ").append(i+1).append("\n");
+        builder.append(" ").append(i + 1).append("\n");
       }
     }
     return builder.toString();
   }
 
+  /*
+  Check that all fields except Neighbor are equal
+   */
+  private boolean rowsMatch(@Nullable Row row1, @Nullable Row row2) {
+    if (row1 != null && row2 != null) {
+      for (ColumnMetadata columnMetadata : COLUMN_METADATA) {
+        if (!columnMetadata.getName().equals(COL_NEIGHBOR)) {
+          Object row1Data = row1.get(columnMetadata.getName(), columnMetadata.getSchema());
+          Object row2Data = row2.get(columnMetadata.getName(), columnMetadata.getSchema());
+          boolean sameField = Objects.equals(row1Data, row2Data);
+          if (!sameField) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /*
+  Combine rows that match on all fields except neighbor
+   */
+  private List<Row> combineRows(List<Row> rows) {
+    List<Row> newList = new ArrayList<>();
+    Comparator<Row> sortByAllExceptNeighbor =
+        Comparator.comparing((Row r) -> r.getString(COL_ROUTE_INCLUDED_PREFIXES))
+            .thenComparing((Row r) -> r.getString(COL_ROUTE_EXCLUDED_PREFIXES))
+            .thenComparing((Row r) -> r.getString(COL_ROUTE_COMM))
+            .thenComparing((Row r) -> r.getString(COL_ROUTE_PROTOCOL))
+            .thenComparing((Row r) -> r.getString(COL_FILTER1))
+            .thenComparing((Row r) -> r.getString(COL_FILTER2))
+            .thenComparing((Row r) -> r.getString(COL_ACTION1))
+            .thenComparing((Row r) -> r.getString(COL_ACTION2))
+            .thenComparing((Row r) -> r.getString(COL_TEXT1))
+            .thenComparing((Row r) -> r.getString(COL_TEXT2));
+
+    rows.sort(sortByAllExceptNeighbor);
+
+    Row prevRow = null;
+    for (Row row : rows) {
+      if (rowsMatch(prevRow, row)) {
+        TypedRowBuilder builder = Row.builder(METADATA_MAP);
+        for (ColumnMetadata data : COLUMN_METADATA) {
+          if (data.getName().equals(COL_NEIGHBOR)) {
+            builder.put(
+                COL_NEIGHBOR, prevRow.getString(COL_NEIGHBOR) + "\n" + row.getString(COL_NEIGHBOR));
+          } else {
+            builder.put(data.getName(), prevRow.get(data.getName()));
+          }
+        }
+        prevRow = builder.build();
+      } else {
+        if (prevRow != null) {
+          newList.add(prevRow);
+        }
+        prevRow = row;
+      }
+    }
+    return newList;
+  }
 }
