@@ -8,24 +8,26 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
-import org.batfish.common.bdd.PacketPrefixRegion;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.LineAction;
+import org.batfish.datamodel.table.Row;
+import org.batfish.minesweeper.policylocalize.SymbolicResult;
+import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
 
 public class AclDiffReport {
-  private Set<PacketPrefixRegion> _regions;
-  private Set<PacketPrefixRegion> _subtractedRegions;
+  private Set<ConjunctHeaderSpace> _regions;
+  private Set<ConjunctHeaderSpace> _subtractedRegions;
   private SingleRouterReport _report1;
   private SingleRouterReport _report2;
 
   private static class SingleRouterReport {
-    String _router;
-    IpAccessList _acl;
+    final String _router;
+    final IpAccessList _acl;
+    final SymbolicResult _result;
     List<IpAccessListLine> _lastDiffs;
     Set<IpAccessListLine> _allDiffs;
-    boolean _permits;
     boolean _implicitDeny;
 
     SingleRouterReport(
@@ -39,11 +41,14 @@ public class AclDiffReport {
       _allDiffs = new HashSet<>(allLines);
       if (_lastDiffs.isEmpty() || _lastDiffs.get(0) == null) {
         _implicitDeny = true;
-        _permits = false;
+        _result = SymbolicResult.REJECT;
         _lastDiffs.clear();
       } else {
         _implicitDeny = false;
-        _permits = _lastDiffs.get(0).getAction().equals(LineAction.PERMIT);
+        _result =
+            _lastDiffs.get(0).getAction().equals(LineAction.PERMIT)
+                ? SymbolicResult.ACCEPT
+                : SymbolicResult.REJECT;
       }
     }
 
@@ -52,9 +57,7 @@ public class AclDiffReport {
     }
 
     void combineWith(SingleRouterReport other) {
-      if (!_router.equals(other._router)
-          || !_acl.equals(other._acl)
-          || _permits != other._permits) {
+      if (!_router.equals(other._router) || !_acl.equals(other._acl) || _result != other._result) {
         throw new IllegalArgumentException();
       }
       _lastDiffs.addAll(other._lastDiffs);
@@ -62,8 +65,16 @@ public class AclDiffReport {
       _implicitDeny = _implicitDeny || other._implicitDeny;
     }
 
-    boolean permits() {
-      return _permits;
+    String getRouterName() {
+      return _router;
+    }
+
+    IpAccessList getAcl() {
+      return _acl;
+    }
+
+    SymbolicResult permits() {
+      return _result;
     }
 
     boolean hasImplicitDeny() {
@@ -71,9 +82,17 @@ public class AclDiffReport {
     }
   }
 
-  AclDiffReport(Set<PacketPrefixRegion> regions, Set<PacketPrefixRegion> subtractedRegions,
-      String r1, IpAccessList acl1, List<IpAccessListLine> last1, Set<IpAccessListLine> all1,
-      String r2, IpAccessList acl2, List<IpAccessListLine> last2, Set<IpAccessListLine> all2) {
+  AclDiffReport(
+      Set<ConjunctHeaderSpace> regions,
+      Set<ConjunctHeaderSpace> subtractedRegions,
+      String r1,
+      IpAccessList acl1,
+      List<IpAccessListLine> last1,
+      Set<IpAccessListLine> all1,
+      String r2,
+      IpAccessList acl2,
+      List<IpAccessListLine> last2,
+      Set<IpAccessListLine> all2) {
     _regions = new HashSet<>(regions);
     _subtractedRegions = new HashSet<>(subtractedRegions);
     _report1 = new SingleRouterReport(r1, acl1, last1, all1);
@@ -133,39 +152,63 @@ public class AclDiffReport {
     AclToConfigLines aclToConfig = new AclToConfigLines(batfish, differential);
     System.out.println("Configuration lines for : ");
     _regions.forEach((r) -> System.out.println("  " + r));
-    System.out.println(_report1._router);
+    System.out.println(_report1.getRouterName());
     aclToConfig.printRelevantLines(
-        _report1._router, _report1._acl, _regions, _report1._lastDiffs, _report1._implicitDeny, printMore);
+        _report1.getRouterName(),
+        _report1.getAcl(),
+        _regions,
+        _report1._lastDiffs,
+        _report1._implicitDeny,
+        printMore);
     System.out.println();
-    System.out.println(_report2._router);
+    System.out.println(_report2.getRouterName());
     aclToConfig.printRelevantLines(
-        _report2._router, _report2._acl, _regions, _report2._lastDiffs, _report2._implicitDeny, printMore);
+        _report2.getRouterName(),
+        _report2.getAcl(),
+        _regions,
+        _report2._lastDiffs,
+        _report2._implicitDeny,
+        printMore);
     System.out.println();
   }
 
-  public LineDifference toLineDifference(IBatfish batfish, boolean printMore, boolean differential) {
+  public Row toRow(IBatfish batfish, boolean printMore, boolean differential) {
+    return new AclDiffToRow().lineDifferenceToRow(toLineDifference(batfish, printMore, differential));
+  }
+
+  public LineDifference toLineDifference(
+      IBatfish batfish, boolean printMore, boolean differential) {
     AclToConfigLines aclToConfig = new AclToConfigLines(batfish, differential);
     String rel1 =
         aclToConfig.getRelevantLines(
-            _report1._router,
-            _report1._acl,
+            _report1.getRouterName(),
+            _report1.getAcl(),
             _regions,
             _report1._lastDiffs,
             _report1._implicitDeny,
             printMore);
-    String rel2 = aclToConfig.getRelevantLines(
-            _report2._router, _report2._acl, _regions, _report2._lastDiffs, _report2._implicitDeny, printMore);
-    SortedSet<String> difference = _regions
-        .stream()
-        .map(PacketPrefixRegion::toString)
-        .collect(Collectors.toCollection(TreeSet::new));
-    SortedSet<String> diffSub = _subtractedRegions.stream()
-        .map(PacketPrefixRegion::toString)
-        .collect(Collectors.toCollection(TreeSet::new));
+    String rel2 =
+        aclToConfig.getRelevantLines(
+            _report2.getRouterName(),
+            _report2.getAcl(),
+            _regions,
+            _report2._lastDiffs,
+            _report2._implicitDeny,
+            printMore);
+    SortedSet<String> difference =
+        _regions.stream()
+            .map(ConjunctHeaderSpace::toString)
+            .collect(Collectors.toCollection(TreeSet::new));
+    SortedSet<String> diffSub =
+        _subtractedRegions.stream()
+            .map(ConjunctHeaderSpace::toString)
+            .collect(Collectors.toCollection(TreeSet::new));
 
-    return new LineDifference(_report1._router, _report2._router,
-        _report1._acl.getName(), _report2._acl.getName(),
+    return new LineDifference(
+        _report1.getRouterName(), _report2.getRouterName(),
+        _report1.getAcl().getName(), _report2.getAcl().getName(),
         rel1, rel2,
-        difference, diffSub);
+        difference, diffSub,
+        _report1.permits(), _report2.permits());
   }
 }

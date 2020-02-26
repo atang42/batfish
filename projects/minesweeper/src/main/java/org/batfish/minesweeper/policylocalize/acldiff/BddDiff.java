@@ -24,7 +24,6 @@ import net.sf.javabdd.BDDPairing;
 import org.batfish.common.bdd.BDDAcl;
 import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.bdd.BDDPacketWithLines;
-import org.batfish.common.bdd.PacketPrefixRegion;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Interface;
@@ -33,6 +32,7 @@ import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.questions.NodesSpecifier;
+import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
 import org.batfish.specifier.AllFiltersFilterSpecifier;
 import org.batfish.specifier.FilterSpecifier;
 import org.batfish.specifier.SpecifierContext;
@@ -191,77 +191,35 @@ public class BddDiff {
     BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
 
     if (notEquivalent.isZero()) {
-      System.out.println("No Difference");
+      // System.out.println("No Difference");
     } else {
-      // BddDiff.totalDiffs++;
-      System.out.println("**************************");
       BDD linesNotEquivalent = notEquivalent.exist(getPacketHeaderFields(packet));
 
-      List<AclDiffReport> reportList = new ArrayList<>();
       while (!linesNotEquivalent.isZero()) {
         BDD lineSat = linesNotEquivalent.satOne();
         BDD counterexample = notEquivalent.and(lineSat).satOne();
 
-        /*
-        long dstIp = packet.getDstIp().getValueSatisfying(counterexample).get();
-        long srcIp = packet.getSrcIp().getValueSatisfying(counterexample).get();
-        long dstPort = packet.getDstPort().getValueSatisfying(counterexample).get();
-        long srcPort = packet.getSrcPort().getValueSatisfying(counterexample).get();
-        System.out.println("EXAMPLE:");
-        System.out.println("\tDST-IP:    " + Ip.create(dstIp));
-        System.out.println("\tSRC-IP:    " + Ip.create(srcIp));
-        System.out.println("\tDST-PORT:  " + dstPort);
-        System.out.println("\tSRC-PORT:  " + srcPort);
-        */
         int i = 0;
         IpAccessListLine[] lineDiff = new IpAccessListLine[2];
         List<IpAccessList> aclList = new ArrayList<>(accessLists.values());
         for (IpAccessList acl : accessLists.values()) {
-          boolean found = false;
           for (IpAccessListLine line : acl.getLines()) {
             if (!counterexample.and(packet.getAclLine(routers.get(i), acl, line)).isZero()) {
-              System.out.print(routers.get(i) + " ");
-              System.out.println(acl.getName() + ":");
-              System.out.println("  " + line.getName());
               lineDiff[i] = line;
-              found = true;
             }
-          }
-          if (!found) {
-            System.out.print(routers.get(i) + " ");
-            System.out.println(acl.getName());
-            System.out.println("  Implicit deny ");
           }
           i++;
         }
         AclLineDiffToPrefix diffToPrefix =
             new AclLineDiffToPrefix(aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
 
-        diffToPrefix.printDifferenceInPrefix();
+        // diffToPrefix.printDifferenceInPrefix();
         AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
-        report.print(batfish, printMore, differential);
-        // differences.add(report.toLineDifference(batfish, printMore, differential));
-        /*boolean merged = false;
-        for (AclDiffReport r : reportList) {
-          System.out.println(AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()));
-          if (AclDiffReport.combinedLineCount(r, report) - Integer.max(report.getLineCount(), r.getLineCount()) <= 1
-              && AclDiffReport.combinedSameAction(r, report)) {
-            merged = true;
-            r.combineWith(report);
-            break;
-          }
-        }
-        if (!merged) {
-          reportList.add(report);
-        }
-        */
+        // report.print(batfish, printMore, differential);
+        differences.add(report.toLineDifference(batfish, printMore, differential));
         BDD cond = counterexample.exist(getPacketHeaderFields(packet)).not();
         linesNotEquivalent = linesNotEquivalent.and(cond);
       }
-      // for (AclDiffReport r : reportList) {
-      //  r.print((Batfish) batfish);:q
-      // }
-      System.out.println("**************************");
     }
     return differences;
   }
@@ -337,13 +295,6 @@ public class BddDiff {
       }
     }
 
-    System.out.println("Only in current");
-    onlyFirst.forEach(System.out::println);
-    System.out.println("Only in reference");
-    onlySecond.forEach(System.out::println);
-
-    System.out.println("PAIRS:");
-
     SortedSet<LineDifference> differences = new TreeSet<>();
     BDDPacketWithLines packet = new BDDPacketWithLines();
     for (Entry<String, List<IpAccessList>> entry : aclPairs.entries()) {
@@ -351,8 +302,6 @@ public class BddDiff {
 
       IpAccessList acl1 = entry.getValue().get(0);
       IpAccessList acl2 = entry.getValue().get(1);
-      System.out.println(router);
-      System.out.println("current:" + acl1.getName() + "--" + "reference:" + acl2.getName());
 
       Map<String, IpAccessList> accessLists = new HashMap<>();
       accessLists.put(router + "-current", acl1);
@@ -378,14 +327,6 @@ public class BddDiff {
                     + ":"
                     + diff.getFilter2());
       }
-    }
-
-    System.out.println("TOTAL DIFFERENCES BY REGION");
-    for (String region : diffToFilters.keySet()) {
-      SortedSet<String> filters = diffToFilters.get(region);
-      System.out.println(region + ": [");
-      filters.forEach(f -> System.out.println("\t" + f));
-      System.out.println("]");
     }
 
     return differences;
@@ -418,29 +359,11 @@ public class BddDiff {
 
     for (String rr : routers) {
       Configuration cc = configs.get(rr);
-      System.out.println("***********************");
-      System.out.println(cc.getHostname());
       for (Entry<String, IpAccessList> entry : cc.getIpAccessLists().entrySet()) {
         IpAccessList acl = entry.getValue();
         List<IpAccessList> lists = aclNameToAcls.getOrDefault(entry.getKey(), new ArrayList<>());
         lists.add(acl);
         aclNameToAcls.put(entry.getKey(), lists);
-
-        BDDAcl bddAcl = BDDAcl.create(packet, acl);
-        /*
-        if (!bddAcl.getBdd().isZero()) {
-          long _dstIp = packet.getDstIp().getValueSatisfying(bddAcl.getBdd()).get();
-          long _srcIp = packet.getSrcIp().getValueSatisfying(bddAcl.getBdd()).get();
-          System.out.println(acl);
-          System.out.println("DST: " + Ip.create(_dstIp));
-          System.out.println("SRC: " + Ip.create(_srcIp));
-          System.out.println();
-        } else {
-          System.out.println(acl);
-          System.out.println("denies all packets");
-          System.out.println();
-        }
-        */
       }
     }
 
@@ -471,20 +394,11 @@ public class BddDiff {
             if (pfxIsEquivalent.isOne()) {
               // System.out.println(entry.getKey() + " is consistent on " + pfx);
             } else if (!forallNotEquivalent.isZero()) {
-              isEquivalent.printDot();
-              forallNotEquivalent.printDot();
               pfxNotEquivalent.andWith(matchPrefix(packet, pfx));
               long dstIp = packet.getDstIp().getValueSatisfying(pfxNotEquivalent).get();
               long srcIp = packet.getSrcIp().getValueSatisfying(pfxNotEquivalent).get();
               long dstPort = packet.getDstPort().getValueSatisfying(pfxNotEquivalent).get();
               long srcPort = packet.getSrcPort().getValueSatisfying(pfxNotEquivalent).get();
-              System.out.println(entry.getKey() + " disagrees on: " + pfx);
-              System.out.println("EXAMPLE:");
-              System.out.println("\tDST-IP:    " + Ip.create(dstIp));
-              System.out.println("\tSRC-IP:    " + Ip.create(srcIp));
-              System.out.println("\tDST-PORT:  " + dstPort);
-              System.out.println("\tSRC-PORT:  " + srcPort);
-              System.out.println();
             } else {
 
               prefixQueue.addAll(genLongerPrefix(pfx));
@@ -521,7 +435,7 @@ public class BddDiff {
     return result;
   }
 
-  private BDD restrictBDD(BDD bdd, BDDPacket pkt, PacketPrefixRegion region) {
+  private BDD restrictBDD(BDD bdd, BDDPacket pkt, ConjunctHeaderSpace region) {
     int dstLen = region.getDstIp().getPrefixLength();
     long dstBits = region.getDstIp().getStartIp().asLong();
     int[] dstVars = new int[dstLen];

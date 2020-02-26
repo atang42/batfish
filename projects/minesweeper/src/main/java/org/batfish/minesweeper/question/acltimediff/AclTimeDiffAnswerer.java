@@ -7,6 +7,9 @@ import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.datamodel.questions.Question;
+import org.batfish.datamodel.table.TableAnswerElement;
+import org.batfish.datamodel.table.TableMetadata;
+import org.batfish.minesweeper.policylocalize.acldiff.AclDiffToRow;
 import org.batfish.minesweeper.policylocalize.acldiff.BddDiff;
 import org.batfish.minesweeper.policylocalize.acldiff.LineDifference;
 
@@ -30,6 +33,12 @@ public final class AclTimeDiffAnswerer extends Answerer {
     boolean printMore = question.getPrintMore();
     BddDiff diffChecker = new BddDiff();
     SortedSet<LineDifference> diffs = diffChecker.getTimeDiff(_batfish, regex, aclRegex, printMore);
-    return new AclTimeDiffAnswerElement(diffs);
+    TableAnswerElement result =
+        new TableAnswerElement(new TableMetadata(AclDiffToRow.COLUMN_METADATA));
+    AclDiffToRow toRow = new AclDiffToRow();
+    for (LineDifference diff : diffs) {
+      result.addRow(toRow.lineDifferenceToRow(diff));
+    }
+    return result;
   }
 }

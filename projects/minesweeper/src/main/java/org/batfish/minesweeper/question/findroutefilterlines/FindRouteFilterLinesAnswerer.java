@@ -32,7 +32,6 @@ import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.PolicyQuotient;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
-import org.batfish.minesweeper.policylocalize.BDDStatementMap;
 import org.batfish.minesweeper.policylocalize.RouteToBDD;
 import org.batfish.minesweeper.policylocalize.SymbolicResult;
 import org.batfish.specifier.NodeSpecifier;

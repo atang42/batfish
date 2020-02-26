@@ -17,7 +17,6 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
-import org.batfish.common.bdd.PacketPrefixRegion;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.config.Settings;
 import org.batfish.datamodel.ConfigurationFormat;
@@ -27,6 +26,8 @@ import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.answers.ConvertConfigurationAnswerElement;
 import org.batfish.datamodel.answers.ParseVendorConfigurationAnswerElement;
 import org.batfish.main.Batfish;
+import org.batfish.minesweeper.policylocalize.acldiff.representation.AclToDescribedHeaderSpaces;
+import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
 import org.batfish.specifier.SpecifierContext;
 
 public class AclToConfigLines {
@@ -157,7 +158,7 @@ public class AclToConfigLines {
     return builder.toString();
   }
 
-  String getRelevantLines(String router, IpAccessList acl, Collection<PacketPrefixRegion> regions,
+  String getRelevantLines(String router, IpAccessList acl, Collection<ConjunctHeaderSpace> regions,
       @Nullable List<IpAccessListLine> lastLines, boolean hasImplicitDeny, boolean printMore) {
 
     SortedMap<Integer, String> lines = getAclLineText(router, acl);
@@ -191,7 +192,7 @@ public class AclToConfigLines {
     return ret;
   }
 
-  void printRelevantLines(String router, IpAccessList acl, Collection<PacketPrefixRegion> regions,
+  void printRelevantLines(String router, IpAccessList acl, Collection<ConjunctHeaderSpace> regions,
       @Nullable List<IpAccessListLine> lastLines, boolean hasImplicitDeny, boolean printMore) {
 
     SortedMap<Integer, String> lines = getAclLineText(router, acl);
@@ -264,16 +265,16 @@ public class AclToConfigLines {
   }
 
   private String getRelevantLinesCisco(SortedMap<Integer, String> lines, IpAccessList acl,
-      Collection<PacketPrefixRegion> regions, @Nullable List<IpAccessListLine> lastLines,
+      Collection<ConjunctHeaderSpace> regions, @Nullable List<IpAccessListLine> lastLines,
       boolean hasImplicitDeny, boolean printMore) {
 
     StringBuilder ret = new StringBuilder();
     List<IpAccessListLine> relevantAclLines = new ArrayList<>();
     int prevPrint = 0;
     for (IpAccessListLine aclLine : acl.getLines()) {
-      List<PacketPrefixRegion> lineRegions = PacketPrefixRegion.createPrefixSpace(aclLine);
-      for (PacketPrefixRegion lineReg : lineRegions) {
-        for (PacketPrefixRegion region : regions) {
+      List<ConjunctHeaderSpace> lineRegions = AclToDescribedHeaderSpaces.createPrefixSpaces(aclLine);
+      for (ConjunctHeaderSpace lineReg : lineRegions) {
+        for (ConjunctHeaderSpace region : regions) {
           if (lineReg.intersection(region).isPresent()) {
             relevantAclLines.add(aclLine);
           }
@@ -337,7 +338,7 @@ public class AclToConfigLines {
   }
 
   private void printRelevantLinesCisco(SortedMap<Integer, String> lines, IpAccessList acl,
-      Collection<PacketPrefixRegion> regions, @Nullable List<IpAccessListLine> lastLines,
+      Collection<ConjunctHeaderSpace> regions, @Nullable List<IpAccessListLine> lastLines,
       boolean hasImplicitDeny, boolean printMore) {
 
     System.out.print(
@@ -345,15 +346,15 @@ public class AclToConfigLines {
   }
 
   private String getRelevantLinesJuniper(int firstLine, int lastLine, String router,
-      IpAccessList acl, Collection<PacketPrefixRegion> regions,
+      IpAccessList acl, Collection<ConjunctHeaderSpace> regions,
       @Nullable List<IpAccessListLine> lastAclLines, boolean hasImplicitDeny, boolean printMore) {
     StringBuilder ret = new StringBuilder();
     int prevPrint = 0;
     List<IpAccessListLine> relevantAclLines = new ArrayList<>();
     for (IpAccessListLine aclLine : acl.getLines()) {
-      List<PacketPrefixRegion> lineRegions = PacketPrefixRegion.createPrefixSpace(aclLine);
-      for (PacketPrefixRegion lineReg : lineRegions) {
-        for (PacketPrefixRegion region : regions) {
+      List<ConjunctHeaderSpace> lineRegions = AclToDescribedHeaderSpaces.createPrefixSpaces(aclLine);
+      for (ConjunctHeaderSpace lineReg : lineRegions) {
+        for (ConjunctHeaderSpace region : regions) {
           if (lineReg.intersection(region).isPresent()) {
             relevantAclLines.add(aclLine);
           }
@@ -441,7 +442,7 @@ public class AclToConfigLines {
   }
 
   private void printRelevantLinesJuniper(int firstLine, int lastLine, String router,
-      IpAccessList acl, Collection<PacketPrefixRegion> regions,
+      IpAccessList acl, Collection<ConjunctHeaderSpace> regions,
       @Nullable List<IpAccessListLine> lastAclLines, boolean hasImplicitDeny, boolean printMore) {
 
     System.out.print(
