@@ -32,6 +32,7 @@ import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.questions.NodesSpecifier;
+import org.batfish.minesweeper.policylocalize.acldiff.representation.AbstractHeaderSpace;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
 import org.batfish.specifier.AllFiltersFilterSpecifier;
 import org.batfish.specifier.FilterSpecifier;
@@ -194,27 +195,27 @@ public class BddDiff {
       // System.out.println("No Difference");
     } else {
       BDD linesNotEquivalent = notEquivalent.exist(getPacketHeaderFields(packet));
-
+      List<IpAccessList> aclList = new ArrayList<>(accessLists.values());
+      AclDiffToPrefix aclDiffToPrefix = new AclDiffToPrefix(
+          routers.get(0), routers.get(1),
+          aclList.get(0), aclList.get(1));
       while (!linesNotEquivalent.isZero()) {
         BDD lineSat = linesNotEquivalent.satOne();
         BDD counterexample = notEquivalent.and(lineSat).satOne();
 
         int i = 0;
         IpAccessListLine[] lineDiff = new IpAccessListLine[2];
-        List<IpAccessList> aclList = new ArrayList<>(accessLists.values());
-        for (IpAccessList acl : accessLists.values()) {
+        for (IpAccessList acl : aclList) {
           for (IpAccessListLine line : acl.getLines()) {
-            if (!counterexample.and(packet.getAclLine(routers.get(i), acl, line)).isZero()) {
+            if (counterexample.andSat(packet.getAclLine(routers.get(i), acl, line))) {
               lineDiff[i] = line;
             }
           }
           i++;
         }
-        AclLineDiffToPrefix diffToPrefix =
-            new AclLineDiffToPrefix(aclList.get(0), aclList.get(1), lineDiff[0], lineDiff[1]);
 
         // diffToPrefix.printDifferenceInPrefix();
-        AclDiffReport report = diffToPrefix.getAclDiffReport(routers.get(0), routers.get(1));
+        AclDiffReport report = aclDiffToPrefix.getReport(lineDiff[0], lineDiff[1]);
         // report.print(batfish, printMore, differential);
         differences.add(report.toLineDifference(batfish, printMore, differential));
         BDD cond = counterexample.exist(getPacketHeaderFields(packet)).not();

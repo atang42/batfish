@@ -1,5 +1,6 @@
 package org.batfish.minesweeper.policylocalize.acldiff.representation;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.Optional;
@@ -179,8 +180,8 @@ public class ConjunctHeaderSpace extends AbstractHeaderSpace implements Comparab
         .compare(this, conjunctHeaderSpace);
   }
 
-  @Override public ConjunctHeaderSpace getIncluded() {
-    return this;
+  @Override public SortedSet<ConjunctHeaderSpace> getIncluded() {
+    return new TreeSet<>(Collections.singleton(this));
   }
 
   @Override public SortedSet<ConjunctHeaderSpace> getExcluded() {

@@ -3,6 +3,7 @@ package org.batfish.minesweeper.policylocalize.acldiff.representation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import javax.annotation.Nonnull;
 import org.batfish.datamodel.AclIpSpace;
 import org.batfish.datamodel.AclIpSpaceLine;
 import org.batfish.datamodel.EmptyIpSpace;
@@ -181,7 +182,7 @@ public class AclToDescribedHeaderSpaces {
       }
       // TODO: Properly handle other packet attributes
       if (space.getTcpFlags() != null && space.getTcpFlags().size() > 0) {
-        return new ArrayList<>();
+        // return new ArrayList<>();
       }
 
       List<ConjunctHeaderSpace> ret = new ArrayList<>();
@@ -241,19 +242,19 @@ public class AclToDescribedHeaderSpaces {
     }
   }
 
-  private static List<ConjunctHeaderSpace> getAllPackets() {
+  @Nonnull public static List<ConjunctHeaderSpace> getAllPackets() {
     List<ConjunctHeaderSpace> ret = new ArrayList<>();
     ret.add(ConjunctHeaderSpace.getUniverseSpace());
     return ret;
   }
 
-  private static List<Prefix> getAllPrefix() {
+  @Nonnull private static List<Prefix> getAllPrefix() {
     List<Prefix> ret = new ArrayList<>();
     ret.add(Prefix.ZERO);
     return ret;
   }
 
-  public static List<ConjunctHeaderSpace> createPrefixSpaces(IpAccessListLine line) {
+  @Nonnull public static List<ConjunctHeaderSpace> createPrefixSpaces(IpAccessListLine line) {
     if (line == null) {
       List<ConjunctHeaderSpace> ret = new ArrayList<>();
       ret.add(ConjunctHeaderSpace.getUniverseSpace());

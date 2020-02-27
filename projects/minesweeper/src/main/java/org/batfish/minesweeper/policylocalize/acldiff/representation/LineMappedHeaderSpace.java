@@ -1,23 +1,22 @@
 package org.batfish.minesweeper.policylocalize.acldiff.representation;
 
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.TreeMap;
+import java.util.List;
 import javax.annotation.Nonnull;
+import org.batfish.datamodel.IpAccessListLine;
 
 /*
-A Header space attached with lines and texts of a particular router config
+A Header space attached with _lines and texts of a particular router config
  */
 public class LineMappedHeaderSpace {
   @Nonnull private final String _routerName;
   @Nonnull private final AbstractHeaderSpace _space;
-  @Nonnull private final TreeMap<Integer, String> _lineToText;
+  @Nonnull private final List<IpAccessListLine> _lines;
 
-  public LineMappedHeaderSpace(@Nonnull String routerName, @Nonnull ConjunctHeaderSpace space,
-      @Nonnull TreeMap<Integer, String> lineToText) {
+  public LineMappedHeaderSpace(@Nonnull String routerName, @Nonnull AbstractHeaderSpace space,
+      @Nonnull List<IpAccessListLine> lineToText) {
     this._routerName = routerName;
     this._space = space;
-    this._lineToText = lineToText;
+    this._lines = lineToText;
   }
 
   @Nonnull public String getRouterName() {
@@ -28,20 +27,22 @@ public class LineMappedHeaderSpace {
     return _space;
   }
 
-  @Nonnull public TreeMap<Integer, String> getLineToText() {
-    return _lineToText;
+  @Nonnull public List<IpAccessListLine> getLineToText() {
+    return _lines;
   }
 
-  public Set<Integer> getLines() {
-    return _lineToText.keySet();
+  @Nonnull public List<IpAccessListLine> getLines() {
+    return _lines;
   }
 
-  public String getText() {
+  /*
+  @Nonnull public String getText() {
     StringBuilder builder = new StringBuilder();
-    for (Entry<Integer, String> e : _lineToText.entrySet()) {
+    for (Entry<Integer, String> e : _lines) {
       builder.append(String.format("%6d %s\n", e.getKey(), e.getValue()));
     }
     return builder.toString();
   }
+  */
 
 }

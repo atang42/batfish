@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
+import org.batfish.minesweeper.policylocalize.acldiff.representation.AbstractHeaderSpace;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.AclToDescribedHeaderSpaces;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
 
