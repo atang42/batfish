@@ -12,7 +12,6 @@ import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.LineAction;
-import org.batfish.datamodel.table.Row;
 import org.batfish.minesweeper.policylocalize.SymbolicResult;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
 
@@ -172,9 +171,6 @@ public class AclDiffReport {
     System.out.println();
   }
 
-  public Row toRow(IBatfish batfish, boolean printMore, boolean differential) {
-    return new AclDiffToRow().lineDifferenceToRow(toLineDifference(batfish, printMore, differential));
-  }
 
   public LineDifference toLineDifference(
       IBatfish batfish, boolean printMore, boolean differential) {

@@ -9,6 +9,7 @@ public final class LineDifference implements Comparable<LineDifference> {
 
   private @Nonnull String _router1;
   private @Nonnull String _router2;
+  private @Nonnull String _interface;
   private @Nonnull String _filter1;
   private @Nonnull String _filter2;
   private @Nonnull String _snippet1;
@@ -159,5 +160,13 @@ public final class LineDifference implements Comparable<LineDifference> {
         .thenComparing(ld -> concatString(ld.getDifference()))
         .thenComparing(ld -> concatString(ld.getDiffSub()))
         .compare(this, lineDifference);
+  }
+
+  @Nonnull public String getInterface() {
+    return _interface;
+  }
+
+  public void setInterface(@Nonnull String _interface) {
+    this._interface = _interface;
   }
 }

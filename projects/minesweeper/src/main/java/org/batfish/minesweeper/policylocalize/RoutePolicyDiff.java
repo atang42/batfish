@@ -553,9 +553,6 @@ public class RoutePolicyDiff {
         String action1 = transferBDD1.getBDDPolicyActionMap().getAction(bdd).toString();
         String action2 = transferBDD2.getBDDPolicyActionMap().getAction(bdd).toString();
 
-        action1 += "\n" + transferBDD1.getAccepted(bdd);
-        action2 += "\n" + transferBDD2.getAccepted(bdd);
-
         TypedRowBuilder builder =
             Row.builder(METADATA_MAP)
                 .put(COL_NEIGHBOR, neighbor)
