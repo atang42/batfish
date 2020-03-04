@@ -386,6 +386,7 @@ public class RoutePolicyNamesExtractor {
       return new ArrayList<>();
     }
     List<String> acc = new ArrayList<>();
+    acc.add(policy.getName());
     NamesStatementVisitor visitor = new NamesStatementVisitor(config);
     for (Statement statement : policy.getStatements()) {
       acc = statement.accept(visitor, acc);

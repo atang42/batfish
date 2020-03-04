@@ -65,12 +65,11 @@ public final class AclDiffAnswerer extends Answerer {
     }
     StringBuilder excluded = new StringBuilder();
     for (String s : ld.getDiffSub()) {
-      excluded.append(s).append("\n");
+      excluded.append(s).append("\n\n");
     }
 
     TypedRowBuilder builder =
         Row.builder(METADATA_MAP)
-            .put(COL_INTERFACE, ld.getInterface())
             .put(COL_NODE1, ld.getRouter1())
             .put(COL_NODE2, ld.getRouter2())
             .put(COL_FILTER1, ld.getFilter1())

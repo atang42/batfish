@@ -19,7 +19,8 @@ public final class LineDifference implements Comparable<LineDifference> {
   private @Nonnull SymbolicResult _action1;
   private @Nonnull SymbolicResult _action2;
 
-  public LineDifference(@Nonnull String router1,
+  public LineDifference(
+      @Nonnull String router1,
       @Nonnull String router2,
       @Nonnull String filter1,
       @Nonnull String filter2,
@@ -50,6 +51,21 @@ public final class LineDifference implements Comparable<LineDifference> {
     }
     this._difference = difference;
     this._diffSub = diffSub;
+    this._interface = "";
+  }
+
+  public LineDifference(@Nonnull LineDifference other) {
+    this(
+        other._router1,
+        other._router2,
+        other._filter1,
+        other._filter2,
+        other._snippet1,
+        other._snippet2,
+        other._difference,
+        other._diffSub,
+        other._action1,
+        other._action2);
   }
 
   @Nonnull
@@ -123,7 +139,8 @@ public final class LineDifference implements Comparable<LineDifference> {
     this._diffSub = diffSub;
   }
 
-  @Nonnull public SymbolicResult getAction1() {
+  @Nonnull
+  public SymbolicResult getAction1() {
     return _action1;
   }
 
@@ -131,7 +148,8 @@ public final class LineDifference implements Comparable<LineDifference> {
     this._action1 = action1;
   }
 
-  @Nonnull public SymbolicResult getAction2() {
+  @Nonnull
+  public SymbolicResult getAction2() {
     return _action2;
   }
 
@@ -162,7 +180,8 @@ public final class LineDifference implements Comparable<LineDifference> {
         .compare(this, lineDifference);
   }
 
-  @Nonnull public String getInterface() {
+  @Nonnull
+  public String getInterface() {
     return _interface;
   }
 

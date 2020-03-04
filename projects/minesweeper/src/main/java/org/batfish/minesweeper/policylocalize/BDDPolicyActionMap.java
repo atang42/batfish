@@ -48,8 +48,8 @@ public class BDDPolicyActionMap {
     private static int count = 0;
     private static final int _bitsUsed = 10;
     private static BDDInteger _actionVars;
-    static Map<Integer, PolicyAction> _encodedValToAction = new HashMap<>();
-    static Map<PolicyAction, Integer> _actionToEncodedVal = new HashMap<>();
+    static Map<Integer, PolicyAction> _encodedValToAction;
+    static Map<PolicyAction, Integer> _actionToEncodedVal;
 
     static {
       BDDFactory factory = BDDRoute.getFactory();

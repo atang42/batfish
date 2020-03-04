@@ -69,7 +69,7 @@ public final class AclTimeDiffAnswerer extends Answerer {
     }
     StringBuilder excluded = new StringBuilder();
     for (String s : ld.getDiffSub()) {
-      excluded.append(s).append("\n");
+      excluded.append(s).append("\n\n");
     }
 
     TypedRowBuilder builder =

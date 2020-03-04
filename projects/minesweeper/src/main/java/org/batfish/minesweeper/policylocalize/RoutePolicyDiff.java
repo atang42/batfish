@@ -89,7 +89,8 @@ public class RoutePolicyDiff {
               Schema.STRING,
               "Action performed by the line (e.g., PERMIT or DENY)",
               true,
-              false));
+              false),
+          new ColumnMetadata(COL_BDD_BITS, Schema.STRING, "BDD bits", true, false));
 
   private static final Map<String, ColumnMetadata> METADATA_MAP =
       TableMetadata.toColumnMap(COLUMN_METADATA);
@@ -186,7 +187,9 @@ public class RoutePolicyDiff {
 
     for (String key : ospfSet) {
       if (!ospf1.containsKey(key) || !ospf2.containsKey(key)) {
-        resultRows.add(createUnequalOspfRow(ospf1, ospf2, key));
+        // Check if both routers have an ospf process
+        // TODO: OSPF processes do not need to have same name
+        // resultRows.add(createUnequalOspfRow(ospf1, ospf2, key));
       } else {
         OspfProcess process1 = ospf1.get(key);
         OspfProcess process2 = ospf2.get(key);
@@ -332,7 +335,7 @@ public class RoutePolicyDiff {
       if (extractor.hasNonDefaultPolicy(r1Import, _config1)
           || extractor.hasNonDefaultPolicy(r2Import, _config2)) {
         resultRows.addAll(
-            computeRoutePolicyDiff(neighbor.getStartIp().toString(), r1Import, r2Import));
+            computeRoutePolicyDiff(neighborToString(neighbor, true), r1Import, r2Import));
       }
     }
 
@@ -344,10 +347,15 @@ public class RoutePolicyDiff {
       if (extractor.hasNonDefaultPolicy(r1Export, _config1)
           || extractor.hasNonDefaultPolicy(r2Export, _config2)) {
         resultRows.addAll(
-            computeRoutePolicyDiff(neighbor.getStartIp().toString(), r1Export, r2Export));
+            computeRoutePolicyDiff(neighborToString(neighbor, false), r1Export, r2Export));
       }
     }
     return resultRows;
+  }
+
+  private String neighborToString(Prefix neighbor, boolean incoming) {
+    String extension = incoming ? "-IMPORT" : "-EXPORT";
+    return neighbor.getStartIp() + extension;
   }
 
   private Row createUnequalNeighborRow(
@@ -423,7 +431,13 @@ public class RoutePolicyDiff {
 
     accepted2 = actionMap2.mapToEncodedBDD(_record);
 
-    BDD difference = accepted1.and(accepted2.not()).or(accepted1.not().and(accepted2));
+    // Ignore cases where prefix len > 32, etc.
+    BDD difference = new RouteToBDD(_record).allRoutes();
+
+    // Compute difference
+    difference = difference.and(accepted1.and(accepted2.not()).or(accepted1.not().and(accepted2)));
+
+    // Remove ignored cases
     BDD ignored = new RouteToBDD(_record).buildPrefixRangesBDD(_ignoredPrefixRanges);
     difference = difference.and(ignored.not());
     if (!difference.isZero()) {
@@ -553,6 +567,8 @@ public class RoutePolicyDiff {
         String action1 = transferBDD1.getBDDPolicyActionMap().getAction(bdd).toString();
         String action2 = transferBDD2.getBDDPolicyActionMap().getAction(bdd).toString();
 
+        String bddbits = fullSatBDDToString(bdd.satOne());
+
         TypedRowBuilder builder =
             Row.builder(METADATA_MAP)
                 .put(COL_NEIGHBOR, neighbor)
@@ -567,7 +583,8 @@ public class RoutePolicyDiff {
                 .put(COL_TEXT1, stmtText1)
                 .put(COL_TEXT2, stmtText2)
                 .put(COL_ACTION1, action1)
-                .put(COL_ACTION2, action2);
+                .put(COL_ACTION2, action2)
+                .put(COL_BDD_BITS, bddbits);
         ret.add(builder.build());
       }
     }
@@ -621,9 +638,14 @@ public class RoutePolicyDiff {
     BDDFactory factory = BDDRoute.getFactory();
     StringBuilder builder = new StringBuilder();
     for (int i = 0; i < factory.varNum(); i++) {
-      if (bdd.and(factory.ithVar(i)).isZero()) {
+      boolean satWithOne = bdd.andSat(factory.ithVar(i));
+      boolean satWithZero = bdd.andSat(factory.ithVar(i).not());
+      if (satWithOne && satWithZero) {
+        builder.append("x");
+      }
+      else if (satWithZero) {
         builder.append("0");
-      } else {
+      } else if (satWithOne){
         builder.append("1");
       }
       if (i % 16 == 15) {
@@ -691,6 +713,9 @@ public class RoutePolicyDiff {
         }
         prevRow = row;
       }
+    }
+    if (prevRow != null) {
+      newList.add(prevRow);
     }
     return newList;
   }

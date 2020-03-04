@@ -85,6 +85,7 @@ import org.batfish.minesweeper.Graph;
 import org.batfish.minesweeper.OspfType;
 import org.batfish.minesweeper.Protocol;
 import org.batfish.minesweeper.TransferParam;
+import org.batfish.minesweeper.TransferParam.ChainContext;
 import org.batfish.minesweeper.TransferResult;
 import org.batfish.minesweeper.collections.Table2;
 import org.batfish.minesweeper.policylocalize.BDDPolicyActionMap;
@@ -206,6 +207,7 @@ public class TransferBDD {
       for (BooleanExpr be : c.getConjuncts()) {
         TransferResult<TransferReturn, BDD> r = compute(be, p.indent(), guardAcc);
         acc = acc.and(r.getReturnValue().getSecond());
+        guardAcc = guardAcc.and(acc);
       }
       TransferReturn ret = new TransferReturn(p.getData(), acc);
       p.debug("Conjunction return: " + acc);
@@ -273,20 +275,23 @@ public class TransferBDD {
       }
       TransferResult<TransferReturn, BDD> result = new TransferResult<>();
       TransferParam<BDDRoute> record = p;
-      BDD acc = factory.zero();
-      for (int i = chainPolicies.size() - 1; i >= 0; i--) {
-        BooleanExpr policyMatcher = chainPolicies.get(i);
-        TransferParam<BDDRoute> param =
-            record
-                .setDefaultPolicy(null)
-                .setChainContext(TransferParam.ChainContext.CONJUNCTION)
-                .indent();
+      BDD notMatchedYet = factory.one();
+      BDD accepted = factory.zero();
+      for (BooleanExpr policyMatcher : chainPolicies) {
+        TransferParam<BDDRoute> param = record.setDefaultPolicy(null)
+            .setChainContext(ChainContext.CONJUNCTION)
+            .indent();
         TransferResult<TransferReturn, BDD> r = compute(policyMatcher, param, guardAcc);
-        guardAcc = guardAcc.and(r.getReturnValue().getSecond().not());
-        record = record.setData(r.getReturnValue().getFirst());
-        acc = ite(r.getFallthroughValue(), acc, r.getReturnValue().getSecond());
+        BDD fallthrough = r.getFallthroughValue();
+        BDD matched = fallthrough.not();
+        accepted = accepted.or(r.getReturnValue().getSecond());
+        guardAcc = guardAcc.and(fallthrough);
+        record = record.setData(ite(matched.and(notMatchedYet),
+            r.getReturnValue().getFirst(),
+            record.getData()));
+        notMatchedYet.andWith(r.getFallthroughValue());
       }
-      TransferReturn ret = new TransferReturn(record.getData(), acc);
+      TransferReturn ret = new TransferReturn(record.getData(), accepted);
       return result.setReturnValue(ret);
     }
 
@@ -353,6 +358,7 @@ public class TransferBDD {
               pol.getStatements(),
               p.setCallContext(TransferParam.CallContext.EXPR_CALL).indent().enterScope(name),
               guardAcc);
+      r.getReturnValue().setReturn(factory.zero());
       CACHE.put(router, name, r);
       return r;
 
@@ -430,7 +436,7 @@ public class TransferBDD {
     totalResult =
         totalResult
             .setReturnValue(new TransferReturn(curP.getData(), factory.zero()))
-            .setFallthroughValue(factory.zero())
+            .setFallthroughValue(factory.one())
             .setReturnAssignedValue(factory.zero());
 
     for (Statement stmt : statements) {
@@ -438,7 +444,7 @@ public class TransferBDD {
       result =
           result
               .setReturnValue(new TransferReturn(curP.getData(), factory.zero()))
-              .setFallthroughValue(factory.zero())
+              .setFallthroughValue(factory.one())
               .setReturnAssignedValue(factory.zero());
       BDD nextGuardAcc = guardAcc;
 
@@ -454,6 +460,8 @@ public class TransferBDD {
             doesReturn = true;
             curP.debug("ExitAccept");
             result = returnValue(result, true);
+            result.getReturnValue().setExit(factory.one());
+            result = result.setFallthroughValue(factory.zero());
             _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
             break;
 
@@ -463,12 +471,16 @@ public class TransferBDD {
             doesReturn = true;
             curP.debug("ReturnTrue");
             result = returnValue(result, true);
+            result.getReturnValue().setReturn(factory.one());
+            result = result.setFallthroughValue(factory.zero());
             break;
 
           case ExitReject:
             doesReturn = true;
             curP.debug("ExitReject");
             result = returnValue(result, false);
+            result.getReturnValue().setExit(factory.one());
+            result = result.setFallthroughValue(factory.zero());
             _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
             break;
 
@@ -478,6 +490,8 @@ public class TransferBDD {
             doesReturn = true;
             curP.debug("ReturnFalse");
             result = returnValue(result, false);
+            result = result.setFallthroughValue(factory.zero());
+            result.getReturnValue().setReturn(factory.one());
             break;
 
           case SetDefaultActionAccept:
@@ -505,9 +519,13 @@ public class TransferBDD {
             // TODO: need to set local default action in an environment
             if (curP.getDefaultAcceptLocal()) {
               result = returnValue(result, true);
+              result.getReturnValue().setReturn(factory.one());
+              result = result.setFallthroughValue(factory.zero());
               _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
             } else {
               result = returnValue(result, false);
+              result.getReturnValue().setReturn(factory.one());
+              result = result.setFallthroughValue(factory.zero());
               _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
             }
             break;
@@ -520,6 +538,8 @@ public class TransferBDD {
           case Return:
             // TODO: assumming this happens at the end of the function, so it is ignored for now.
             curP.debug("Return");
+            result.getReturnValue().setReturn(factory.one());
+            result = result.setFallthroughValue(factory.zero());
             break;
 
           case RemovePrivateAs:
@@ -538,7 +558,6 @@ public class TransferBDD {
         BDD guard = r.getReturnValue().getSecond();
         curP.debug("guard: ");
         _bddToActions.addStatement(guardAcc.and(guard), stmt);
-        nextGuardAcc = guard.not().and(guardAcc);
 
         BDDRoute current = result.getReturnValue().getFirst();
 
@@ -556,6 +575,12 @@ public class TransferBDD {
         BDDRoute r1 = trueBranch.getReturnValue().getFirst();
         BDDRoute r2 = falseBranch.getReturnValue().getFirst();
         BDDRoute recordVal = ite(guard, r1, r2);
+
+        BDD exitBDD = trueBranch.getReturnValue().getExit()
+            .or(falseBranch.getReturnValue().getExit());
+        BDD returnBDD = trueBranch.getReturnValue().getReturn()
+            .or(falseBranch.getReturnValue().getReturn());
+        nextGuardAcc = guardAcc.and(exitBDD.not()).and(returnBDD.not());
 
         // update return values
         BDD returnVal =
@@ -581,6 +606,8 @@ public class TransferBDD {
                 .setReturnValue(new TransferReturn(recordVal, returnVal))
                 .setReturnAssignedValue(returnAss)
                 .setFallthroughValue(fallThrough);
+        result.getReturnValue().setReturn(returnBDD);
+        result.getReturnValue().setExit(exitBDD);
 
         curP.debug("If return: " + result.getReturnValue().getFirst().hashCode());
 
@@ -726,6 +753,8 @@ public class TransferBDD {
               guardAcc,
               result.getReturnValue().getSecond(),
               totalResult.getReturnValue().getSecond());
+      BDD exitBDD = ite(guardAcc, result.getReturnValue().getExit(), totalResult.getReturnValue().getExit());
+      BDD returnBDD = ite(guardAcc, result.getReturnValue().getReturn(), totalResult.getReturnValue().getReturn());
       BDD returnAss =
           ite(guardAcc, result.getReturnAssignedValue(), totalResult.getReturnAssignedValue());
       BDD fallThrough =
@@ -735,6 +764,8 @@ public class TransferBDD {
               .setReturnValue(new TransferReturn(recordVal, returnVal))
               .setReturnAssignedValue(returnAss)
               .setFallthroughValue(fallThrough);
+      totalResult.getReturnValue().setExit(exitBDD);
+      totalResult.getReturnValue().setReturn(returnBDD);
       guardAcc = nextGuardAcc;
     }
 
@@ -755,6 +786,7 @@ public class TransferBDD {
 
       // Set all the values to 0 if the return is not true;
       TransferReturn ret = totalResult.getReturnValue();
+      BDD exitBDD = totalResult.getReturnValue().getExit();
       BDDRoute retVal = ite(ret.getSecond(), ret.getFirst(), zeroedRecord());
       totalResult = totalResult.setReturnValue(new TransferReturn(retVal, ret.getSecond()));
       _transferResult = totalResult;
@@ -873,6 +905,7 @@ public class TransferBDD {
     List<CommunityListLine> lines = new ArrayList<>(cl.getLines());
     Collections.reverse(lines);
     BDD acc = factory.zero();
+    BDD notMatchedYet = factory.one();
     for (CommunityListLine line : lines) {
       boolean action = (line.getAction() == LineAction.PERMIT);
       CommunityVar cvar = toRegexCommunityVar(toCommunityVar(line.getMatchCondition()));
@@ -882,7 +915,13 @@ public class TransferBDD {
       if (_policyQuotient.getCommsMatchedButNotAssigned().contains(cvar)) {
         continue;
       }
-      matchSingleCommunityVar(p, cvar, action, other);
+      List<CommunityVar> deps = _commDeps.get(cvar);
+      for (CommunityVar dep : deps) {
+        p.debug("Test for: " + dep);
+        BDD c = other.getCommunities().get(dep);
+        acc = ite(c.and(notMatchedYet), mkBDD(action), acc);
+        notMatchedYet.andWith(c.not());
+      }
     }
     return acc;
   }
