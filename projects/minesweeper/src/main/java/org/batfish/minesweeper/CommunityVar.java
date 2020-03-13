@@ -7,6 +7,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.bgp.community.Community;
+import org.batfish.datamodel.routing_policy.expr.LiteralCommunity;
 
 /**
  * Representation of a community variable for the symbolic encoding. Configuration languages allow

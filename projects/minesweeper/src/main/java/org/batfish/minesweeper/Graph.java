@@ -64,6 +64,7 @@ import org.batfish.datamodel.routing_policy.statement.DeleteCommunity;
 import org.batfish.datamodel.routing_policy.statement.RetainCommunity;
 import org.batfish.datamodel.routing_policy.statement.SetCommunity;
 import org.batfish.minesweeper.collections.Table2;
+import org.batfish.minesweeper.communities.CommunityVarExprCollector;
 
 /**
  * A graph object representing the structure of the network. The graph is built potentially by

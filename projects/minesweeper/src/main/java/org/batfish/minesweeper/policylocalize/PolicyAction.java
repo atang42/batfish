@@ -5,12 +5,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nonnull;
-import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.minesweeper.CommunityVar;
 
 public class PolicyAction {
   private SymbolicResult _result;
-  private boolean _setsCommunitities;
+  private boolean _setsCommunities;
   private boolean _setsMetric;
   private boolean _setsLocalPref;
 
@@ -25,7 +24,7 @@ public class PolicyAction {
 
   public PolicyAction(PolicyAction action) {
     _result = action._result;
-    _setsCommunitities = action._setsCommunitities;
+    _setsCommunities = action._setsCommunities;
     _setsMetric = action._setsMetric;
     _setsLocalPref = action._setsLocalPref;
 
@@ -39,7 +38,7 @@ public class PolicyAction {
   }
 
   private void setZeroAction() {
-    _setsCommunitities = false;
+    _setsCommunities = false;
     _setsLocalPref = false;
     _setsMetric = false;
     _addedCommunities = new ArrayList<>();
@@ -89,13 +88,13 @@ public class PolicyAction {
 
   public void setAddedCommunities(Collection<CommunityVar> communityVars) {
     if (_result != SymbolicResult.REJECT) {
-      _setsCommunitities = true;
+      _setsCommunities = true;
       _addedCommunities = new ArrayList<>(communityVars);
     }
   }
 
   public boolean setsCommunities() {
-    return _setsCommunitities;
+    return _setsCommunities;
   }
 
   public List<CommunityVar> getCommunities() {
@@ -126,7 +125,7 @@ public class PolicyAction {
       return false;
     }
     PolicyAction action = (PolicyAction) o;
-    return _setsCommunitities == action._setsCommunitities && _setsMetric == action._setsMetric
+    return _setsCommunities == action._setsCommunities && _setsMetric == action._setsMetric
         && _setsLocalPref == action._setsLocalPref && _metricValue == action._metricValue
         && _localPrefValue == action._localPrefValue && _result == action._result && Objects.equals(
         _addedCommunities,
@@ -135,8 +134,7 @@ public class PolicyAction {
 
   @Override public int hashCode() {
 
-    return Objects.hash(_result,
-        _setsCommunitities,
+    return Objects.hash(_result, _setsCommunities,
         _setsMetric,
         _setsLocalPref,
         _addedCommunities,

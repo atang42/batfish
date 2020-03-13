@@ -167,7 +167,7 @@ public class MatchCommunitiesToBDD
 
     @Override
     public BDD visitCommunityIs(CommunityIs communityIs, CommunityContext arg) {
-      CommunityVar comm = toRegexCommunityVar(CommunityVar.from(communityIs.getCommunity()));
+      CommunityVar comm = CommunityVar.from(communityIs.getCommunity());
       return _transferBDD.matchSingleCommunityVar(_param, comm, true, _record);
     }
 

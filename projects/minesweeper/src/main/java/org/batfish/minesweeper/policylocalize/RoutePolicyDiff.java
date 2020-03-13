@@ -36,6 +36,7 @@ import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.Row.TypedRowBuilder;
 import org.batfish.datamodel.table.TableMetadata;
 import org.batfish.minesweeper.CommunityVar;
+import org.batfish.minesweeper.communities.CommunityVarExtractor;
 import org.batfish.minesweeper.Graph;
 import org.batfish.minesweeper.Protocol;
 import org.batfish.minesweeper.TransferResult;
@@ -43,6 +44,7 @@ import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.PolicyQuotient;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
+import org.batfish.minesweeper.communities.CommunityVarSet;
 import org.batfish.minesweeper.policylocalize.resultrepr.IncludedExcludedPrefixRanges;
 import org.batfish.minesweeper.policylocalize.resultrepr.PrefixExtractor;
 
@@ -104,6 +106,7 @@ public class RoutePolicyDiff {
   private final PolicyQuotient _policyQuotient;
   private final List<PrefixRange> _ignoredPrefixRanges;
   private final PrefixExtractor _prefixExtractor;
+  private final CommunityVarSet _comms;
 
   public RoutePolicyDiff(
       String router1,
@@ -114,8 +117,8 @@ public class RoutePolicyDiff {
     _ignoredPrefixRanges = ranges;
 
     _graph = new Graph(batfish);
-    Set<CommunityVar> comms = _graph.getAllCommunities();
-    _record = new BDDRoute(comms);
+    _comms = new CommunityVarExtractor(configurations).getCommunityVars();
+    _record = new BDDRoute(_comms.getVars());
     _policyQuotient = new PolicyQuotient();
 
     _config1 = configurations.get(0);
@@ -414,14 +417,14 @@ public class RoutePolicyDiff {
         new TransferBDD(_graph, _config1, r1Policy.getStatements(), _policyQuotient);
     BDDRoute route1 = _record.deepCopy();
     TransferResult<TransferReturn, BDD> transferResult1 =
-        transferBDD1.compute(new TreeSet<>(), route1);
+        transferBDD1.compute(new TreeSet<>(), route1, _comms);
     BDD accepted1 = transferResult1.getReturnValue().getSecond();
 
     TransferBDD transferBDD2 =
         new TransferBDD(_graph, _config2, r2Policy.getStatements(), _policyQuotient);
     BDDRoute route2 = _record.deepCopy();
     TransferResult<TransferReturn, BDD> transferResult2 =
-        transferBDD2.compute(new TreeSet<>(), route2);
+        transferBDD2.compute(new TreeSet<>(), route2, _comms);
     BDD accepted2 = transferResult2.getReturnValue().getSecond();
 
     BDDPolicyActionMap actionMap1 = transferBDD1.getBDDPolicyActionMap();

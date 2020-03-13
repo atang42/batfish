@@ -137,11 +137,9 @@ public class BDDRoute implements IDeepCopy<BDDRoute> {
     // Initialize communities
     _communities = new TreeMap<>();
     for (CommunityVar comm : comms) {
-      if (comm.getType() != Type.REGEX) {
-        _communities.put(comm, factory.ithVar(idx));
-        _bitNames.put(idx, comm.getRegex());
-        idx++;
-      }
+      _communities.put(comm, factory.ithVar(idx));
+      _bitNames.put(idx, comm.getRegex());
+      idx++;
     }
     // Initialize OSPF type
     _ospfMetric = new BDDDomain<>(factory, allMetricTypes, idx);

@@ -32,6 +32,7 @@ import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.PolicyQuotient;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
+import org.batfish.minesweeper.communities.CommunityVarSet;
 import org.batfish.minesweeper.policylocalize.RouteToBDD;
 import org.batfish.minesweeper.policylocalize.SymbolicResult;
 import org.batfish.specifier.NodeSpecifier;
@@ -100,7 +101,7 @@ public class FindRouteFilterLinesAnswerer extends Answerer {
         BDDRoute route = new BDDRoute(comms);
         BDDRoute record = route.deepCopy();
         TransferResult<TransferReturn, BDD> transferResult =
-            transferBDD.compute(new TreeSet<>(), route);
+            transferBDD.compute(new TreeSet<>(), route, new CommunityVarSet(comms));
         BDD accepted = transferResult.getReturnValue().getSecond();
         BDD rejected = accepted.not();
 
@@ -163,7 +164,7 @@ public class FindRouteFilterLinesAnswerer extends Answerer {
         BDDRoute route = new BDDRoute(comms);
         BDDRoute record = route.deepCopy();
         TransferResult<TransferReturn, BDD> transferResult =
-            transferBDD.compute(new TreeSet<>(), route);
+            transferBDD.compute(new TreeSet<>(), route, new CommunityVarSet(comms));
 
         /*
         List<Statement> stmts = transferBDD.getStatementsActingOnPrefix(_prefix, transferResult.getReturnValue().getFirst());

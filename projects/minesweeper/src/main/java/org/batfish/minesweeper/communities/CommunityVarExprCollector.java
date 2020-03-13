@@ -1,4 +1,4 @@
-package org.batfish.minesweeper;
+package org.batfish.minesweeper.communities;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -40,6 +40,7 @@ import org.batfish.datamodel.routing_policy.communities.SiteOfOriginExtendedComm
 import org.batfish.datamodel.routing_policy.communities.StandardCommunityHighMatch;
 import org.batfish.datamodel.routing_policy.communities.StandardCommunityLowMatch;
 import org.batfish.datamodel.routing_policy.communities.VpnDistinguisherExtendedCommunities;
+import org.batfish.minesweeper.CommunityVar;
 
 public class CommunityVarExprCollector {
 
@@ -62,7 +63,8 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitAllExtendedCommunities(
         AllExtendedCommunities allExtendedCommunities, CommunityContext arg) {
-      System.err.println("Unsupported operation in CommunityVarExprCollector: AllExtendedCommunities");
+      System.err.println(
+          "Unsupported operation in CommunityVarExprCollector: AllExtendedCommunities");
       return new HashSet<CommunityVar>();
     }
 
@@ -76,7 +78,8 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitAllStandardCommunities(
         AllStandardCommunities allStandardCommunities, CommunityContext arg) {
-      System.err.println("Unsupported operation in CommunityVarExprCollector: AllStandardCommunities");
+      System.err.println(
+          "Unsupported operation in CommunityVarExprCollector: AllStandardCommunities");
       return new HashSet<CommunityVar>();
     }
 
@@ -101,9 +104,7 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitCommunityMatchAll(
         CommunityMatchAll communityMatchAll, CommunityContext arg) {
-      return communityMatchAll
-          .getExprs()
-          .stream()
+      return communityMatchAll.getExprs().stream()
           .map(expr -> expr.accept(this, arg))
           .flatMap(Set::stream)
           .collect(Collectors.toSet());
@@ -112,9 +113,7 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitCommunityMatchAny(
         CommunityMatchAny communityMatchAny, CommunityContext arg) {
-      return communityMatchAny
-          .getExprs()
-          .stream()
+      return communityMatchAny.getExprs().stream()
           .map(expr -> expr.accept(this, arg))
           .flatMap(Set::stream)
           .collect(Collectors.toSet());
@@ -144,28 +143,32 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitRouteTargetExtendedCommunities(
         RouteTargetExtendedCommunities routeTargetExtendedCommunities, CommunityContext arg) {
-      System.err.println("Unsupported operation in CommunityVarExprCollector: RouteTargetExtendedCommunities");
+      System.err.println(
+          "Unsupported operation in CommunityVarExprCollector: RouteTargetExtendedCommunities");
       return new HashSet<CommunityVar>();
     }
 
     @Override
     public Set<CommunityVar> visitSiteOfOriginExtendedCommunities(
         SiteOfOriginExtendedCommunities siteOfOriginExtendedCommunities, CommunityContext arg) {
-      System.err.println("Unsupported operation in CommunityVarExprCollector: SiteOfOriginExtendedCommunities");
+      System.err.println(
+          "Unsupported operation in CommunityVarExprCollector: SiteOfOriginExtendedCommunities");
       return new HashSet<CommunityVar>();
     }
 
     @Override
     public Set<CommunityVar> visitStandardCommunityHighMatch(
         StandardCommunityHighMatch standardCommunityHighMatch, CommunityContext arg) {
-      System.err.println("Unsupported operation in CommunityVarExprCollector: StandardCommunityHighMatch");
+      System.err.println(
+          "Unsupported operation in CommunityVarExprCollector: StandardCommunityHighMatch");
       return new HashSet<CommunityVar>();
     }
 
     @Override
     public Set<CommunityVar> visitStandardCommunityLowMatch(
         StandardCommunityLowMatch standardCommunityLowMatch, CommunityContext arg) {
-      System.err.println("Unsupported operation in CommunityVarExprCollector: StandardCommunityLowMatch");
+      System.err.println(
+          "Unsupported operation in CommunityVarExprCollector: StandardCommunityLowMatch");
       return new HashSet<CommunityVar>();
     }
 
@@ -173,7 +176,8 @@ public class CommunityVarExprCollector {
     public Set<CommunityVar> visitVpnDistinguisherExtendedCommunities(
         VpnDistinguisherExtendedCommunities vpnDistinguisherExtendedCommunities,
         CommunityContext arg) {
-      System.err.println("Unsupported operation in CommunityVarExprCollector: VpnDistinguisherExtendedCommunities");
+      System.err.println(
+          "Unsupported operation in CommunityVarExprCollector: VpnDistinguisherExtendedCommunities");
       return new HashSet<CommunityVar>();
     }
   }
@@ -207,15 +211,15 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitCommunitySetReference(
         CommunitySetReference communitySetReference, CommunityContext arg) {
-      return arg.getCommunitySetExprs().get(communitySetReference.getName()).accept(this, arg);
+      return arg.getCommunitySets().get(communitySetReference.getName()).getCommunities().stream()
+          .map(CommunityVar::from)
+          .collect(Collectors.toSet());
     }
 
     @Override
     public Set<CommunityVar> visitCommunitySetUnion(
         CommunitySetUnion communitySetUnion, CommunityContext arg) {
-      return communitySetUnion
-          .getExprs()
-          .stream()
+      return communitySetUnion.getExprs().stream()
           .map(expr -> expr.accept(this, arg))
           .flatMap(Set::stream)
           .collect(Collectors.toSet());
@@ -224,21 +228,16 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitInputCommunities(
         InputCommunities inputCommunities, CommunityContext arg) {
-      return arg.getInputCommunitySet()
-          .getCommunities()
-          .stream()
-          .map(community -> CommunityVar.from(community))
+      return arg.getInputCommunitySet().getCommunities().stream()
+          .map(CommunityVar::from)
           .collect(Collectors.toSet());
     }
 
     @Override
     public Set<CommunityVar> visitLiteralCommunitySet(
         LiteralCommunitySet literalCommunitySet, CommunityContext arg) {
-      return literalCommunitySet
-          .getCommunitySet()
-          .getCommunities()
-          .stream()
-          .map(community -> CommunityVar.from(community))
+      return literalCommunitySet.getCommunitySet().getCommunities().stream()
+          .map(CommunityVar::from)
           .collect(Collectors.toSet());
     }
   }
@@ -256,9 +255,7 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitCommunitySetMatchAll(
         CommunitySetMatchAll communitySetMatchAll, CommunityContext arg) {
-      return communitySetMatchAll
-          .getExprs()
-          .stream()
+      return communitySetMatchAll.getExprs().stream()
           .map(expr -> expr.accept(this, arg))
           .flatMap(Set::stream)
           .collect(Collectors.toSet());
@@ -267,9 +264,7 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitCommunitySetMatchAny(
         CommunitySetMatchAny communitySetMatchAny, CommunityContext arg) {
-      return communitySetMatchAny
-          .getExprs()
-          .stream()
+      return communitySetMatchAny.getExprs().stream()
           .map(expr -> expr.accept(this, arg))
           .flatMap(Set::stream)
           .collect(Collectors.toSet());

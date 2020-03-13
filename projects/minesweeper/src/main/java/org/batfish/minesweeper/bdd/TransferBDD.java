@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.stream.Collectors;
@@ -85,9 +86,11 @@ import org.batfish.minesweeper.Graph;
 import org.batfish.minesweeper.OspfType;
 import org.batfish.minesweeper.Protocol;
 import org.batfish.minesweeper.TransferParam;
+import org.batfish.minesweeper.TransferParam.CallContext;
 import org.batfish.minesweeper.TransferParam.ChainContext;
 import org.batfish.minesweeper.TransferResult;
 import org.batfish.minesweeper.collections.Table2;
+import org.batfish.minesweeper.communities.CommunityVarSet;
 import org.batfish.minesweeper.policylocalize.BDDPolicyActionMap;
 import org.batfish.minesweeper.policylocalize.RouteToBDD;
 import org.batfish.minesweeper.policylocalize.SymbolicResult;
@@ -473,6 +476,9 @@ public class TransferBDD {
             result = returnValue(result, true);
             result.getReturnValue().setReturn(factory.one());
             result = result.setFallthroughValue(factory.zero());
+            if (curP.getCallContext().equals(CallContext.NONE)) {
+              _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
+            }
             break;
 
           case ExitReject:
@@ -492,6 +498,9 @@ public class TransferBDD {
             result = returnValue(result, false);
             result = result.setFallthroughValue(factory.zero());
             result.getReturnValue().setReturn(factory.one());
+            if (curP.getCallContext().equals(CallContext.NONE)) {
+              _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
+            }
             break;
 
           case SetDefaultActionAccept:
@@ -521,12 +530,16 @@ public class TransferBDD {
               result = returnValue(result, true);
               result.getReturnValue().setReturn(factory.one());
               result = result.setFallthroughValue(factory.zero());
-              _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
+              if (curP.getCallContext().equals(CallContext.NONE)) {
+                _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
+              }
             } else {
               result = returnValue(result, false);
               result.getReturnValue().setReturn(factory.one());
               result = result.setFallthroughValue(factory.zero());
-              _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
+              if (curP.getCallContext().equals(CallContext.NONE)) {
+                _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
+              }
             }
             break;
 
@@ -908,14 +921,15 @@ public class TransferBDD {
     BDD notMatchedYet = factory.one();
     for (CommunityListLine line : lines) {
       boolean action = (line.getAction() == LineAction.PERMIT);
-      CommunityVar cvar = toRegexCommunityVar(toCommunityVar(line.getMatchCondition()));
+      CommunityVar cvar = toCommunityVar(line.getMatchCondition());
       p.debug("Match Line: " + cvar);
       p.debug("Action: " + line.getAction());
       // Skip this match if it is irrelevant
       if (_policyQuotient.getCommsMatchedButNotAssigned().contains(cvar)) {
         continue;
       }
-      List<CommunityVar> deps = _commDeps.get(cvar);
+      List<CommunityVar> deps = _commDeps.getOrDefault(cvar, new ArrayList<>());
+      deps.add(cvar);
       for (CommunityVar dep : deps) {
         p.debug("Test for: " + dep);
         BDD c = other.getCommunities().get(dep);
@@ -928,11 +942,12 @@ public class TransferBDD {
 
   public BDD matchSingleCommunityVar(
       TransferParam<BDDRoute> p, CommunityVar cvar, boolean action, BDDRoute other) {
-    List<CommunityVar> deps = _commDeps.get(cvar);
+    List<CommunityVar> deps = _commDeps.getOrDefault(cvar, new ArrayList<>());
+    deps.add(cvar);
     BDD acc = factory.zero();
     for (CommunityVar dep : deps) {
       p.debug("Test for: " + dep);
-      BDD c = other.getCommunities().get(dep);
+      BDD c = other.getCommunities().getOrDefault(dep, factory.zero());
       acc = ite(c, mkBDD(action), acc);
     }
     return acc;
@@ -1102,10 +1117,10 @@ public class TransferBDD {
    * Create a BDDRecord representing the symbolic output of
    * the RoutingPolicy given the input variables.
    */
-  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks, BDDRoute route) {
+  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks, BDDRoute route, CommunityVarSet comms) {
     _ignoredNetworks = ignoredNetworks;
-    _commDeps = _graph.getCommunityDependencies();
-    _comms = _graph.getAllCommunities();
+    _commDeps = comms.getDependencies();
+    _comms = comms.getVars();
     _bddToActions = new BDDPolicyActionMap();
     addCommunityAssumptions(route);
     TransferParam<BDDRoute> p = new TransferParam<>(route, false);
@@ -1113,9 +1128,13 @@ public class TransferBDD {
     return result;
   }
 
+  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks, CommunityVarSet comms) {
+    return compute(ignoredNetworks, new BDDRoute(_comms), comms);
+  }
+
   public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks) {
     _comms = _graph.getAllCommunities();
-    return compute(ignoredNetworks, new BDDRoute(_comms));
+    return compute(ignoredNetworks, new BDDRoute(_comms), new CommunityVarSet(_comms));
   }
 
   /*
