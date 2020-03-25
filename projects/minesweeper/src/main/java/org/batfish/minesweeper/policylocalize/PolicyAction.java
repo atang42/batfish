@@ -12,6 +12,7 @@ public class PolicyAction {
   private boolean _setsCommunities;
   private boolean _setsMetric;
   private boolean _setsLocalPref;
+  private boolean _setsAsPath;
 
   @Nonnull private List<CommunityVar> _addedCommunities;
   private long _metricValue;
@@ -110,8 +111,11 @@ public class PolicyAction {
       builder.append("SET LOCAL PREF ").append(_localPrefValue).append("\n");
     }
     if (setsCommunities()) {
-      builder.append("ADD COMMUNITIES\n");
-      //TODO: Add community values to string
+      builder.append("ADD COMMUNITIES [");
+      for (CommunityVar var : getCommunities()) {
+        builder.append(var.getRegex()).append(" ");
+        builder.append("]\n");
+      }
     }
     builder.append(_result.name());
     return builder.toString();

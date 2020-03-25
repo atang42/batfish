@@ -464,8 +464,7 @@ public class CommunityVarExtractor {
 
     @Override
     public Set<CommunityVar> visitSetCommunity(SetCommunity setCommunity, CommunityContext arg) {
-      System.err.println("CommunityVarExtractor : visitSetCommunity not implemented");
-      return Collections.emptySet();
+      return setCommunity.getExpr().accept(new CommunitySetExprExtractor(_config));
     }
 
     @Override

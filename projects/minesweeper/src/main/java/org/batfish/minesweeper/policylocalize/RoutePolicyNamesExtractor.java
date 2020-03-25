@@ -8,39 +8,8 @@ import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.communities.MatchCommunities;
 import org.batfish.datamodel.routing_policy.communities.SetCommunities;
-import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
-import org.batfish.datamodel.routing_policy.expr.BooleanExprVisitor;
+import org.batfish.datamodel.routing_policy.expr.*;
 import org.batfish.datamodel.routing_policy.expr.BooleanExprs.StaticBooleanExpr;
-import org.batfish.datamodel.routing_policy.expr.CallExpr;
-import org.batfish.datamodel.routing_policy.expr.Conjunction;
-import org.batfish.datamodel.routing_policy.expr.ConjunctionChain;
-import org.batfish.datamodel.routing_policy.expr.Disjunction;
-import org.batfish.datamodel.routing_policy.expr.FirstMatchChain;
-import org.batfish.datamodel.routing_policy.expr.HasRoute;
-import org.batfish.datamodel.routing_policy.expr.HasRoute6;
-import org.batfish.datamodel.routing_policy.expr.MatchAsPath;
-import org.batfish.datamodel.routing_policy.expr.MatchColor;
-import org.batfish.datamodel.routing_policy.expr.MatchCommunitySet;
-import org.batfish.datamodel.routing_policy.expr.MatchEntireCommunitySet;
-import org.batfish.datamodel.routing_policy.expr.MatchIp6AccessList;
-import org.batfish.datamodel.routing_policy.expr.MatchIpv4;
-import org.batfish.datamodel.routing_policy.expr.MatchIpv6;
-import org.batfish.datamodel.routing_policy.expr.MatchLocalPreference;
-import org.batfish.datamodel.routing_policy.expr.MatchLocalRouteSourcePrefixLength;
-import org.batfish.datamodel.routing_policy.expr.MatchMetric;
-import org.batfish.datamodel.routing_policy.expr.MatchPrefix6Set;
-import org.batfish.datamodel.routing_policy.expr.MatchPrefixSet;
-import org.batfish.datamodel.routing_policy.expr.MatchProcessAsn;
-import org.batfish.datamodel.routing_policy.expr.MatchProtocol;
-import org.batfish.datamodel.routing_policy.expr.MatchRouteType;
-import org.batfish.datamodel.routing_policy.expr.MatchSourceVrf;
-import org.batfish.datamodel.routing_policy.expr.MatchTag;
-import org.batfish.datamodel.routing_policy.expr.NeighborIsAsPath;
-import org.batfish.datamodel.routing_policy.expr.Not;
-import org.batfish.datamodel.routing_policy.expr.OriginatesFromAsPath;
-import org.batfish.datamodel.routing_policy.expr.PassesThroughAsPath;
-import org.batfish.datamodel.routing_policy.expr.RouteIsClassful;
-import org.batfish.datamodel.routing_policy.expr.WithEnvironmentExpr;
 import org.batfish.datamodel.routing_policy.statement.AddCommunity;
 import org.batfish.datamodel.routing_policy.statement.BufferedStatement;
 import org.batfish.datamodel.routing_policy.statement.CallStatement;
@@ -91,10 +60,6 @@ public class RoutePolicyNamesExtractor {
     @Override public List<String> visitCallStatement(CallStatement callStatement,
         List<String> arg) {
       arg.add(callStatement.getCalledPolicyName());
-      RoutingPolicy policy =_env.getRoutingPolicies().get(callStatement.getCalledPolicyName());
-      for (Statement statement : policy.getStatements()) {
-        arg = statement.accept(this, arg);
-      }
       return arg;
     }
 
@@ -323,6 +288,9 @@ public class RoutePolicyNamesExtractor {
 
     @Override public List<String> visitMatchPrefixSet(MatchPrefixSet matchPrefixSet,
         List<String> arg) {
+      if (matchPrefixSet.getPrefixSet() instanceof NamedPrefixSet) {
+        arg.add(((NamedPrefixSet) matchPrefixSet.getPrefixSet()).getName());
+      }
       return arg;
     }
 

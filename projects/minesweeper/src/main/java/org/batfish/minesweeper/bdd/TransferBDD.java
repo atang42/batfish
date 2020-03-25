@@ -66,19 +66,7 @@ import org.batfish.datamodel.routing_policy.expr.NamedPrefixSet;
 import org.batfish.datamodel.routing_policy.expr.Not;
 import org.batfish.datamodel.routing_policy.expr.PrefixSetExpr;
 import org.batfish.datamodel.routing_policy.expr.WithEnvironmentExpr;
-import org.batfish.datamodel.routing_policy.statement.AddCommunity;
-import org.batfish.datamodel.routing_policy.statement.DeleteCommunity;
-import org.batfish.datamodel.routing_policy.statement.If;
-import org.batfish.datamodel.routing_policy.statement.PrependAsPath;
-import org.batfish.datamodel.routing_policy.statement.RetainCommunity;
-import org.batfish.datamodel.routing_policy.statement.SetCommunity;
-import org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy;
-import org.batfish.datamodel.routing_policy.statement.SetLocalPreference;
-import org.batfish.datamodel.routing_policy.statement.SetMetric;
-import org.batfish.datamodel.routing_policy.statement.SetNextHop;
-import org.batfish.datamodel.routing_policy.statement.SetOrigin;
-import org.batfish.datamodel.routing_policy.statement.SetOspfMetricType;
-import org.batfish.datamodel.routing_policy.statement.Statement;
+import org.batfish.datamodel.routing_policy.statement.*;
 import org.batfish.datamodel.routing_policy.statement.Statements.StaticStatement;
 import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.CommunityVar.Type;
@@ -451,7 +439,7 @@ public class TransferBDD {
               .setReturnAssignedValue(factory.zero());
       BDD nextGuardAcc = guardAcc;
 
-      if (!(stmt instanceof If)) {
+      if (!(stmt instanceof If) && p.getInitialCall()) {
         _bddToActions.addStatement(guardAcc, stmt);
       }
 
@@ -511,6 +499,25 @@ public class TransferBDD {
           case SetDefaultActionReject:
             curP.debug("SetDefaultActionReject");
             curP = curP.setDefaultAccept(false);
+            break;
+
+          case DefaultAction:
+            curP.debug("DefaultAction");
+            if(curP.getDefaultAccept()) {
+              result = returnValue(result, true);
+              result.getReturnValue().setReturn(factory.one());
+              result = result.setFallthroughValue(factory.zero());
+              if (curP.getCallContext().equals(CallContext.NONE)) {
+                _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
+              }
+            } else {
+              result = returnValue(result, false);
+              result.getReturnValue().setReturn(factory.one());
+              result = result.setFallthroughValue(factory.zero());
+              if (curP.getCallContext().equals(CallContext.NONE)) {
+                _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
+              }
+            }
             break;
 
           case SetLocalDefaultActionAccept:
@@ -737,6 +744,10 @@ public class TransferBDD {
         newValue = ite(result.getReturnAssignedValue(), curP.getData().getMetric(), newValue);
         curP.getData().setMetric(newValue);
 
+      } else if (stmt instanceof CallStatement) {
+        p.debug("CallStatement");
+        // TODO: implement me
+
       } else if (stmt instanceof SetOrigin) {
         curP.debug("SetOrigin");
         // System.out.println("Warning: use of unimplemented feature SetOrigin");
@@ -750,6 +761,14 @@ public class TransferBDD {
       } else if (stmt instanceof SetCommunities) {
         curP.debug("SetCommunities");
         // System.out.println("Warning: use of unimplemented feature SetNextHop");
+        // TODO: implement me
+
+      } else if  (stmt instanceof SetWeight) {
+        curP.debug("SetWeight");
+        // TODO: implement me
+
+      } else if (stmt instanceof BufferedStatement) {
+        curP.debug("BufferedStatement");
         // TODO: implement me
 
       } else {

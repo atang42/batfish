@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import net.sf.javabdd.BDD;
@@ -26,12 +28,14 @@ public class PrefixRangeNode extends AbstractPrefixRangeNode {
   @Nonnull private final List<PrefixRangeNode> _intersects;
   @Nonnull private PrefixRange _prefixRange;
   @Nullable private RemainderNode _remainder;
+  private final boolean _isIntersection;
 
-  PrefixRangeNode(PrefixRange prefixRange) {
+  PrefixRangeNode(PrefixRange prefixRange, boolean isIntersection) {
     _parents = new ArrayList<>();
     _children = new ArrayList<>();
     _intersects = new ArrayList<>();
     _prefixRange = prefixRange;
+    _isIntersection = isIntersection;
   }
 
   public static Optional<PrefixRange> prefixRangeIntersection(
@@ -60,6 +64,10 @@ public class PrefixRangeNode extends AbstractPrefixRangeNode {
     _parents.add(p);
   }
 
+  public void removeParent(@Nonnull PrefixRangeNode p) {
+    _parents.remove(p);
+  }
+
   @Override
   @Nonnull
   public List<PrefixRangeNode> getParents() {
@@ -81,6 +89,10 @@ public class PrefixRangeNode extends AbstractPrefixRangeNode {
     _children.add(ch);
   }
 
+  public void removeChild(@Nonnull PrefixRangeNode ch) {
+    _children.remove(ch);
+  }
+
   @Nonnull
   public List<PrefixRangeNode> getChildren() {
     return _children;
@@ -100,8 +112,18 @@ public class PrefixRangeNode extends AbstractPrefixRangeNode {
     return _prefixRange;
   }
 
+  private void generateRemainder() {
+    List<PrefixRange> excluded =
+            getChildren().stream().map(PrefixRangeNode::getPrefixRange).collect(Collectors.toList());
+    RemainderNode remainderNode = new RemainderNode(this, excluded);
+    setRemainder(remainderNode);
+  }
+
   @Nullable
   public RemainderNode getRemainder() {
+    if (_remainder == null) {
+      generateRemainder();
+    }
     return _remainder;
   }
 
@@ -121,6 +143,10 @@ public class PrefixRangeNode extends AbstractPrefixRangeNode {
     return PrefixRangeNode.prefixRangeIntersection(_prefixRange, range);
   }
 
+  public boolean isIntersection() {
+    return _isIntersection;
+  }
+
   /*
   Recursive method for determining which prefix ranges must be included and excluded to match
   a BDD. For the subgraph reachable from the current node, this method returns a list of included
@@ -129,7 +155,7 @@ public class PrefixRangeNode extends AbstractPrefixRangeNode {
    */
   public IncludedExcludedPrefixRanges getRangesMatchingBDD(BDD bdd, BDDRoute record) {
     IncludedExcludedPrefixRanges ranges = new IncludedExcludedPrefixRanges();
-    if (_children.isEmpty() && _intersects.isEmpty()) {
+    if (_children.isEmpty()) {
       if (intersectsBDD(bdd, record)) {
         ranges.getIncludedRanges().add(_prefixRange);
       }
@@ -142,8 +168,8 @@ public class PrefixRangeNode extends AbstractPrefixRangeNode {
       return ranges;
     }
 
-    assert _remainder != null;
-    boolean remainderMatches = _remainder.intersectsBDD(bdd, record);
+    assert getRemainder() != null;
+    boolean remainderMatches = getRemainder().intersectsBDD(bdd, record);
     if (remainderMatches) {
       ranges.getIncludedRanges().add(getPrefixRange());
     }
@@ -165,7 +191,7 @@ public class PrefixRangeNode extends AbstractPrefixRangeNode {
    */
   public IncludedExcludedPrefixRanges getRangesNotMatchingBDD(BDD bdd, BDDRoute record) {
     IncludedExcludedPrefixRanges ranges = new IncludedExcludedPrefixRanges();
-    if (_children.isEmpty() && _intersects.isEmpty()) {
+    if (_children.isEmpty()) {
       if (!intersectsBDD(bdd, record)) {
         ranges.getIncludedRanges().add(_prefixRange);
       }
@@ -179,8 +205,8 @@ public class PrefixRangeNode extends AbstractPrefixRangeNode {
       return ranges;
     }
 
-    assert _remainder != null;
-    boolean remainderMatches = _remainder.intersectsBDD(bdd, record);
+    assert getRemainder() != null;
+    boolean remainderMatches = getRemainder().getBDD(record).isZero() || getRemainder().intersectsBDD(bdd, record);
     if (!remainderMatches) {
       ranges.getIncludedRanges().add(getPrefixRange());
     }

@@ -200,7 +200,7 @@ public class BDDPolicyActionMap {
     StringBuilder stmtText = new StringBuilder();
     statements
         .stream()
-        .filter(stmt -> stmt.getText() != null && stmt instanceof If)
+        .filter(stmt -> stmt.getText() != null)
         .forEach(stmt -> stmtText.append(stmt.getText()).append(System.lineSeparator()));
     return stmtText.toString().trim();
   }

@@ -25,7 +25,6 @@ public class PrefixExtractor {
     _prefixRanges = new TreeSet<>();
     _record = record;
     addRouteFilterLists(routeFilterLists);
-    _graph = PrefixRangeDAG.build(_prefixRanges);
   }
 
   /*

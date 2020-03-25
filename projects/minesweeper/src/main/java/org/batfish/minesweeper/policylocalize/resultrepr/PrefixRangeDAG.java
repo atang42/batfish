@@ -1,15 +1,7 @@
 package org.batfish.minesweeper.policylocalize.resultrepr;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.*;
+
 import net.sf.javabdd.BDD;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixRange;
@@ -21,21 +13,16 @@ public class PrefixRangeDAG {
   private static PrefixRange ALL_PREFIXES = new PrefixRange(Prefix.ZERO, new SubRange(0, 32));
 
   private PrefixRangeNode _start;
-  private Set<AbstractPrefixRangeNode> _ends;
   private int _intersections;
+  Map<PrefixRange, PrefixRangeNode> _nodeMap = new HashMap<>();
 
   private PrefixRangeDAG() {
-    _start = new PrefixRangeNode(ALL_PREFIXES);
-    _ends = new HashSet<>();
+    _start = new PrefixRangeNode(ALL_PREFIXES, false);
     _intersections = 0;
   }
 
   public PrefixRangeNode getStart() {
     return _start;
-  }
-
-  public Set<AbstractPrefixRangeNode> getEnds() {
-    return _ends;
   }
 
   public List<IncludedExcludedPrefixRanges> getRangesMatchingBDD(BDD bdd, BDDRoute record) {
@@ -50,16 +37,23 @@ public class PrefixRangeDAG {
   Add prefix range node to subgraph starting at parent.
   Nodes must be added in order by prefix length of the prefix ranges
   */
-  private static void addNode(PrefixRangeNode parent, PrefixRangeNode newNode) {
+  private static void addNode(PrefixRangeNode parent, PrefixRangeNode newNode, PrefixRangeDAG graph) {
     List<PrefixRangeNode> children = parent.getChildren();
     List<PrefixRangeNode> containingNodes = new ArrayList<>();
+    List<PrefixRangeNode> containedNodes = new ArrayList<>();
     List<PrefixRangeNode> intersectingNodes = new ArrayList<>();
-
+    if (parent == newNode) {
+      // Don't insert node as child of self
+      return;
+    }
     PrefixRange prefixRange = newNode.getPrefixRange();
     for (PrefixRangeNode node : children) {
       if (node.containsPrefixRange(prefixRange)) {
         containingNodes.add(node);
-      } else if (node.getIntersection(prefixRange).isPresent()) {
+      } else if (newNode.containsPrefixRange(node.getPrefixRange())) {
+        containedNodes.add(node);
+      }
+      else if (node.getIntersection(prefixRange).isPresent()) {
         intersectingNodes.add(node);
       }
     }
@@ -69,21 +63,33 @@ public class PrefixRangeDAG {
       newNode.addParent(parent);
     } else {
       for (PrefixRangeNode containingNode : containingNodes) {
-        addNode(containingNode, newNode);
+        addNode(containingNode, newNode, graph);
       }
+    }
+
+    for (PrefixRangeNode contained : containedNodes) {
+      contained.removeParent(parent);
+      parent.removeChild(contained);
+      newNode.addChild(contained);
+      contained.addParent(contained);
     }
 
     for (PrefixRangeNode intersecting : intersectingNodes) {
       intersecting.addIntersects(newNode);
       newNode.addIntersects(intersecting);
+      Optional<PrefixRange> intersection = newNode.getIntersection(intersecting.getPrefixRange());
+      assert intersection.isPresent();
+      if (!graph._nodeMap.containsKey(intersection.get())) {
+        PrefixRangeNode intersectionNode = new PrefixRangeNode(intersection.get(), true);
+        addNode(parent, intersectionNode, graph);
+      }
     }
   }
 
   public static PrefixRangeDAG build(Collection<PrefixRange> ranges) {
     PrefixRangeDAG graph = new PrefixRangeDAG();
     List<PrefixRange> prefixRangeList = new ArrayList<>(ranges);
-    Map<PrefixRange, PrefixRangeNode> nodeMap = new HashMap<>();
-    nodeMap.put(ALL_PREFIXES, graph._start);
+    graph._nodeMap.put(ALL_PREFIXES, graph._start);
 
     // Add all prefix ranges as nodes with parent, children, intersect relationships
     // Sorting ensures that if A contains B then A comes before B
@@ -93,34 +99,23 @@ public class PrefixRangeDAG {
             .thenComparing((PrefixRange pr) -> -pr.getLengthRange().getEnd()));
     for (PrefixRange range : prefixRangeList) {
       if (!range.equals(ALL_PREFIXES)) {
-        PrefixRangeNode newNode = new PrefixRangeNode(range);
-        nodeMap.put(range, newNode);
-        addNode(graph.getStart(), newNode);
+        PrefixRangeNode newNode = new PrefixRangeNode(range, false);
+        if (graph._nodeMap.containsKey(range)) {
+          continue;
+        }
+        graph._nodeMap.put(range, newNode);
+        addNode(graph.getStart(), newNode, graph);
       }
     }
 
     // Mark ends and create generated nodes based on remainders
     int intersections = 0;
-    for (PrefixRangeNode node : nodeMap.values()) {
+    for (PrefixRangeNode node : graph._nodeMap.values()) {
       intersections += node.getIntersects().size();
-      if (node.getChildren().isEmpty() && node.getIntersects().isEmpty()) {
-        graph._ends.add(node);
-      } else {
-        List<PrefixRange> excluded =
-            Stream.concat(
-                    node.getChildren().stream().map(PrefixRangeNode::getPrefixRange),
-                    node.getIntersects().stream().map(PrefixRangeNode::getPrefixRange))
-                .collect(Collectors.toList());
-        RemainderNode remainderNode = new RemainderNode(node, excluded);
-        node.setRemainder(remainderNode);
-        graph.getEnds().add(remainderNode);
-      }
     }
     // Avoid double counting intersections
     intersections /= 2;
     graph._intersections = intersections;
-
-    // TODO: Create intersection nodes based on intersections
 
     return graph;
   }
