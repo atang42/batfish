@@ -3,43 +3,8 @@ package org.batfish.minesweeper.communities;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.batfish.datamodel.routing_policy.communities.AllExtendedCommunities;
-import org.batfish.datamodel.routing_policy.communities.AllLargeCommunities;
-import org.batfish.datamodel.routing_policy.communities.AllStandardCommunities;
-import org.batfish.datamodel.routing_policy.communities.CommunityAcl;
-import org.batfish.datamodel.routing_policy.communities.CommunityContext;
-import org.batfish.datamodel.routing_policy.communities.CommunityExprsSet;
-import org.batfish.datamodel.routing_policy.communities.CommunityIn;
-import org.batfish.datamodel.routing_policy.communities.CommunityIs;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchAll;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchAny;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchExpr;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchExprReference;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchExprVisitor;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchRegex;
-import org.batfish.datamodel.routing_policy.communities.CommunityNot;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetAcl;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetDifference;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetExpr;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetExprReference;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetExprVisitor;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchAll;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchAny;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchExpr;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchExprReference;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchExprVisitor;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchRegex;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetNot;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetReference;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetUnion;
-import org.batfish.datamodel.routing_policy.communities.HasCommunity;
-import org.batfish.datamodel.routing_policy.communities.InputCommunities;
-import org.batfish.datamodel.routing_policy.communities.LiteralCommunitySet;
-import org.batfish.datamodel.routing_policy.communities.RouteTargetExtendedCommunities;
-import org.batfish.datamodel.routing_policy.communities.SiteOfOriginExtendedCommunities;
-import org.batfish.datamodel.routing_policy.communities.StandardCommunityHighMatch;
-import org.batfish.datamodel.routing_policy.communities.StandardCommunityLowMatch;
-import org.batfish.datamodel.routing_policy.communities.VpnDistinguisherExtendedCommunities;
+
+import org.batfish.datamodel.routing_policy.communities.*;
 import org.batfish.minesweeper.CommunityVar;
 
 public class CommunityVarExprCollector {
@@ -248,7 +213,10 @@ public class CommunityVarExprCollector {
     @Override
     public Set<CommunityVar> visitCommunitySetAcl(
         CommunitySetAcl communitySetAcl, CommunityContext arg) {
-      System.err.println("Unsupported operation in CommunityVarExprCollector: CommunitySetAcl");
+      for (CommunitySetAclLine line :
+              communitySetAcl.getLines()) {
+        line.getCommunitySetMatchExpr().accept(this, arg);
+      }
       return new HashSet<CommunityVar>();
     }
 

@@ -44,7 +44,8 @@ public class CommunitySetExprToRegex implements CommunitySetExprVisitor<RegexCom
   @Override
   public RegexCommunitySet visitLiteralCommunityConjunction(
       LiteralCommunityConjunction literalCommunityConjunction) {
-    throw new UnsupportedOperationException("no implementation for generated method");
+    return new RegexCommunitySet(".*");
+    //throw new UnsupportedOperationException("no implementation for generated method");
   }
 
   @Override

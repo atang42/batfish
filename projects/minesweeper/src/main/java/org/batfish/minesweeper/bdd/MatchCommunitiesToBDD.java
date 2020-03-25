@@ -4,32 +4,8 @@ import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Configuration;
-import org.batfish.datamodel.routing_policy.communities.AllExtendedCommunities;
-import org.batfish.datamodel.routing_policy.communities.AllLargeCommunities;
-import org.batfish.datamodel.routing_policy.communities.AllStandardCommunities;
-import org.batfish.datamodel.routing_policy.communities.CommunityAcl;
-import org.batfish.datamodel.routing_policy.communities.CommunityContext;
-import org.batfish.datamodel.routing_policy.communities.CommunityIn;
-import org.batfish.datamodel.routing_policy.communities.CommunityIs;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchAll;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchAny;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchExprReference;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchExprVisitor;
-import org.batfish.datamodel.routing_policy.communities.CommunityMatchRegex;
-import org.batfish.datamodel.routing_policy.communities.CommunityNot;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetAcl;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchAll;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchAny;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchExprReference;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchExprVisitor;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchRegex;
-import org.batfish.datamodel.routing_policy.communities.CommunitySetNot;
-import org.batfish.datamodel.routing_policy.communities.HasCommunity;
-import org.batfish.datamodel.routing_policy.communities.RouteTargetExtendedCommunities;
-import org.batfish.datamodel.routing_policy.communities.SiteOfOriginExtendedCommunities;
-import org.batfish.datamodel.routing_policy.communities.StandardCommunityHighMatch;
-import org.batfish.datamodel.routing_policy.communities.StandardCommunityLowMatch;
-import org.batfish.datamodel.routing_policy.communities.VpnDistinguisherExtendedCommunities;
+import org.batfish.datamodel.LineAction;
+import org.batfish.datamodel.routing_policy.communities.*;
 import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.TransferParam;
 
@@ -53,7 +29,16 @@ public class MatchCommunitiesToBDD
 
   @Override
   public BDD visitCommunitySetAcl(CommunitySetAcl communitySetAcl, CommunityContext arg) {
-    throw new UnsupportedOperationException("Unsupported Operation: CommunitySetAcl");
+    BDD result = _factory.zero();
+    BDD soFar = _factory.zero();
+    for (CommunitySetAclLine line : communitySetAcl.getLines()) {
+      BDD matched = line.getCommunitySetMatchExpr().accept(this, arg).and(soFar.not());
+      soFar = soFar.or(matched);
+      if (line.getAction() == LineAction.PERMIT) {
+        result = result.and(matched);
+      }
+    }
+    return result;
   }
 
   @Override
