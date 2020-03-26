@@ -26,6 +26,7 @@ import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.RouteFilterList;
 import org.batfish.datamodel.answers.Schema;
+import org.batfish.datamodel.bgp.AddressFamilyCapabilities;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.ospf.OspfProcess;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
@@ -291,6 +292,77 @@ public class RoutePolicyDiff {
     return resultRows;
   }
 
+  private Optional<Row> getCapabilityDifference(
+          BgpActivePeerConfig bgpConfig1, BgpActivePeerConfig bgpConfig2, Prefix neighbor) {
+    AddressFamilyCapabilities cap1 = Optional.ofNullable(bgpConfig1.getIpv4UnicastAddressFamily())
+            .map(Ipv4UnicastAddressFamily::getAddressFamilyCapabilities)
+            .orElse(null);
+    AddressFamilyCapabilities cap2 = Optional.ofNullable(bgpConfig2.getIpv4UnicastAddressFamily())
+            .map(Ipv4UnicastAddressFamily::getAddressFamilyCapabilities)
+            .orElse(null);
+    if (cap1 != null && cap2 != null) {
+      StringBuilder action1 = new StringBuilder();
+      StringBuilder action2 = new StringBuilder();
+
+      if(cap1.getAllowLocalAsIn() != cap2.getAllowLocalAsIn()) {
+        action1.append(cap1.getAdditionalPathsSend() ? "ALLOW LOCAL AS IN\n" : "");
+        action2.append(cap2.getAdditionalPathsSend() ? "ALLOW LOCAL AS IN\n" : "");
+      }
+      if(cap1.getSendCommunity() != cap2.getSendCommunity()) {
+        action1.append(cap1.getSendCommunity() ? "SEND COMMUNITY\n" : "");
+        action2.append(cap2.getSendCommunity() ? "SEND COMMUNITY\n" : "");
+      }
+      if(cap1.getSendExtendedCommunity() != cap2.getSendExtendedCommunity()) {
+        action1.append(cap1.getSendExtendedCommunity() ? "SEND EXTENDED COMMUNITY\n" : "");
+        action2.append(cap2.getSendExtendedCommunity() ? "SEND EXTENDED COMMUNITY\n" : "");
+      }
+      if(cap1.getAllowRemoteAsOut() != cap2.getAllowRemoteAsOut()) {
+        action1.append(cap1.getAllowRemoteAsOut() ? "ALLOW REMOTE AS OUT\n" : "");
+        action2.append(cap2.getAllowRemoteAsOut() ? "ALLOW REMOTE AS OUT\n" : "");
+      }
+      if(cap1.getAdvertiseExternal() != cap2.getAdvertiseExternal()) {
+        action1.append(cap1.getAdvertiseExternal() ? "ADVERTISE EXTERNAL\n" : "");
+        action2.append(cap2.getAdvertiseExternal() ? "ADVERTISE EXTERNAL\n" : "");
+      }
+      if(cap1.getAdvertiseInactive() != cap2.getAdvertiseInactive()) {
+        action1.append(cap1.getAdvertiseInactive() ? "ADVERTISE INACTIVE\n" : "");
+        action2.append(cap2.getAdvertiseInactive() ? "ADVERTISE INACTIVE\n" : "");
+      }
+      if(cap1.getAdditionalPathsSend() != cap2.getAdditionalPathsSend()) {
+        action1.append(cap1.getAdditionalPathsSend() ? "ADDITIONAL PATHS SEND\n" : "");
+        action2.append(cap2.getAdditionalPathsSend() ? "ADDITIONAL PATHS SEND\n" : "");
+      }
+      if(cap1.getAdditionalPathsReceive() != cap2.getAdditionalPathsReceive()) {
+        action1.append(cap1.getAdditionalPathsReceive() ? "ADDITIONAL PATHS RECIEVE\n" : "");
+        action2.append(cap2.getAdditionalPathsReceive() ? "ADDITIONAL PATHS RECIEVE\n" : "");
+      }
+      if(cap1.getAdditionalPathsSelectAll() != cap2.getAdditionalPathsSelectAll()) {
+        action1.append(cap1.getAdditionalPathsSelectAll() ? "ADDITIONAL PATHS SELECT ALL\n" : "");
+        action2.append(cap2.getAdditionalPathsSelectAll() ? "ADDITIONAL PATHS SELECT ALL\n" : "");
+      }
+
+      if (!action1.toString().equals(action2.toString())) {
+        TypedRowBuilder builder =
+            Row.builder(METADATA_MAP)
+                .put(COL_NEIGHBOR, neighbor.getStartIp().toString())
+                .put(COL_NODE1, _routerName1)
+                .put(COL_NODE2, _routerName2)
+                .put(COL_FILTER1, "BGP Capabilities")
+                .put(COL_FILTER2, "BGP Capabilities")
+                .put(COL_ROUTE_INCLUDED_PREFIXES, "")
+                .put(COL_ROUTE_EXCLUDED_PREFIXES, "")
+                .put(COL_ROUTE_COMM, "")
+                .put(COL_ROUTE_PROTOCOL, "")
+                .put(COL_TEXT1, "")
+                .put(COL_TEXT2, "")
+                .put(COL_ACTION1, action1.toString())
+                .put(COL_ACTION2, action2.toString());
+        return Optional.of(builder.build());
+      }
+    }
+    return Optional.empty();
+  }
+
   private List<Row> getRowsForNeighbor(
       Prefix neighbor,
       SortedMap<Prefix, BgpActivePeerConfig> neighbors1,
@@ -302,6 +374,9 @@ public class RoutePolicyDiff {
     }
     BgpActivePeerConfig bgpConfig1 = neighbors1.get(neighbor);
     BgpActivePeerConfig bgpConfig2 = neighbors2.get(neighbor);
+
+    Optional<Row> capabilityDifference = getCapabilityDifference(bgpConfig1, bgpConfig2, neighbor);
+    capabilityDifference.ifPresent(resultRows::add);
 
     String r1ImportName =
         Optional.ofNullable(bgpConfig1)
