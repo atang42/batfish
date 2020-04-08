@@ -1,14 +1,7 @@
 package org.batfish.minesweeper.policylocalize;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.Nonnull;
@@ -86,6 +79,9 @@ public class BDDPolicyActionMap {
           .map(_encodedValToAction::get);
     }
   }
+
+  // Used to ignore certain extraneous statement texts
+  private static List<String> _ignoredTexts = Arrays.asList("accept", "reject", "");
 
   private Map<BDD, ActionStatementsPair> _bddToAction;
 
@@ -200,7 +196,7 @@ public class BDDPolicyActionMap {
     StringBuilder stmtText = new StringBuilder();
     statements
         .stream()
-        .filter(stmt -> stmt.getText() != null)
+        .filter(stmt -> stmt.getText() != null && !_ignoredTexts.contains(stmt.getText()))
         .forEach(stmt -> stmtText.append(stmt.getText()).append(System.lineSeparator()));
     return stmtText.toString().trim();
   }

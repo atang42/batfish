@@ -36,6 +36,8 @@ public class TransferParam<T extends IDeepCopy<T>> {
 
   private boolean _debug;
 
+  private boolean _atPolicyLevel;
+
   public TransferParam(T data, boolean debug) {
     _data = data;
     _callContext = CallContext.NONE;
@@ -46,6 +48,7 @@ public class TransferParam<T extends IDeepCopy<T>> {
     _defaultAcceptLocal = false;
     _defaultPolicy = null;
     _debug = debug;
+    _atPolicyLevel = true;
   }
 
   private TransferParam(TransferParam<T> p) {
@@ -58,6 +61,7 @@ public class TransferParam<T extends IDeepCopy<T>> {
     _defaultAcceptLocal = p._defaultAcceptLocal;
     _defaultPolicy = p._defaultPolicy;
     _debug = p._debug;
+    _atPolicyLevel = p._atPolicyLevel;
   }
 
   public T getData() {
@@ -82,6 +86,10 @@ public class TransferParam<T extends IDeepCopy<T>> {
 
   public SetDefaultPolicy getDefaultPolicy() {
     return _defaultPolicy;
+  }
+
+  public boolean getAtPolicyLevel() {
+    return _atPolicyLevel;
   }
 
   public boolean getInitialCall() {
@@ -143,6 +151,12 @@ public class TransferParam<T extends IDeepCopy<T>> {
   public TransferParam<T> indent() {
     TransferParam<T> ret = new TransferParam<>(this);
     ret._indent = _indent + 1;
+    return ret;
+  }
+
+  public TransferParam<T> setAtPolicyLevel(boolean b) {
+    TransferParam<T> ret = new TransferParam<>(this);
+    ret._atPolicyLevel = b;
     return ret;
   }
 

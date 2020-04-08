@@ -6,10 +6,8 @@ import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+
+import java.util.*;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
@@ -173,34 +171,62 @@ public abstract class IpAccessListToBdd {
    */
   public final BDD toBddWithLines(String router, IpAccessList acl) {
     if (!(_pkt instanceof BDDPacketWithLines)) {
-      // Default to normal BDD representation
-      return toBdd(acl);
+      return null;
     }
     BDDPacketWithLines pkt = (BDDPacketWithLines) _pkt;
     pkt.addAcl(router, acl);
     BDD accept = pkt.getAccept();
-    //System.out.println(accept.var() + " ACCEPT");
     BDD result = accept.not().and(pkt.getAclNoLine(router, acl));
-    List<BDD> bddList = new ArrayList<>();
+    BDD notOtherBDD = pkt.getFactory().one();
     for (IpAccessListLine line : Lists.reverse(acl.getLines())) {
       BDD lineMatchBDD = toBdd(line.getMatchCondition());
       BDD aclLineBDD = pkt.getAclLine(router, acl, line);
-      //System.out.println(aclLineBDD.var() + " " + line.getName());
-      BDD notOtherBDD = bddList.stream()
-          .map(BDD::not)
-          .reduce(pkt.getFactory().one(), BDD::and);
       BDD actionBDD;
       if (line.getAction() == LineAction.PERMIT) {
         actionBDD = aclLineBDD.and(notOtherBDD.and(accept));
       } else {
         actionBDD = aclLineBDD.and(notOtherBDD.and(accept.not()));
       }
-      //actionBDD.printDot();
       result = lineMatchBDD.ite(actionBDD, aclLineBDD.not().and(result));
-      bddList.add(aclLineBDD);
+      notOtherBDD = notOtherBDD.and(aclLineBDD.not());
     }
     return result;
   }
+
+  /**
+   * Converts an ACL to a symbolic boolean expression with additional structures to keep track of
+   * lines from the configuration
+   */
+  public final List<BDD> toBddPairWithLines(String router, IpAccessList acl) {
+    if (!(_pkt instanceof BDDPacketWithLines)) {
+      return null;
+    }
+    BDDPacketWithLines pkt = (BDDPacketWithLines) _pkt;
+    long old_time = System.currentTimeMillis();
+    pkt.addAcl(router, acl);
+    long new_time = System.currentTimeMillis();
+    System.out.println("Add Acl " + (new_time - old_time));
+    old_time = new_time;
+
+    BDD accept = pkt.getAccept();
+    BDD acceptedPackets = pkt.getFactory().zero();
+    BDD rejectedPackets = pkt.getAclNoLine(router, acl);
+    for (IpAccessListLine line : Lists.reverse(acl.getLines())) {
+      BDD lineMatchBDD = toBdd(line.getMatchCondition());
+      BDD aclLineBDD = pkt.getAclLine(router, acl, line);
+      if (line.getAction() == LineAction.PERMIT) {
+        acceptedPackets = lineMatchBDD.ite(aclLineBDD, acceptedPackets);
+        rejectedPackets = rejectedPackets.and(lineMatchBDD.not());
+      } else {
+        rejectedPackets = lineMatchBDD.ite(aclLineBDD, rejectedPackets);
+        acceptedPackets = acceptedPackets.and(lineMatchBDD.not());
+      }
+    }
+    new_time = System.currentTimeMillis();
+    System.out.println("Build Loop " + (new_time - old_time));
+    return Arrays.asList(acceptedPackets, rejectedPackets);
+  }
+
 
   /**
    * Return the {@link PermitAndDenyBdds} matched by each line (and no earlier line). The last

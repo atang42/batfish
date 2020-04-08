@@ -37,8 +37,10 @@ public final class PsTerm implements Serializable {
   public String getText() {
     StringBuilder builder = new StringBuilder();
     builder.append(getName()).append(System.lineSeparator());
-    builder.append(indent(_froms.getText()))
-        .append(System.lineSeparator());
+    if (hasAtLeastOneFrom()) {
+      builder.append(indent(_froms.getText()))
+          .append(System.lineSeparator());
+    }
 
     StringBuilder thenBuilder = new StringBuilder();
     if (_thens.size() == 1) {
@@ -48,7 +50,7 @@ public final class PsTerm implements Serializable {
       thenBuilder.append("then {\n");
       getThens().forEach(then -> thenBuilder.append("\t")
         .append(then.getText())
-        .append("\n"));
+        .append(";\n"));
       thenBuilder.append("}");
     }
     builder.append(indent(thenBuilder.toString()));

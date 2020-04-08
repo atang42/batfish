@@ -186,10 +186,6 @@ public class RoutePolicyNamesExtractor {
 
     @Override public List<String> visitCallExpr(CallExpr callExpr, List<String> arg) {
       arg.add(callExpr.getCalledPolicyName());
-      RoutingPolicy policy =_env.getRoutingPolicies().get(callExpr.getCalledPolicyName());
-      for (Statement statement : policy.getStatements()) {
-        arg = statement.accept(new NamesStatementVisitor(_config), arg);
-      }
       return arg;
     }
 
@@ -354,10 +350,13 @@ public class RoutePolicyNamesExtractor {
       return new ArrayList<>();
     }
     List<String> acc = new ArrayList<>();
-    acc.add(policy.getName());
-    NamesStatementVisitor visitor = new NamesStatementVisitor(config);
-    for (Statement statement : policy.getStatements()) {
-      acc = statement.accept(visitor, acc);
+    if (policy.getName().startsWith("~")) {
+      NamesStatementVisitor visitor = new NamesStatementVisitor(config);
+      for (Statement statement : policy.getStatements()) {
+        acc = statement.accept(visitor, acc);
+      }
+    } else {
+      acc.add(policy.getName());
     }
     return acc;
   }

@@ -118,10 +118,7 @@ import org.batfish.datamodel.ospf.OspfInterfaceSettings;
 import org.batfish.datamodel.ospf.OspfMetricType;
 import org.batfish.datamodel.ospf.OspfNetworkType;
 import org.batfish.datamodel.ospf.OspfProcess;
-import org.batfish.datamodel.packet_policy.Drop;
-import org.batfish.datamodel.packet_policy.PacketMatchExpr;
-import org.batfish.datamodel.packet_policy.PacketPolicy;
-import org.batfish.datamodel.packet_policy.Return;
+import org.batfish.datamodel.packet_policy.*;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.communities.ColonSeparatedRendering;
 import org.batfish.datamodel.routing_policy.communities.CommunityIs;
@@ -2707,6 +2704,10 @@ public final class JuniperConfiguration extends VendorConfiguration {
         ifStatement.getTrueStatements().addAll(thens);
         statements.add(ifStatement);
       } else {
+        // Attach text to first element of term if no froms
+        if (thens.size() > 0) {
+          thens.get(0).setText(term.getText());
+        }
         statements.addAll(thens);
       }
     }

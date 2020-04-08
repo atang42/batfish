@@ -347,7 +347,7 @@ public class TransferBDD {
       TransferResult<TransferReturn, BDD> r =
           compute(
               pol.getStatements(),
-              p.setCallContext(TransferParam.CallContext.EXPR_CALL).indent().enterScope(name),
+              p.setCallContext(TransferParam.CallContext.EXPR_CALL).indent().enterScope(name).setAtPolicyLevel(true),
               guardAcc);
       r.getReturnValue().setReturn(factory.zero());
       CACHE.put(router, name, r);
@@ -439,7 +439,7 @@ public class TransferBDD {
               .setReturnAssignedValue(factory.zero());
       BDD nextGuardAcc = guardAcc;
 
-      if (!(stmt instanceof If) && p.getInitialCall()) {
+      if (!(stmt instanceof If) && p.getAtPolicyLevel()) {
         _bddToActions.addStatement(guardAcc, stmt);
       }
 
@@ -581,8 +581,8 @@ public class TransferBDD {
 
         BDDRoute current = result.getReturnValue().getFirst();
 
-        TransferParam<BDDRoute> pTrue = curP.indent().setData(current.deepCopy());
-        TransferParam<BDDRoute> pFalse = curP.indent().setData(current.deepCopy());
+        TransferParam<BDDRoute> pTrue = curP.indent().setData(current.deepCopy()).setAtPolicyLevel(false);
+        TransferParam<BDDRoute> pFalse = curP.indent().setData(current.deepCopy()).setAtPolicyLevel(false);
         curP.debug("True Branch");
         TransferResult<TransferReturn, BDD> trueBranch =
             compute(i.getTrueStatements(), pTrue, guardAcc.and(guard));

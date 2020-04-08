@@ -355,8 +355,8 @@ public class RoutePolicyDiff {
                 .put(COL_ROUTE_PROTOCOL, "")
                 .put(COL_TEXT1, "")
                 .put(COL_TEXT2, "")
-                .put(COL_ACTION1, action1.toString())
-                .put(COL_ACTION2, action2.toString());
+                .put(COL_ACTION1, action1.toString().trim())
+                .put(COL_ACTION2, action2.toString().trim());
         return Optional.of(builder.build());
       }
     }

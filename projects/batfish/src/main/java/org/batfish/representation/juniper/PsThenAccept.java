@@ -16,7 +16,7 @@ public final class PsThenAccept extends PsThen {
 
   private PsThenAccept() {
     // TODO: Add line numbers for accept
-    super("", new TreeSet<>());
+    super("accept", new TreeSet<>());
   }
 
   @Override

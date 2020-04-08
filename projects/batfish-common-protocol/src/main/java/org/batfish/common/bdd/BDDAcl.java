@@ -98,6 +98,21 @@ public final class BDDAcl {
     return new BDDAcl(bdd, pkt);
   }
 
+  public static List<BDD> createBDDWithLinesPair(
+      BDDPacketWithLines pkt,
+      String router,
+      IpAccessList acl) {
+
+
+    Map<String, IpAccessList> aclEnv;
+    Map<String, IpSpace> ipSpaceEnv;
+    BDDSourceManager bddSrcManager;
+    aclEnv = ImmutableMap.of();
+    ipSpaceEnv = ImmutableMap.of();
+    bddSrcManager = BDDSourceManager.forInterfaces(pkt, ImmutableSet.of());
+    return new IpAccessListToBddImpl(pkt, bddSrcManager, aclEnv, ipSpaceEnv).toBddPairWithLines(router, acl);
+  }
+
   @Nonnull
   public BDD getBdd() {
     return _bdd;

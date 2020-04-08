@@ -16,7 +16,7 @@ public final class PsThenReject extends PsThen {
 
   private PsThenReject() {
     // TODO: Add line numbers for reject
-    super("", new TreeSet<>());
+    super("reject", new TreeSet<>());
   }
 
   @Override
