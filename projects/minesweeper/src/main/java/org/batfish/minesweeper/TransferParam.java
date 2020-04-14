@@ -1,7 +1,9 @@
 package org.batfish.minesweeper;
 
 import javax.annotation.Nullable;
+import net.sf.javabdd.BDD;
 import org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy;
+import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.collections.PList;
 
 public class TransferParam<T extends IDeepCopy<T>> {
@@ -38,6 +40,10 @@ public class TransferParam<T extends IDeepCopy<T>> {
 
   private boolean _atPolicyLevel;
 
+  private BDD _localDefaultBdd;
+
+  private BDD _defaultBdd;
+
   public TransferParam(T data, boolean debug) {
     _data = data;
     _callContext = CallContext.NONE;
@@ -49,6 +55,8 @@ public class TransferParam<T extends IDeepCopy<T>> {
     _defaultPolicy = null;
     _debug = debug;
     _atPolicyLevel = true;
+    _localDefaultBdd = BDDRoute.getFactory().zero();
+    _defaultBdd = BDDRoute.getFactory().zero();
   }
 
   private TransferParam(TransferParam<T> p) {
@@ -62,6 +70,8 @@ public class TransferParam<T extends IDeepCopy<T>> {
     _defaultPolicy = p._defaultPolicy;
     _debug = p._debug;
     _atPolicyLevel = p._atPolicyLevel;
+    _localDefaultBdd = p.getLocalDefaultBdd().id();
+    _defaultBdd = p.getDefaultBdd().id();
   }
 
   public T getData() {
@@ -159,6 +169,23 @@ public class TransferParam<T extends IDeepCopy<T>> {
     ret._atPolicyLevel = b;
     return ret;
   }
+
+  public BDD getLocalDefaultBdd() {
+    return _localDefaultBdd;
+  }
+
+  public void setLocalDefaultBdd(BDD localDefaultBdd) {
+    this._localDefaultBdd = localDefaultBdd.id();
+  }
+
+  public BDD getDefaultBdd() {
+    return _defaultBdd;
+  }
+
+  public void setDefaultBdd(BDD defaultBdd) {
+    this._defaultBdd = defaultBdd.id();
+  }
+
 
   public void debug(String str) {
     if (_debug) {

@@ -1,8 +1,12 @@
 package org.batfish.minesweeper;
 
 import com.google.common.base.MoreObjects;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -36,34 +40,66 @@ public final class CommunityVar implements Comparable<CommunityVar> {
   public enum Type {
     EXACT,
     REGEX,
+    CONJUNCT,
     OTHER
   }
 
   @Nonnull private final Type _type;
   @Nonnull private final String _regex;
   @Nullable private final Community _literalValue;
+  @Nullable private final Set<CommunityVar> _conjuncts;
 
-  private CommunityVar(Type type, String regex, @Nullable Community literalValue) {
+  private CommunityVar(Type type, String regex, @Nullable Community literalValue, @Nullable Set<CommunityVar> conjuncts) {
     _type = type;
     _regex = regex;
     _literalValue = literalValue;
+    _conjuncts = conjuncts;
   }
 
   /** Create a community var of type {@link Type#REGEX} */
   public static CommunityVar from(String regex) {
-    return new CommunityVar(Type.REGEX, regex, null);
+    return new CommunityVar(Type.REGEX, regex, null, null );
   }
 
   /**
    * Create a community var of type {@link Type#EXACT} based on a literal {@link Community} value
    */
   public static CommunityVar from(Community literalCommunity) {
-    return new CommunityVar(Type.EXACT, literalCommunity.matchString(), literalCommunity);
+    return new CommunityVar(Type.EXACT, literalCommunity.matchString(), literalCommunity, null);
   }
 
   /** Create a community var of type {@link Type#OTHER} based on a REGEX community var. */
   public static CommunityVar other(String regex) {
-    return new CommunityVar(Type.OTHER, regex, null);
+    return new CommunityVar(Type.OTHER, regex, null, null);
+  }
+
+  private static Collection<CommunityVar> flattenCommunityVars(Collection<CommunityVar> conjuncts) {
+    Set<CommunityVar> result = new HashSet<>();
+    for (CommunityVar var : conjuncts) {
+      if (var.getType() == Type.CONJUNCT) {
+        assert var.getConjuncts() != null;
+        result.addAll(flattenCommunityVars(var.getConjuncts()));
+      } else {
+        result.add(var);
+      }
+    }
+    return result;
+  }
+
+  /** Create a community var of type {@link Type#CONJUNCT} based on other community var */
+  public static CommunityVar from(Collection<CommunityVar> conjuncts) {
+    StringBuilder builder = new StringBuilder();
+    boolean notFirst = false;
+    conjuncts = flattenCommunityVars(conjuncts);
+    for (CommunityVar comm : conjuncts) {
+      if (notFirst) {
+        builder.append(" AND ");
+      } else {
+        notFirst = true;
+      }
+      builder.append(comm.getRegex());
+    }
+    return new CommunityVar(Type.CONJUNCT, builder.toString(), null, new TreeSet<>(conjuncts));
   }
 
   @Nonnull
@@ -79,6 +115,11 @@ public final class CommunityVar implements Comparable<CommunityVar> {
   @Nullable
   public Community getLiteralValue() {
     return _literalValue;
+  }
+
+  @Nullable
+  public Set<CommunityVar> getConjuncts() {
+    return _conjuncts;
   }
 
   @Override

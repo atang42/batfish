@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.stream.Collectors;
@@ -141,8 +140,8 @@ public class TransferBDD {
   /*
    * Apply the effect of modifying a long value (e.g., to set the metric)
    */
-  private BDDInteger applyLongExprModification(
-      TransferParam<BDDRoute> p, BDDInteger x, LongExpr e) {
+  private BDDInteger applyLongExprModification(TransferParam<BDDRoute> p, BDDInteger x,
+      LongExpr e) {
     if (e instanceof LiteralLong) {
       LiteralLong z = (LiteralLong) e;
       p.debug("LiteralLong: " + z.getValue());
@@ -175,7 +174,8 @@ public class TransferBDD {
    * Convert a Batfish AST boolean expression to a symbolic Z3 boolean expression
    * by performing inlining of stateful side effects.
    */
-  private TransferResult<TransferReturn, BDD> compute(BooleanExpr expr, TransferParam<BDDRoute> p, BDD guardAcc) {
+  private TransferResult<TransferReturn, BDD> compute(BooleanExpr expr, TransferParam<BDDRoute> p,
+      BDD guardAcc) {
 
     // TODO: right now everything is IPV4
     if (expr instanceof MatchIpv4) {
@@ -238,11 +238,9 @@ public class TransferBDD {
         BDD acc = factory.zero();
         for (int i = conjuncts.size() - 1; i >= 0; i--) {
           BooleanExpr conjunct = conjuncts.get(i);
-          TransferParam<BDDRoute> param =
-              record
-                  .setDefaultPolicy(null)
-                  .setChainContext(TransferParam.ChainContext.CONJUNCTION)
-                  .indent();
+          TransferParam<BDDRoute> param = record.setDefaultPolicy(null)
+              .setChainContext(TransferParam.ChainContext.CONJUNCTION)
+              .indent();
           TransferResult<TransferReturn, BDD> r = compute(conjunct, param, guardAcc);
           record = record.setData(r.getReturnValue().getFirst());
           acc = ite(r.getFallthroughValue(), acc, r.getReturnValue().getSecond());
@@ -344,12 +342,13 @@ public class TransferBDD {
       */
       RoutingPolicy pol = _conf.getRoutingPolicies().get(name);
       p.debug("Guards not properly checked for CallExpr");
-      TransferResult<TransferReturn, BDD> r =
-          compute(
-              pol.getStatements(),
-              p.setCallContext(TransferParam.CallContext.EXPR_CALL).indent().enterScope(name).setAtPolicyLevel(true),
-              guardAcc);
+      TransferParam<BDDRoute> param = p.setCallContext(TransferParam.CallContext.EXPR_CALL)
+          .indent()
+          .enterScope(name)
+          .setAtPolicyLevel(true);
+      TransferResult<TransferReturn, BDD> r = compute(pol.getStatements(), param, guardAcc);
       r.getReturnValue().setReturn(factory.zero());
+      r.getReturnValue().setDefaultActionAccept(r.getReturnValue().getDefaultActionAccept());
       CACHE.put(router, name, r);
       return r;
 
@@ -363,7 +362,7 @@ public class TransferBDD {
     } else if (expr instanceof MatchCommunitySet) {
       p.debug("MatchCommunitySet");
       MatchCommunitySet mcs = (MatchCommunitySet) expr;
-      BDD c = matchCommunitySet(p.indent(), _conf, mcs.getExpr(), p.getData());
+      BDD c = mcs.getExpr().accept(new CommunitySetExprToBddVisitor(_conf, p.getData(), _commDeps));
       TransferReturn ret = new TransferReturn(p.getData(), c);
       return fromExpr(ret);
 
@@ -371,27 +370,27 @@ public class TransferBDD {
       BooleanExprs.StaticBooleanExpr b = (BooleanExprs.StaticBooleanExpr) expr;
       TransferReturn ret;
       switch (b.getType()) {
-        case CallExprContext:
-          p.debug("CallExprContext");
-          BDD x1 = mkBDD(p.getCallContext() == TransferParam.CallContext.EXPR_CALL);
-          ret = new TransferReturn(p.getData(), x1);
-          return fromExpr(ret);
-        case CallStatementContext:
-          p.debug("CallStmtContext");
-          BDD x2 = mkBDD(p.getCallContext() == TransferParam.CallContext.STMT_CALL);
-          ret = new TransferReturn(p.getData(), x2);
-          return fromExpr(ret);
-        case True:
-          p.debug("True");
-          ret = new TransferReturn(p.getData(), factory.one());
-          return fromExpr(ret);
-        case False:
-          p.debug("False");
-          ret = new TransferReturn(p.getData(), factory.zero());
-          return fromExpr(ret);
-        default:
-          throw new BatfishException(
-              "Unhandled " + BooleanExprs.class.getCanonicalName() + ": " + b.getType());
+      case CallExprContext:
+        p.debug("CallExprContext");
+        BDD x1 = mkBDD(p.getCallContext() == TransferParam.CallContext.EXPR_CALL);
+        ret = new TransferReturn(p.getData(), x1);
+        return fromExpr(ret);
+      case CallStatementContext:
+        p.debug("CallStmtContext");
+        BDD x2 = mkBDD(p.getCallContext() == TransferParam.CallContext.STMT_CALL);
+        ret = new TransferReturn(p.getData(), x2);
+        return fromExpr(ret);
+      case True:
+        p.debug("True");
+        ret = new TransferReturn(p.getData(), factory.one());
+        return fromExpr(ret);
+      case False:
+        p.debug("False");
+        ret = new TransferReturn(p.getData(), factory.zero());
+        return fromExpr(ret);
+      default:
+        throw new BatfishException(
+            "Unhandled " + BooleanExprs.class.getCanonicalName() + ": " + b.getType());
       }
 
     } else if (expr instanceof MatchAsPath) {
@@ -404,39 +403,39 @@ public class TransferBDD {
       p.debug("MatchCommunities");
       p.debug("Warning: use of unimplemented feature MatchCommunities");
       MatchCommunities matchCommunities = (MatchCommunities) expr;
-      CommunityContext commContext =
-          CommunityContext.fromEnvironment(Environment.builder(_conf).build());
-      BDD result = matchCommunities.getCommunitySetMatchExpr().accept(
-          new MatchCommunitiesToBDD(this, p, _conf, p.getData()), commContext);
+      CommunityContext commContext = CommunityContext.fromEnvironment(Environment.builder(_conf)
+          .build());
+      BDD result = matchCommunities.getCommunitySetMatchExpr()
+          .accept(new CommunitySetMatchExprToBddVisitor(this, p, _conf, p.getData()), commContext);
       TransferReturn ret = new TransferReturn(p.getData(), result);
       return fromExpr(ret);
     }
 
-    throw new BatfishException("TODO: compute expr transfer function: " + expr);
+    System.err.println("TODO: compute expr transfer function: " + expr);
+    TransferReturn ret = new TransferReturn(p.getData(), factory.one());
+    return fromExpr(ret);
   }
 
   /*
    * Convert a list of statements into a Z3 boolean expression for the transfer function.
    */
-  private TransferResult<TransferReturn, BDD> compute(
-      List<Statement> statements, TransferParam<BDDRoute> p, BDD guardAcc) {
+  private TransferResult<TransferReturn, BDD> compute(List<Statement> statements,
+      TransferParam<BDDRoute> p, BDD guardAcc) {
     TransferParam<BDDRoute> curP = p;
     boolean doesReturn = false;
 
     TransferResult<TransferReturn, BDD> totalResult = new TransferResult<>();
-    totalResult =
-        totalResult
-            .setReturnValue(new TransferReturn(curP.getData(), factory.zero()))
-            .setFallthroughValue(factory.one())
-            .setReturnAssignedValue(factory.zero());
+    totalResult = totalResult.setReturnValue(new TransferReturn(curP.getData(), factory.zero()))
+        .setFallthroughValue(factory.one())
+        .setReturnAssignedValue(factory.zero());
 
+    BDD defaultAccept = curP.getDefaultBdd();
+    BDD localDefaultAccept = curP.getLocalDefaultBdd();
     for (Statement stmt : statements) {
       TransferResult<TransferReturn, BDD> result = new TransferResult<>();
-      result =
-          result
-              .setReturnValue(new TransferReturn(curP.getData(), factory.zero()))
-              .setFallthroughValue(factory.one())
-              .setReturnAssignedValue(factory.zero());
+      result = result.setReturnValue(new TransferReturn(curP.getData(), factory.zero()))
+          .setFallthroughValue(factory.one())
+          .setReturnAssignedValue(factory.zero());
       BDD nextGuardAcc = guardAcc;
 
       if (!(stmt instanceof If) && p.getAtPolicyLevel()) {
@@ -447,128 +446,137 @@ public class TransferBDD {
         StaticStatement ss = (StaticStatement) stmt;
 
         switch (ss.getType()) {
-          case ExitAccept:
-            doesReturn = true;
-            curP.debug("ExitAccept");
-            result = returnValue(result, true);
-            result.getReturnValue().setExit(factory.one());
-            result = result.setFallthroughValue(factory.zero());
+        case ExitAccept:
+          doesReturn = true;
+          curP.debug("ExitAccept");
+          result = returnValue(result, true);
+          result.getReturnValue().setExit(factory.one());
+          result = result.setFallthroughValue(factory.zero());
+          _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
+          break;
+
+        // TODO: implement proper unsuppression of routes covered by aggregates
+        case Unsuppress:
+        case ReturnTrue:
+          doesReturn = true;
+          curP.debug("ReturnTrue");
+          result = returnValue(result, true);
+          result.getReturnValue().setReturn(factory.one());
+          result = result.setFallthroughValue(factory.zero());
+          if (curP.getCallContext().equals(CallContext.NONE)) {
             _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
-            break;
+          }
+          break;
 
-            // TODO: implement proper unsuppression of routes covered by aggregates
-          case Unsuppress:
-          case ReturnTrue:
-            doesReturn = true;
-            curP.debug("ReturnTrue");
+        case ExitReject:
+          doesReturn = true;
+          curP.debug("ExitReject");
+          result = returnValue(result, false);
+          result.getReturnValue().setExit(factory.one());
+          result = result.setFallthroughValue(factory.zero());
+          _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
+          break;
+
+        // TODO: implement proper suppression of routes covered by aggregates
+        case Suppress:
+        case ReturnFalse:
+          doesReturn = true;
+          curP.debug("ReturnFalse");
+          result = returnValue(result, false);
+          result = result.setFallthroughValue(factory.zero());
+          result.getReturnValue().setReturn(factory.one());
+          if (curP.getCallContext().equals(CallContext.NONE)) {
+            _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
+          }
+          break;
+
+        case SetDefaultActionAccept:
+          curP.debug("SetDefaulActionAccept");
+          curP = curP.setDefaultAccept(true);
+          result.getReturnValue().setDefaultActionAccept(defaultAccept.or(guardAcc));
+          defaultAccept.orWith(guardAcc.id());
+          break;
+
+        case SetDefaultActionReject:
+          curP.debug("SetDefaultActionReject");
+          curP = curP.setDefaultAccept(false);
+          result.getReturnValue().setDefaultActionAccept(defaultAccept.and(guardAcc.not()));
+          defaultAccept.andWith(guardAcc.not().id());
+          break;
+
+        case DefaultAction:
+          curP.debug("DefaultAction");
+          if (curP.getDefaultAccept()) {
             result = returnValue(result, true);
             result.getReturnValue().setReturn(factory.one());
             result = result.setFallthroughValue(factory.zero());
-            if (curP.getCallContext().equals(CallContext.NONE)) {
-              _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
-            }
-            break;
-
-          case ExitReject:
-            doesReturn = true;
-            curP.debug("ExitReject");
+          } else {
             result = returnValue(result, false);
-            result.getReturnValue().setExit(factory.one());
-            result = result.setFallthroughValue(factory.zero());
-            _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
-            break;
-
-            // TODO: implement proper suppression of routes covered by aggregates
-          case Suppress:
-          case ReturnFalse:
-            doesReturn = true;
-            curP.debug("ReturnFalse");
-            result = returnValue(result, false);
-            result = result.setFallthroughValue(factory.zero());
-            result.getReturnValue().setReturn(factory.one());
-            if (curP.getCallContext().equals(CallContext.NONE)) {
-              _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
-            }
-            break;
-
-          case SetDefaultActionAccept:
-            curP.debug("SetDefaulActionAccept");
-            curP = curP.setDefaultAccept(true);
-            break;
-
-          case SetDefaultActionReject:
-            curP.debug("SetDefaultActionReject");
-            curP = curP.setDefaultAccept(false);
-            break;
-
-          case DefaultAction:
-            curP.debug("DefaultAction");
-            if(curP.getDefaultAccept()) {
-              result = returnValue(result, true);
-              result.getReturnValue().setReturn(factory.one());
-              result = result.setFallthroughValue(factory.zero());
-              if (curP.getCallContext().equals(CallContext.NONE)) {
-                _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
-              }
-            } else {
-              result = returnValue(result, false);
-              result.getReturnValue().setReturn(factory.one());
-              result = result.setFallthroughValue(factory.zero());
-              if (curP.getCallContext().equals(CallContext.NONE)) {
-                _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
-              }
-            }
-            break;
-
-          case SetLocalDefaultActionAccept:
-            curP.debug("SetLocalDefaultActionAccept");
-            curP = curP.setDefaultAcceptLocal(true);
-            break;
-
-          case SetLocalDefaultActionReject:
-            curP.debug("SetLocalDefaultActionReject");
-            curP = curP.setDefaultAcceptLocal(false);
-            break;
-
-          case ReturnLocalDefaultAction:
-            curP.debug("ReturnLocalDefaultAction");
-            // TODO: need to set local default action in an environment
-            if (curP.getDefaultAcceptLocal()) {
-              result = returnValue(result, true);
-              result.getReturnValue().setReturn(factory.one());
-              result = result.setFallthroughValue(factory.zero());
-              if (curP.getCallContext().equals(CallContext.NONE)) {
-                _bddToActions.setResult(guardAcc, SymbolicResult.ACCEPT);
-              }
-            } else {
-              result = returnValue(result, false);
-              result.getReturnValue().setReturn(factory.one());
-              result = result.setFallthroughValue(factory.zero());
-              if (curP.getCallContext().equals(CallContext.NONE)) {
-                _bddToActions.setResult(guardAcc, SymbolicResult.REJECT);
-              }
-            }
-            break;
-
-          case FallThrough:
-            curP.debug("Fallthrough");
-            result = fallthrough(result);
-            break;
-
-          case Return:
-            // TODO: assumming this happens at the end of the function, so it is ignored for now.
-            curP.debug("Return");
             result.getReturnValue().setReturn(factory.one());
             result = result.setFallthroughValue(factory.zero());
-            break;
+          }
+          if (curP.getCallContext().equals(CallContext.NONE)) {
+            _bddToActions.setResult(guardAcc.and(defaultAccept), SymbolicResult.ACCEPT);
+            _bddToActions.setResult(guardAcc.and(defaultAccept.not()), SymbolicResult.REJECT);
+          }
+          result.getReturnValue().setReturn(guardAcc.and(defaultAccept));
+          result.getReturnValue().getSecond().orWith(guardAcc.and(defaultAccept).id());
+          result.getReturnValue().getSecond().andWith(guardAcc.not().or(defaultAccept));
+          break;
 
-          case RemovePrivateAs:
-            curP.debug("RemovePrivateAs");
-            // System.out.println("Warning: use of unimplemented feature RemovePrivateAs");
-            break;
+        case SetLocalDefaultActionAccept:
+          curP.debug("SetLocalDefaultActionAccept");
+          curP = curP.setDefaultAcceptLocal(true);
+          result.getReturnValue().setLocalDefaultActionAccept(localDefaultAccept.or(guardAcc));
+          localDefaultAccept.orWith(guardAcc.id());
+          break;
 
-          default:
-            throw new BatfishException("TODO: computeTransferFunction: " + ss.getType());
+        case SetLocalDefaultActionReject:
+          curP.debug("SetLocalDefaultActionReject");
+          curP = curP.setDefaultAcceptLocal(false);
+          result.getReturnValue()
+              .setLocalDefaultActionAccept(localDefaultAccept.and(guardAcc.not()));
+          localDefaultAccept.andWith(guardAcc.not().id());
+          break;
+
+        case ReturnLocalDefaultAction:
+          curP.debug("ReturnLocalDefaultAction");
+          // TODO: need to set local default action in an environment
+          if (curP.getDefaultAcceptLocal()) {
+            result.getReturnValue().setReturn(factory.one());
+            result = result.setFallthroughValue(factory.zero());
+          } else {
+            result.getReturnValue().setReturn(factory.one());
+            result = result.setFallthroughValue(factory.zero());
+          }
+          if (curP.getCallContext().equals(CallContext.NONE)) {
+            _bddToActions.setResult(guardAcc.and(localDefaultAccept), SymbolicResult.ACCEPT);
+            _bddToActions.setResult(guardAcc.and(localDefaultAccept.not()), SymbolicResult.REJECT);
+          }
+          result.getReturnValue().setReturn(guardAcc.and(localDefaultAccept));
+          result.getReturnValue().getSecond().orWith(guardAcc.and(localDefaultAccept).id());
+          result.getReturnValue().getSecond().andWith(guardAcc.not().or(localDefaultAccept));
+          break;
+
+        case FallThrough:
+          curP.debug("Fallthrough");
+          result = fallthrough(result);
+          break;
+
+        case Return:
+          // TODO: assumming this happens at the end of the function, so it is ignored for now.
+          curP.debug("Return");
+          result.getReturnValue().setReturn(factory.one());
+          result = result.setFallthroughValue(factory.zero());
+          break;
+
+        case RemovePrivateAs:
+          curP.debug("RemovePrivateAs");
+          // System.out.println("Warning: use of unimplemented feature RemovePrivateAs");
+          break;
+
+        default:
+          throw new BatfishException("TODO: computeTransferFunction: " + ss.getType());
         }
 
       } else if (stmt instanceof If) {
@@ -581,53 +589,71 @@ public class TransferBDD {
 
         BDDRoute current = result.getReturnValue().getFirst();
 
-        TransferParam<BDDRoute> pTrue = curP.indent().setData(current.deepCopy()).setAtPolicyLevel(false);
-        TransferParam<BDDRoute> pFalse = curP.indent().setData(current.deepCopy()).setAtPolicyLevel(false);
+        TransferParam<BDDRoute> pTrue = curP.indent()
+            .setData(current.deepCopy())
+            .setAtPolicyLevel(false);
+        pTrue.setDefaultBdd(defaultAccept);
+        pTrue.setLocalDefaultBdd(localDefaultAccept);
+        TransferParam<BDDRoute> pFalse = curP.indent()
+            .setData(current.deepCopy())
+            .setAtPolicyLevel(false);
+        pFalse.setDefaultBdd(defaultAccept);
+        pFalse.setLocalDefaultBdd(localDefaultAccept);
         curP.debug("True Branch");
-        TransferResult<TransferReturn, BDD> trueBranch =
-            compute(i.getTrueStatements(), pTrue, guardAcc.and(guard));
+        TransferResult<TransferReturn, BDD> trueBranch = compute(
+            i.getTrueStatements(),
+            pTrue,
+            guardAcc.and(guard));
         curP.debug("True Branch: " + trueBranch.getReturnValue().getFirst().hashCode());
         curP.debug("False Branch");
-        TransferResult<TransferReturn, BDD> falseBranch =
-            compute(i.getFalseStatements(), pFalse, guardAcc.and(guard.not()));
+        TransferResult<TransferReturn, BDD> falseBranch = compute(
+            i.getFalseStatements(),
+            pFalse,
+            guardAcc.and(guard.not()));
         curP.debug("False Branch: " + trueBranch.getReturnValue().getFirst().hashCode());
 
         BDDRoute r1 = trueBranch.getReturnValue().getFirst();
         BDDRoute r2 = falseBranch.getReturnValue().getFirst();
         BDDRoute recordVal = ite(guard, r1, r2);
 
-        BDD exitBDD = trueBranch.getReturnValue().getExit()
+        BDD exitBDD = trueBranch.getReturnValue()
+            .getExit()
             .or(falseBranch.getReturnValue().getExit());
-        BDD returnBDD = trueBranch.getReturnValue().getReturn()
+        BDD returnBDD = trueBranch.getReturnValue()
+            .getReturn()
             .or(falseBranch.getReturnValue().getReturn());
         nextGuardAcc = guardAcc.and(exitBDD.not()).and(returnBDD.not());
 
         // update return values
-        BDD returnVal =
-            ite(
-                guard,
-                trueBranch.getReturnValue().getSecond(),
-                falseBranch.getReturnValue().getSecond());
+        BDD returnVal = ite(guard,
+            trueBranch.getReturnValue().getSecond(),
+            falseBranch.getReturnValue().getSecond());
 
         // p.debug("New Return Value (neg): " + returnVal.not());
 
-        BDD returnAss =
-            ite(guard, trueBranch.getReturnAssignedValue(), falseBranch.getReturnAssignedValue());
+        BDD returnAss = ite(
+            guard,
+            trueBranch.getReturnAssignedValue(),
+            falseBranch.getReturnAssignedValue());
 
         // p.debug("New Return Assigned: " + returnAss);
 
-        BDD fallThrough =
-            ite(guard, trueBranch.getFallthroughValue(), falseBranch.getFallthroughValue());
+        BDD fallThrough = ite(
+            guard,
+            trueBranch.getFallthroughValue(),
+            falseBranch.getFallthroughValue());
 
         // p.debug("New fallthrough: " + fallThrough);
 
-        result =
-            result
-                .setReturnValue(new TransferReturn(recordVal, returnVal))
-                .setReturnAssignedValue(returnAss)
-                .setFallthroughValue(fallThrough);
+        result = result.setReturnValue(new TransferReturn(recordVal, returnVal))
+            .setReturnAssignedValue(returnAss)
+            .setFallthroughValue(fallThrough);
         result.getReturnValue().setReturn(returnBDD);
         result.getReturnValue().setExit(exitBDD);
+        localDefaultAccept.orWith(trueBranch.getReturnValue().getLocalDefaultActionAccept());
+        localDefaultAccept.orWith(falseBranch.getReturnValue().getLocalDefaultActionAccept());
+        defaultAccept.orWith(trueBranch.getReturnValue().getDefaultActionAccept());
+        defaultAccept.orWith(falseBranch.getReturnValue().getDefaultActionAccept());
 
         curP.debug("If return: " + result.getReturnValue().getFirst().hashCode());
 
@@ -642,8 +668,10 @@ public class TransferBDD {
         BDD isBGP = curP.getData().getProtocolHistory().value(Protocol.BGP);
         BDD updateMed = isBGP.and(result.getReturnAssignedValue());
         BDD updateMet = isBGP.less(result.getReturnAssignedValue());
-        BDDInteger newValue =
-            applyLongExprModification(curP.indent(), curP.getData().getMetric(), ie);
+        BDDInteger newValue = applyLongExprModification(
+            curP.indent(),
+            curP.getData().getMetric(),
+            ie);
         BDDInteger med = ite(updateMed, curP.getData().getMed(), newValue);
         BDDInteger met = ite(updateMet, curP.getData().getMetric(), newValue);
         curP.getData().setMetric(met);
@@ -670,11 +698,15 @@ public class TransferBDD {
         curP.debug("SetLocalPreference");
         SetLocalPreference slp = (SetLocalPreference) stmt;
         LongExpr ie = slp.getLocalPreference();
-        BDDInteger newValue =
-            applyLongExprModification(curP.indent(), curP.getData().getLocalPref(), ie);
+        BDDInteger newValue = applyLongExprModification(curP.indent(),
+            curP.getData().getLocalPref(),
+            ie);
         newValue = ite(result.getReturnAssignedValue(), curP.getData().getLocalPref(), newValue);
         curP.getData().setLocalPref(newValue);
         _bddToActions.setLocalPref(guardAcc, ie);
+
+      } else if (stmt instanceof SetNextHop) {
+        _bddToActions.setNextHop(guardAcc, ((SetNextHop) stmt).getExpr());
 
       } else if (stmt instanceof AddCommunity) {
         curP.debug("AddCommunity");
@@ -744,60 +776,40 @@ public class TransferBDD {
         newValue = ite(result.getReturnAssignedValue(), curP.getData().getMetric(), newValue);
         curP.getData().setMetric(newValue);
 
-      } else if (stmt instanceof CallStatement) {
-        p.debug("CallStatement");
-        // TODO: implement me
-
-      } else if (stmt instanceof SetOrigin) {
-        curP.debug("SetOrigin");
-        // System.out.println("Warning: use of unimplemented feature SetOrigin");
-        // TODO: implement me
-
-      } else if (stmt instanceof SetNextHop) {
-        curP.debug("SetNextHop");
-        // System.out.println("Warning: use of unimplemented feature SetNextHop");
-        // TODO: implement me
-
-      } else if (stmt instanceof SetCommunities) {
-        curP.debug("SetCommunities");
-        // System.out.println("Warning: use of unimplemented feature SetNextHop");
-        // TODO: implement me
-
-      } else if  (stmt instanceof SetWeight) {
-        curP.debug("SetWeight");
-        // TODO: implement me
-
-      } else if (stmt instanceof BufferedStatement) {
-        curP.debug("BufferedStatement");
-        // TODO: implement me
-
       } else {
-        throw new BatfishException("TODO: statement transfer function: " + stmt);
+        System.err.println("TODO: statement transfer function: " + stmt);
       }
 
       // update overall return value
-      BDDRoute recordVal =
-          ite(guardAcc,
-              result.getReturnValue().getFirst(),
-              totalResult.getReturnValue().getFirst());
-      BDD returnVal =
-          ite(
-              guardAcc,
-              result.getReturnValue().getSecond(),
-              totalResult.getReturnValue().getSecond());
-      BDD exitBDD = ite(guardAcc, result.getReturnValue().getExit(), totalResult.getReturnValue().getExit());
-      BDD returnBDD = ite(guardAcc, result.getReturnValue().getReturn(), totalResult.getReturnValue().getReturn());
-      BDD returnAss =
-          ite(guardAcc, result.getReturnAssignedValue(), totalResult.getReturnAssignedValue());
-      BDD fallThrough =
-          ite(guardAcc, result.getFallthroughValue(), totalResult.getFallthroughValue());
-      totalResult =
-          totalResult
-              .setReturnValue(new TransferReturn(recordVal, returnVal))
-              .setReturnAssignedValue(returnAss)
-              .setFallthroughValue(fallThrough);
+      BDDRoute recordVal = ite(guardAcc,
+          result.getReturnValue().getFirst(),
+          totalResult.getReturnValue().getFirst());
+      BDD returnVal = ite(guardAcc,
+          result.getReturnValue().getSecond(),
+          totalResult.getReturnValue().getSecond());
+      BDD exitBDD = ite(
+          guardAcc,
+          result.getReturnValue().getExit(),
+          totalResult.getReturnValue().getExit());
+      BDD returnBDD = ite(
+          guardAcc,
+          result.getReturnValue().getReturn(),
+          totalResult.getReturnValue().getReturn());
+      BDD returnAss = ite(
+          guardAcc,
+          result.getReturnAssignedValue(),
+          totalResult.getReturnAssignedValue());
+      BDD fallThrough = ite(
+          guardAcc,
+          result.getFallthroughValue(),
+          totalResult.getFallthroughValue());
+      totalResult = totalResult.setReturnValue(new TransferReturn(recordVal, returnVal))
+          .setReturnAssignedValue(returnAss)
+          .setFallthroughValue(fallThrough);
       totalResult.getReturnValue().setExit(exitBDD);
       totalResult.getReturnValue().setReturn(returnBDD);
+      totalResult.getReturnValue().setDefaultActionAccept(defaultAccept);
+      totalResult.getReturnValue().setLocalDefaultActionAccept(localDefaultAccept);
       guardAcc = nextGuardAcc;
     }
 
@@ -821,6 +833,8 @@ public class TransferBDD {
       BDD exitBDD = totalResult.getReturnValue().getExit();
       BDDRoute retVal = ite(ret.getSecond(), ret.getFirst(), zeroedRecord());
       totalResult = totalResult.setReturnValue(new TransferReturn(retVal, ret.getSecond()));
+      totalResult.getReturnValue().setLocalDefaultActionAccept(localDefaultAccept);
+      totalResult.getReturnValue().setDefaultActionAccept(defaultAccept);
       _transferResult = totalResult;
     }
     return totalResult;
@@ -835,8 +849,7 @@ public class TransferBDD {
    * Wrap a simple boolean expression return value in a transfer function result
    */
   private TransferResult<TransferReturn, BDD> fromExpr(TransferReturn b) {
-    return new TransferResult<TransferReturn, BDD>()
-        .setReturnAssignedValue(factory.one())
+    return new TransferResult<TransferReturn, BDD>().setReturnAssignedValue(factory.one())
         .setReturnValue(b);
   }
 
@@ -916,12 +929,10 @@ public class TransferBDD {
     y = r2.getMed();
     ret.getMed().setValue(ite(guard, x, y));
 
-    r1.getCommunities()
-        .forEach(
-            (c, var1) -> {
-              BDD var2 = r2.getCommunities().get(c);
-              ret.getCommunities().put(c, ite(guard, var1, var2));
-            });
+    r1.getCommunities().forEach((c, var1) -> {
+      BDD var2 = r2.getCommunities().get(c);
+      ret.getCommunities().put(c, ite(guard, var1, var2));
+    });
 
     // BDDInteger i =
     //    ite(guard, r1.getProtocolHistory().getInteger(), r2.getProtocolHistory().getInteger());
@@ -959,8 +970,8 @@ public class TransferBDD {
     return acc;
   }
 
-  public BDD matchSingleCommunityVar(
-      TransferParam<BDDRoute> p, CommunityVar cvar, boolean action, BDDRoute other) {
+  public BDD matchSingleCommunityVar(TransferParam<BDDRoute> p, CommunityVar cvar, boolean action,
+      BDDRoute other) {
     List<CommunityVar> deps = _commDeps.getOrDefault(cvar, new ArrayList<>());
     deps.add(cvar);
     BDD acc = factory.zero();
@@ -975,15 +986,14 @@ public class TransferBDD {
   /*
    * Converts a community set to a boolean expression
    */
-  public BDD matchCommunitySet(
-      TransferParam<BDDRoute> p, Configuration conf, CommunitySetExpr e, BDDRoute other) {
+  public BDD matchCommunitySet(TransferParam<BDDRoute> p, Configuration conf, CommunitySetExpr e,
+      BDDRoute other) {
 
     if (e instanceof CommunityList) {
-      Set<CommunityVar> comms =
-          ((CommunityList) e)
-              .getLines().stream()
-                  .map(line -> toCommunityVar(line.getMatchCondition()))
-                  .collect(Collectors.toSet());
+      Set<CommunityVar> comms = ((CommunityList) e).getLines()
+          .stream()
+          .map(line -> toCommunityVar(line.getMatchCondition()))
+          .collect(Collectors.toSet());
       BDD acc = factory.one();
       for (CommunityVar comm : comms) {
         p.debug("Inline Community Set: " + comm);
@@ -1036,8 +1046,8 @@ public class TransferBDD {
   /*
    * Converts a prefix set to a boolean expression.
    */
-  private BDD matchPrefixSet(
-      TransferParam<BDDRoute> p, Configuration conf, PrefixSetExpr e, BDDRoute other) {
+  private BDD matchPrefixSet(TransferParam<BDDRoute> p, Configuration conf, PrefixSetExpr e,
+      BDDRoute other) {
     if (e instanceof ExplicitPrefixSet) {
       ExplicitPrefixSet x = (ExplicitPrefixSet) e;
 
@@ -1095,8 +1105,8 @@ public class TransferBDD {
   /*
    * Create a new variable reflecting the final return value of the function
    */
-  private TransferResult<TransferReturn, BDD> returnValue(
-      TransferResult<TransferReturn, BDD> r, boolean val) {
+  private TransferResult<TransferReturn, BDD> returnValue(TransferResult<TransferReturn, BDD> r,
+      boolean val) {
     BDD b = ite(r.getReturnAssignedValue(), r.getReturnValue().getSecond(), mkBDD(val));
     TransferReturn ret = new TransferReturn(r.getReturnValue().getFirst(), b);
     return r.setReturnValue(ret).setReturnAssignedValue(factory.one());
@@ -1136,7 +1146,8 @@ public class TransferBDD {
    * Create a BDDRecord representing the symbolic output of
    * the RoutingPolicy given the input variables.
    */
-  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks, BDDRoute route, CommunityVarSet comms) {
+  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks,
+      BDDRoute route, CommunityVarSet comms) {
     _ignoredNetworks = ignoredNetworks;
     _commDeps = comms.getDependencies();
     _comms = comms.getVars();
@@ -1147,7 +1158,8 @@ public class TransferBDD {
     return result;
   }
 
-  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks, CommunityVarSet comms) {
+  public TransferResult<TransferReturn, BDD> compute(@Nullable Set<Prefix> ignoredNetworks,
+      CommunityVarSet comms) {
     return compute(ignoredNetworks, new BDDRoute(_comms), comms);
   }
 
@@ -1161,13 +1173,13 @@ public class TransferBDD {
    */
   private static CommunityVar toRegexCommunityVar(CommunityVar cvar) {
     switch (cvar.getType()) {
-      case REGEX:
-        return cvar;
-      case EXACT:
-        assert cvar.getLiteralValue() != null; // invariant of the EXACT type
-        return CommunityVar.from(String.format("^%s$", cvar.getLiteralValue().matchString()));
-      default:
-        throw new BatfishException("Unexpected CommunityVar type: " + cvar.getType());
+    case REGEX:
+      return cvar;
+    case EXACT:
+      assert cvar.getLiteralValue() != null; // invariant of the EXACT type
+      return CommunityVar.from(String.format("^%s$", cvar.getLiteralValue().matchString()));
+    default:
+      throw new BatfishException("Unexpected CommunityVar type: " + cvar.getType());
     }
   }
 

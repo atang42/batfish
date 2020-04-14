@@ -4,7 +4,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import javax.annotation.Nonnull;
+import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.routing_policy.expr.DiscardNextHop;
+import org.batfish.datamodel.routing_policy.expr.IpNextHop;
+import org.batfish.datamodel.routing_policy.expr.NextHopExpr;
+import org.batfish.datamodel.routing_policy.expr.NextHopIp6;
+import org.batfish.datamodel.routing_policy.expr.SelfNextHop;
 import org.batfish.minesweeper.CommunityVar;
 
 public class PolicyAction {
@@ -17,10 +24,22 @@ public class PolicyAction {
   @Nonnull private List<CommunityVar> _addedCommunities;
   private long _metricValue;
   private long _localPrefValue;
+  private NextHopEnum _nextHop;
+  private Ip _nextHopIp;
+
+  public enum NextHopEnum {
+    NONE,
+    SELF,
+    DISCARD,
+    IP,
+    OTHER
+  }
 
   public PolicyAction() {
     _result = SymbolicResult.UNKNOWN;
     _addedCommunities = new ArrayList<>();
+    _nextHop = NextHopEnum.NONE;
+    _nextHopIp = null;
   }
 
   public PolicyAction(PolicyAction action) {
@@ -32,6 +51,8 @@ public class PolicyAction {
     _addedCommunities = new ArrayList<>(action._addedCommunities);
     _metricValue = action._metricValue;
     _localPrefValue = action._localPrefValue;
+    _nextHop = action._nextHop;
+    _nextHopIp = action._nextHopIp;
   }
 
   public SymbolicResult getResult() {
@@ -45,6 +66,8 @@ public class PolicyAction {
     _addedCommunities = new ArrayList<>();
     _metricValue = 0;
     _localPrefValue = 0;
+    _nextHopIp = null;
+    _nextHop = NextHopEnum.NONE;
   }
 
   public void setResult(SymbolicResult result) {
@@ -102,6 +125,33 @@ public class PolicyAction {
     return _addedCommunities;
   }
 
+  public void setNextHop(NextHopExpr expr) {
+    if (expr instanceof DiscardNextHop) {
+      _nextHop = NextHopEnum.DISCARD;
+      _nextHopIp = null;
+    } else if (expr instanceof SelfNextHop) {
+      _nextHop = NextHopEnum.SELF;
+      _nextHopIp = null;
+    } else if (expr instanceof IpNextHop) {
+      _nextHop = NextHopEnum.IP;
+      if (((IpNextHop) expr).getIps().size() == 1) {
+        _nextHopIp = ((IpNextHop) expr).getIps().get(0);
+      } else {
+        _nextHopIp = null;
+      }
+    } else {
+      _nextHop = NextHopEnum.OTHER;
+    }
+  }
+
+  public NextHopEnum getNextHop() {
+    return _nextHop;
+  }
+
+  public Optional<Ip> getNextHopIp() {
+    return Optional.ofNullable(_nextHopIp);
+  }
+
   @Override public String toString() {
     StringBuilder builder = new StringBuilder();
     if (setsMetric()) {
@@ -116,6 +166,13 @@ public class PolicyAction {
         builder.append(var.getRegex()).append(" ");
         builder.append("]\n");
       }
+    }
+    if (_nextHop != NextHopEnum.NONE) {
+      builder.append("SET NEXT HOP ").append(_nextHop.name());
+      if (_nextHopIp != null) {
+        builder.append(" ").append(_nextHopIp.toString());
+      }
+      builder.append("\n");
     }
     builder.append(_result.name());
     return builder.toString();

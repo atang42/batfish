@@ -10,6 +10,7 @@ import net.sf.javabdd.BDDFactory;
 import org.batfish.common.bdd.BDDInteger;
 import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.expr.LongExpr;
+import org.batfish.datamodel.routing_policy.expr.NextHopExpr;
 import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.minesweeper.CommunityVar;
@@ -168,6 +169,10 @@ public class BDDPolicyActionMap {
     } else {
       throw new UnsupportedOperationException("Unsupported set local pref expression");
     }
+  }
+
+  public void setNextHop(BDD bdd, NextHopExpr nextHop) {
+    getPolicyActionsMatchingBDD(bdd).forEach(pair -> pair.action.setNextHop(nextHop));
   }
 
   public void addCommunities(BDD bdd, Set<CommunityVar> comms) {
