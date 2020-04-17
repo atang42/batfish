@@ -545,7 +545,8 @@ public final class JuniperConfiguration extends VendorConfiguration {
           .add(Statements.ExitReject.toStaticStatement());
 
       // Apply rib groups
-      if (ig.getRibGroup() != null) {
+      if (ig.getRibGroup() != null
+          && _masterLogicalSystem.getRibGroups().containsKey(ig.getRibGroup())) {
         neighbor.setAppliedRibGroup(
             toRibGroup(
                 _masterLogicalSystem.getRibGroups().get(ig.getRibGroup()),

@@ -1,5 +1,10 @@
 package org.batfish.minesweeper;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import javax.annotation.Nullable;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.RoutingProtocol;
@@ -13,11 +18,7 @@ import org.batfish.datamodel.RoutingProtocol;
 public class Protocol {
 
   enum Type {
-    BEST,
-    OSPF,
-    BGP,
-    CONNECTED,
-    STATIC
+    BEST, OSPF, BGP, CONNECTED, STATIC
   }
 
   private Type _type;
@@ -36,35 +37,43 @@ public class Protocol {
 
   public static final Protocol BEST = new Protocol(Type.BEST);
 
-  @Nullable
-  public static Protocol fromRoutingProtocol(RoutingProtocol p) {
+  private static List<Protocol> _allProtos = Arrays.asList(Protocol.BGP,
+      Protocol.OSPF,
+      Protocol.CONNECTED,
+      Protocol.STATIC);
+
+  @Nullable public static Protocol fromRoutingProtocol(RoutingProtocol p) {
     switch (p) {
-      case CONNECTED:
-        return Protocol.CONNECTED;
-      case STATIC:
-        return Protocol.STATIC;
-      case BGP:
-        return Protocol.BGP;
-      case OSPF:
-        return Protocol.OSPF;
-      default:
-        return null;
+    case CONNECTED:
+      return Protocol.CONNECTED;
+    case STATIC:
+      return Protocol.STATIC;
+    case BGP:
+      return Protocol.BGP;
+    case OSPF:
+      return Protocol.OSPF;
+    default:
+      return null;
     }
   }
 
   public static RoutingProtocol toRoutingProtocol(Protocol p) {
     switch (p._type) {
-      case BGP:
-        return RoutingProtocol.BGP;
-      case OSPF:
-        return RoutingProtocol.OSPF;
-      case CONNECTED:
-        return RoutingProtocol.CONNECTED;
-      case STATIC:
-        return RoutingProtocol.STATIC;
-      default:
-        throw new BatfishException("Error[toRoutingProtocol]: " + p.name());
+    case BGP:
+      return RoutingProtocol.BGP;
+    case OSPF:
+      return RoutingProtocol.OSPF;
+    case CONNECTED:
+      return RoutingProtocol.CONNECTED;
+    case STATIC:
+      return RoutingProtocol.STATIC;
+    default:
+      throw new BatfishException("Error[toRoutingProtocol]: " + p.name());
     }
+  }
+
+  public static List<Protocol> allProtocols() {
+    return _allProtos;
   }
 
   public boolean isBgp() {
@@ -91,8 +100,7 @@ public class Protocol {
     return _type.toString();
   }
 
-  @Override
-  public boolean equals(Object o) {
+  @Override public boolean equals(Object o) {
     if (this == o) {
       return true;
     }
@@ -105,8 +113,7 @@ public class Protocol {
     return _type == protocol._type;
   }
 
-  @Override
-  public int hashCode() {
+  @Override public int hashCode() {
     return _type != null ? _type.ordinal() : 0;
   }
 }

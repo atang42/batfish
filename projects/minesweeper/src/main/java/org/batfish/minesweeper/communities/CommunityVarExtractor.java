@@ -1,8 +1,11 @@
 package org.batfish.minesweeper.communities;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -88,10 +91,18 @@ Extracts all communities from a set of configurations and assigns them to a Comm
  */
 public class CommunityVarExtractor {
 
-  @Nonnull private final Collection<Configuration> _configs;
+  @Nonnull private final Map<Configuration, Collection<RoutingPolicy>> _configsToPolicy;
 
   public CommunityVarExtractor(@Nonnull Collection<Configuration> configs) {
-    _configs = configs;
+    _configsToPolicy = new HashMap<>();
+    for (Configuration c : configs) {
+      _configsToPolicy.put(c, c.getRoutingPolicies().values());
+    }
+  }
+
+  public CommunityVarExtractor(@Nonnull Configuration config, @Nonnull Collection<RoutingPolicy> exports) {
+    _configsToPolicy = new HashMap<>();
+    _configsToPolicy.put(config, exports);
   }
 
   private static class BooleanExprExtractor
@@ -542,9 +553,9 @@ public class CommunityVarExtractor {
 
   public @Nonnull CommunityVarSet getCommunityVars() {
     TreeSet<CommunityVar> result = new TreeSet<>();
-    for (Configuration c : _configs) {
+    for (Configuration c : _configsToPolicy.keySet()) {
       CommunityContext ctx = CommunityContext.fromEnvironment(Environment.builder(c).build());
-      for (RoutingPolicy policy : c.getRoutingPolicies().values()) {
+      for (RoutingPolicy policy : _configsToPolicy.get(c)) {
         for (Statement statement : policy.getStatements()) {
           result.addAll(statement.accept(new StatementVarExtractor(c), ctx));
         }
