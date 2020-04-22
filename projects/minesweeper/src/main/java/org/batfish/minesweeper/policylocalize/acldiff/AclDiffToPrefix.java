@@ -7,7 +7,7 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.batfish.datamodel.IpAccessList;
-import org.batfish.datamodel.IpAccessListLine;
+import org.batfish.datamodel.AclLine;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.AbstractHeaderSpace;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.AclSpacesMap;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
@@ -33,7 +33,7 @@ public class AclDiffToPrefix {
   }
 
   @Nonnull
-  public AbstractHeaderSpace computeDifference(@Nullable IpAccessListLine line1, @Nullable IpAccessListLine line2) {
+  public AbstractHeaderSpace computeDifference(@Nullable AclLine line1, @Nullable AclLine line2) {
 
     Optional<AbstractHeaderSpace> diffSpace = _map1.getDifferenceSpace(line1)
         .intersection(_map2.getDifferenceSpace(line2));
@@ -55,19 +55,19 @@ public class AclDiffToPrefix {
   }
 
   @Nonnull
-  public Set<IpAccessListLine> getAcl1ReleventLines(
-      @Nonnull Collection<ConjunctHeaderSpace> spaces, @Nullable IpAccessListLine upto) {
+  public Set<AclLine> getAcl1ReleventLines(
+      @Nonnull Collection<ConjunctHeaderSpace> spaces, @Nullable AclLine upto) {
     return _map1.getRelevantLinesUptoLine(spaces, upto);
   }
 
   @Nonnull
-  public Set<IpAccessListLine> getAcl2ReleventLines(
-      @Nonnull Collection<ConjunctHeaderSpace> spaces, @Nullable IpAccessListLine upto) {
+  public Set<AclLine> getAcl2ReleventLines(
+      @Nonnull Collection<ConjunctHeaderSpace> spaces, @Nullable AclLine upto) {
     return _map2.getRelevantLinesUptoLine(spaces, upto);
   }
 
   @Nonnull
-  AclDiffReport getReport(@Nullable IpAccessListLine line1, @Nullable IpAccessListLine line2) {
+  AclDiffReport getReport(@Nullable AclLine line1, @Nullable AclLine line2) {
     AbstractHeaderSpace diffSpace = computeDifference(line1, line2);
     return new AclDiffReport(
         diffSpace.getIncluded(),

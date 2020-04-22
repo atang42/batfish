@@ -178,17 +178,20 @@ public abstract class IpAccessListToBdd {
     BDD accept = pkt.getAccept();
     BDD result = accept.not().and(pkt.getAclNoLine(router, acl));
     BDD notOtherBDD = pkt.getFactory().one();
-    for (IpAccessListLine line : Lists.reverse(acl.getLines())) {
-      BDD lineMatchBDD = toBdd(line.getMatchCondition());
-      BDD aclLineBDD = pkt.getAclLine(router, acl, line);
-      BDD actionBDD;
-      if (line.getAction() == LineAction.PERMIT) {
-        actionBDD = aclLineBDD.and(notOtherBDD.and(accept));
-      } else {
-        actionBDD = aclLineBDD.and(notOtherBDD.and(accept.not()));
+    for (AclLine l : Lists.reverse(acl.getLines())) {
+      if (l instanceof ExprAclLine) {
+        ExprAclLine line = (ExprAclLine) l;
+        BDD lineMatchBDD = toBdd(line.getMatchCondition());
+        BDD aclLineBDD = pkt.getAclLine(router, acl, line);
+        BDD actionBDD;
+        if (line.getAction() == LineAction.PERMIT) {
+          actionBDD = aclLineBDD.and(notOtherBDD.and(accept));
+        } else {
+          actionBDD = aclLineBDD.and(notOtherBDD.and(accept.not()));
+        }
+        result = lineMatchBDD.ite(actionBDD, aclLineBDD.not().and(result));
+        notOtherBDD = notOtherBDD.and(aclLineBDD.not());
       }
-      result = lineMatchBDD.ite(actionBDD, aclLineBDD.not().and(result));
-      notOtherBDD = notOtherBDD.and(aclLineBDD.not());
     }
     return result;
   }
@@ -211,15 +214,18 @@ public abstract class IpAccessListToBdd {
     BDD accept = pkt.getAccept();
     BDD acceptedPackets = pkt.getFactory().zero();
     BDD rejectedPackets = pkt.getAclNoLine(router, acl);
-    for (IpAccessListLine line : Lists.reverse(acl.getLines())) {
-      BDD lineMatchBDD = toBdd(line.getMatchCondition());
-      BDD aclLineBDD = pkt.getAclLine(router, acl, line);
-      if (line.getAction() == LineAction.PERMIT) {
-        acceptedPackets = lineMatchBDD.ite(aclLineBDD, acceptedPackets);
-        rejectedPackets = rejectedPackets.and(lineMatchBDD.not());
-      } else {
-        rejectedPackets = lineMatchBDD.ite(aclLineBDD, rejectedPackets);
-        acceptedPackets = acceptedPackets.and(lineMatchBDD.not());
+    for (AclLine l  : Lists.reverse(acl.getLines())) {
+      if (l instanceof ExprAclLine) {
+        ExprAclLine line = (ExprAclLine) l;
+        BDD lineMatchBDD = toBdd(line.getMatchCondition());
+        BDD aclLineBDD = pkt.getAclLine(router, acl, line);
+        if (line.getAction() == LineAction.PERMIT) {
+          acceptedPackets = lineMatchBDD.ite(aclLineBDD, acceptedPackets);
+          rejectedPackets = rejectedPackets.and(lineMatchBDD.not());
+        } else {
+          rejectedPackets = lineMatchBDD.ite(aclLineBDD, rejectedPackets);
+          acceptedPackets = acceptedPackets.and(lineMatchBDD.not());
+        }
       }
     }
     new_time = System.currentTimeMillis();

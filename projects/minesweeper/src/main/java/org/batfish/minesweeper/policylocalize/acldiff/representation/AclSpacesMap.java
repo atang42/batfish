@@ -13,18 +13,18 @@ import java.util.TreeSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.batfish.datamodel.IpAccessList;
-import org.batfish.datamodel.IpAccessListLine;
+import org.batfish.datamodel.AclLine;
 import org.batfish.minesweeper.policylocalize.acldiff.AclLineDiffToPrefix;
 import org.batfish.minesweeper.policylocalize.acldiff.AclToConfigLines;
 
 public class AclSpacesMap {
   @Nonnull private IpAccessList _acl;
-  @Nonnull private Map<IpAccessListLine, List<ConjunctHeaderSpace>> _linesToSpaces;
+  @Nonnull private Map<AclLine, List<ConjunctHeaderSpace>> _linesToSpaces;
 
   public AclSpacesMap(@Nonnull IpAccessList acl) {
     _acl = acl;
     _linesToSpaces = new HashMap<>();
-    for (IpAccessListLine line : _acl.getLines()) {
+    for (AclLine line : _acl.getLines()) {
       List<ConjunctHeaderSpace> spaces = AclToDescribedHeaderSpaces.createPrefixSpaces(line);
       _linesToSpaces.put(line, spaces);
     }
@@ -36,15 +36,15 @@ public class AclSpacesMap {
   }
 
   @Nonnull
-  public List<ConjunctHeaderSpace> getSpace(@Nonnull IpAccessListLine line) {
+  public List<ConjunctHeaderSpace> getSpace(@Nonnull AclLine line) {
     return _linesToSpaces.getOrDefault(line, new ArrayList<>());
   }
 
   @Nonnull
-  public Set<IpAccessListLine> getRelevantLinesUptoLine(
-      @Nonnull Collection<ConjunctHeaderSpace> spaces, @Nullable IpAccessListLine limit) {
-    Set<IpAccessListLine> result = new HashSet<>();
-    for (IpAccessListLine line : _linesToSpaces.keySet()) {
+  public Set<AclLine> getRelevantLinesUptoLine(
+      @Nonnull Collection<ConjunctHeaderSpace> spaces, @Nullable AclLine limit) {
+    Set<AclLine> result = new HashSet<>();
+    for (AclLine line : _linesToSpaces.keySet()) {
       if (Objects.equals(line, limit)) {
         return result;
       }
@@ -61,15 +61,15 @@ public class AclSpacesMap {
   }
 
   @Nonnull
-  public Set<IpAccessListLine> getRelevantLines(@Nonnull Collection<ConjunctHeaderSpace> spaces) {
+  public Set<AclLine> getRelevantLines(@Nonnull Collection<ConjunctHeaderSpace> spaces) {
     return getRelevantLinesUptoLine(spaces, null);
   }
 
   @Nonnull
-  public DifferenceHeaderSpace getDifferenceSpace(@Nullable IpAccessListLine line) {
+  public DifferenceHeaderSpace getDifferenceSpace(@Nullable AclLine line) {
     List<ConjunctHeaderSpace> fullSpace = null;
     SortedSet<ConjunctHeaderSpace> spacesSoFar = new TreeSet<>();
-    for (IpAccessListLine prev : _acl.getLines()) {
+    for (AclLine prev : _acl.getLines()) {
       if (Objects.equals(prev, line)) {
         fullSpace = getSpace(prev);
         break;

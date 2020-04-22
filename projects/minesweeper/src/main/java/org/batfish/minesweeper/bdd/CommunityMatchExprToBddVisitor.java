@@ -17,6 +17,10 @@ import org.batfish.datamodel.routing_policy.communities.CommunityMatchExprRefere
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchExprVisitor;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchRegex;
 import org.batfish.datamodel.routing_policy.communities.CommunityNot;
+import org.batfish.datamodel.routing_policy.communities.ExtendedCommunityGlobalAdministratorHighMatch;
+import org.batfish.datamodel.routing_policy.communities.ExtendedCommunityGlobalAdministratorLowMatch;
+import org.batfish.datamodel.routing_policy.communities.ExtendedCommunityGlobalAdministratorMatch;
+import org.batfish.datamodel.routing_policy.communities.ExtendedCommunityLocalAdministratorMatch;
 import org.batfish.datamodel.routing_policy.communities.RouteTargetExtendedCommunities;
 import org.batfish.datamodel.routing_policy.communities.SiteOfOriginExtendedCommunities;
 import org.batfish.datamodel.routing_policy.communities.StandardCommunityHighMatch;
@@ -118,6 +122,34 @@ class CommunityMatchExprToBddVisitor
   @Override
   public BDD visitCommunityNot(CommunityNot communityNot, CommunityContext arg) {
     return communityNot.getExpr().accept(this, arg).not();
+  }
+
+  @Override public BDD visitExtendedCommunityGlobalAdministratorHighMatch(
+      ExtendedCommunityGlobalAdministratorHighMatch extendedCommunityGlobalAdministratorHighMatch,
+      CommunityContext arg) {
+    System.err.println("Unsupported Operation: ExtendedCommunityGlobalAdministratorHighMatch");
+    return _factory.one();
+  }
+
+  @Override public BDD visitExtendedCommunityGlobalAdministratorLowMatch(
+      ExtendedCommunityGlobalAdministratorLowMatch extendedCommunityGlobalAdministratorLowMatch,
+      CommunityContext arg) {
+    System.err.println("Unsupported Operation: ExtendedCommunityGlobalAdministratorLowMatch");
+    return _factory.one();
+  }
+
+  @Override public BDD visitExtendedCommunityGlobalAdministratorMatch(
+      ExtendedCommunityGlobalAdministratorMatch extendedCommunityGlobalAdministratorMatch,
+      CommunityContext arg) {
+    System.err.println("Unsupported Operation: ExtendedCommunityGlobalAdministratorMatch");
+    return _factory.one();
+  }
+
+  @Override public BDD visitExtendedCommunityLocalAdministratorMatch(
+      ExtendedCommunityLocalAdministratorMatch extendedCommunityLocalAdministratorMatch,
+      CommunityContext arg) {
+    System.err.println("Unsupported Operation: ExtendedCommunityLocalAdministratorMatch");
+    return _factory.one();
   }
 
   @Override

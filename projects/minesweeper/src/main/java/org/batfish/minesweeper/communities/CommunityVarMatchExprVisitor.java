@@ -18,6 +18,10 @@ import org.batfish.datamodel.routing_policy.communities.CommunityMatchExprRefere
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchExprVisitor;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchRegex;
 import org.batfish.datamodel.routing_policy.communities.CommunityNot;
+import org.batfish.datamodel.routing_policy.communities.ExtendedCommunityGlobalAdministratorHighMatch;
+import org.batfish.datamodel.routing_policy.communities.ExtendedCommunityGlobalAdministratorLowMatch;
+import org.batfish.datamodel.routing_policy.communities.ExtendedCommunityGlobalAdministratorMatch;
+import org.batfish.datamodel.routing_policy.communities.ExtendedCommunityLocalAdministratorMatch;
 import org.batfish.datamodel.routing_policy.communities.RouteTargetExtendedCommunities;
 import org.batfish.datamodel.routing_policy.communities.SiteOfOriginExtendedCommunities;
 import org.batfish.datamodel.routing_policy.communities.StandardCommunityHighMatch;
@@ -112,10 +116,40 @@ final class CommunityVarMatchExprVisitor
     return communityNot.getExpr().accept(this, arg);
   }
 
+  @Override public Set<CommunityVar> visitExtendedCommunityGlobalAdministratorHighMatch(
+      ExtendedCommunityGlobalAdministratorHighMatch extendedCommunityGlobalAdministratorHighMatch,
+      CommunityContext arg) {
+    return null;
+  }
+
+  @Override public Set<CommunityVar> visitExtendedCommunityGlobalAdministratorLowMatch(
+      ExtendedCommunityGlobalAdministratorLowMatch extendedCommunityGlobalAdministratorLowMatch,
+      CommunityContext arg) {
+    System.err.println(
+        "Unsupported operation in CommunityVarMatchExprVisitor");
+    return new HashSet<CommunityVar>();
+  }
+
+  @Override public Set<CommunityVar> visitExtendedCommunityGlobalAdministratorMatch(
+      ExtendedCommunityGlobalAdministratorMatch extendedCommunityGlobalAdministratorMatch,
+      CommunityContext arg) {
+    System.err.println(
+        "Unsupported operation in CommunityVarMatchExprVisitor");
+    return new HashSet<CommunityVar>();
+  }
+
+  @Override public Set<CommunityVar> visitExtendedCommunityLocalAdministratorMatch(
+      ExtendedCommunityLocalAdministratorMatch extendedCommunityLocalAdministratorMatch,
+      CommunityContext arg) {
+    System.err.println(
+        "Unsupported operation in CommunityVarMatchExprVisitor");
+    return new HashSet<CommunityVar>();
+  }
+
   @Override public Set<CommunityVar> visitRouteTargetExtendedCommunities(
       RouteTargetExtendedCommunities routeTargetExtendedCommunities, CommunityContext arg) {
     System.err.println(
-        "Unsupported operation in CommunityVarMatchExprVisitor: RouteTargetExtendedCommunities");
+        "Unsupported operation in CommunityVarMatchExprVisitor");
     return new HashSet<CommunityVar>();
   }
 

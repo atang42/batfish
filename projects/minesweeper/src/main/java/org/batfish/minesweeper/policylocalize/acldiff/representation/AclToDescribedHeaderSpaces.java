@@ -6,9 +6,10 @@ import java.util.Optional;
 import javax.annotation.Nonnull;
 import org.batfish.datamodel.AclIpSpace;
 import org.batfish.datamodel.AclIpSpaceLine;
+import org.batfish.datamodel.AclLine;
 import org.batfish.datamodel.EmptyIpSpace;
+import org.batfish.datamodel.ExprAclLine;
 import org.batfish.datamodel.HeaderSpace;
-import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.IpIpSpace;
 import org.batfish.datamodel.IpProtocol;
 import org.batfish.datamodel.IpSpaceReference;
@@ -22,6 +23,7 @@ import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.UniverseIpSpace;
 import org.batfish.datamodel.acl.AclLineMatchExpr;
 import org.batfish.datamodel.acl.AndMatchExpr;
+import org.batfish.datamodel.acl.DeniedByAcl;
 import org.batfish.datamodel.acl.FalseExpr;
 import org.batfish.datamodel.acl.GenericAclLineMatchExprVisitor;
 import org.batfish.datamodel.acl.MatchHeaderSpace;
@@ -136,6 +138,11 @@ public class AclToDescribedHeaderSpaces {
         ret = temp;
       }
       return ret;
+    }
+
+    @Override public List<ConjunctHeaderSpace> visitDeniedByAcl(DeniedByAcl deniedByAcl) {
+      System.err.println("Uses PermittedByAcl in ACL");
+      return getAllPackets();
     }
 
     @Override
@@ -254,13 +261,16 @@ public class AclToDescribedHeaderSpaces {
     return ret;
   }
 
-  @Nonnull public static List<ConjunctHeaderSpace> createPrefixSpaces(IpAccessListLine line) {
+  @Nonnull public static List<ConjunctHeaderSpace> createPrefixSpaces(AclLine line) {
     if (line == null) {
       List<ConjunctHeaderSpace> ret = new ArrayList<>();
       ret.add(ConjunctHeaderSpace.getUniverseSpace());
       return ret;
     }
-    return line.getMatchCondition().accept(new AclLineVisitor());
+    if (line instanceof ExprAclLine) {
+      return ((ExprAclLine) line).getMatchCondition().accept(new AclLineVisitor());
+    }
+    return new ArrayList<>();
   }
 
 }

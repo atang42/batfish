@@ -8,6 +8,7 @@ import java.util.TreeSet;
 import javax.annotation.Nonnull;
 import org.batfish.common.Answerer;
 import org.batfish.common.BatfishException;
+import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.PrefixRange;
@@ -33,20 +34,16 @@ public class RouterTimeDiffAnswerer extends Answerer {
   }
 
   @Override
-  public AnswerElement answer() {
+  public AnswerElement answer(NetworkSnapshot snapshot) {
     throw new BatfishException(
         String.format("%s can only be run in differential mode.", _question.getName()));
   }
 
   @Override
-  public TableAnswerElement answerDiff() {
-    _batfish.pushBaseSnapshot();
-    SpecifierContext currentContext = _batfish.specifierContext();
-    _batfish.popSnapshot();
+  public TableAnswerElement answerDiff(NetworkSnapshot current, NetworkSnapshot reference) {
+    SpecifierContext currentContext = _batfish.specifierContext(current);
 
-    _batfish.pushDeltaSnapshot();
-    SpecifierContext referenceContext = _batfish.specifierContext();
-    _batfish.popSnapshot();
+    SpecifierContext referenceContext = _batfish.specifierContext(reference);
 
     Set<String> routersInBoth = new TreeSet<>(_nodeSpecifier.resolve(currentContext));
     routersInBoth.retainAll(_nodeSpecifier.resolve(referenceContext));

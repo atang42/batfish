@@ -16,7 +16,7 @@ public class RouteMapSetNextHopPeerAddress extends RouteMapSetLine {
   @Override
   public void applyTo(
       List<Statement> statements, CiscoConfiguration cc, Configuration c, Warnings w) {
-    Statement stmt = new SetNextHop(PeerAddressNextHop.getInstance());
+    Statement stmt = new SetNextHop(BgpPeerAddressNextHop.getInstance());
     stmt.setText(getText());
     statements.add(stmt);
   }

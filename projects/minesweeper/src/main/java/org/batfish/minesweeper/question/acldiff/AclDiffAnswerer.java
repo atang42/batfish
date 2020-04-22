@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.SortedSet;
 import org.batfish.common.Answerer;
+import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.answers.Schema;
 import org.batfish.datamodel.questions.NodesSpecifier;
@@ -16,6 +17,7 @@ import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.datamodel.table.TableMetadata;
 import org.batfish.minesweeper.policylocalize.acldiff.BddDiff;
 import org.batfish.minesweeper.policylocalize.acldiff.LineDifference;
+import org.batfish.representation.cisco_nxos.BgpVrfIpv4AddressFamilyConfiguration.Network;
 
 public final class AclDiffAnswerer extends Answerer {
 
@@ -88,7 +90,7 @@ public final class AclDiffAnswerer extends Answerer {
   }
 
   @Override
-  public TableAnswerElement answer() {
+  public TableAnswerElement answer(NetworkSnapshot snapshot) {
     AclDiffQuestion question = (AclDiffQuestion) _question;
     NodesSpecifier regex = question.getNodeRegex();
     String aclRegex = question.getAclRegex();

@@ -2,7 +2,7 @@ package org.batfish.minesweeper.policylocalize.acldiff.representation;
 
 import java.util.List;
 import javax.annotation.Nonnull;
-import org.batfish.datamodel.IpAccessListLine;
+import org.batfish.datamodel.AclLine;
 
 /*
 A Header space attached with _lines and texts of a particular router config
@@ -10,10 +10,10 @@ A Header space attached with _lines and texts of a particular router config
 public class LineMappedHeaderSpace {
   @Nonnull private final String _routerName;
   @Nonnull private final AbstractHeaderSpace _space;
-  @Nonnull private final List<IpAccessListLine> _lines;
+  @Nonnull private final List<AclLine> _lines;
 
   public LineMappedHeaderSpace(@Nonnull String routerName, @Nonnull AbstractHeaderSpace space,
-      @Nonnull List<IpAccessListLine> lineToText) {
+      @Nonnull List<AclLine> lineToText) {
     this._routerName = routerName;
     this._space = space;
     this._lines = lineToText;
@@ -27,11 +27,11 @@ public class LineMappedHeaderSpace {
     return _space;
   }
 
-  @Nonnull public List<IpAccessListLine> getLineToText() {
+  @Nonnull public List<AclLine> getLineToText() {
     return _lines;
   }
 
-  @Nonnull public List<IpAccessListLine> getLines() {
+  @Nonnull public List<AclLine> getLines() {
     return _lines;
   }
 

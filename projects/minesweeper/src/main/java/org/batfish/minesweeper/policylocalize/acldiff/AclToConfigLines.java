@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
@@ -19,10 +20,10 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.config.Settings;
+import org.batfish.datamodel.AclLine;
 import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.DefinedStructureInfo;
 import org.batfish.datamodel.IpAccessList;
-import org.batfish.datamodel.IpAccessListLine;
 import org.batfish.datamodel.answers.ConvertConfigurationAnswerElement;
 import org.batfish.datamodel.answers.ParseVendorConfigurationAnswerElement;
 import org.batfish.main.Batfish;
@@ -44,16 +45,14 @@ public class AclToConfigLines {
 
   AclToConfigLines(IBatfish batfish, boolean differential) {
     _batfish = (Batfish) batfish;
-    _ccae = _batfish.loadConvertConfigurationAnswerElementOrReparse();
-    _pvcae = _batfish.loadParseVendorConfigurationAnswerElement();
+    _ccae = _batfish.loadConvertConfigurationAnswerElementOrReparse(_batfish.getSnapshot());
+    _pvcae = _batfish.loadParseVendorConfigurationAnswerElement(_batfish.getSnapshot());
     _settings = _batfish.getSettings();
 
     if (differential) {
-      _batfish.pushDeltaSnapshot();
-      _ccaeRef = _batfish.loadConvertConfigurationAnswerElementOrReparse();
-      _pvcaeRef = _batfish.loadParseVendorConfigurationAnswerElement();
-      _referenceContext = _batfish.specifierContext();
-      _batfish.popSnapshot();
+      _ccaeRef = _batfish.loadConvertConfigurationAnswerElementOrReparse(_batfish.getReferenceSnapshot());
+      _pvcaeRef = _batfish.loadParseVendorConfigurationAnswerElement(_batfish.getReferenceSnapshot());
+      _referenceContext = _batfish.specifierContext(_batfish.getReferenceSnapshot());
     }
   }
 
@@ -86,16 +85,16 @@ public class AclToConfigLines {
     SortedSet<Integer> lineNums;
     if (router.endsWith("-current")) {
       router = router.substring(0, router.length() - "-current".length());
-      path = _settings.getActiveTestrigSettings().getInputPath();
+      path = _settings.getFlattenDestination();
       name = new ArrayList<>(_pvcae.getFileMap().get(router)).get(0);
       lineNums = getAclLineNums(router, acl, _pvcae, _ccae);
     } else if (router.endsWith("-reference")) {
       router = router.substring(0, router.length() - "-reference".length());
-      path = _settings.getDeltaTestrigSettings().getInputPath();
+      path = _settings.getFlattenDestination();
       name = new ArrayList<>(_pvcaeRef.getFileMap().get(router)).get(0);
       lineNums = getAclLineNums(router, acl, _pvcaeRef, _ccaeRef);
     } else {
-      path = _settings.getActiveTestrigSettings().getInputPath();
+      path = _settings.getFlattenDestination();
       name = new ArrayList<>(_pvcae.getFileMap().get(router)).get(0);
       lineNums = getAclLineNums(router, acl, _pvcae, _ccae);
     }
@@ -130,7 +129,7 @@ public class AclToConfigLines {
   }
 
   private String getConfigText(String router) {
-    Path path = _settings.getActiveTestrigSettings().getInputPath();
+    Path path = _settings.getFlattenDestination();
     String name = new ArrayList<String>(_pvcae.getFileMap().get(router)).get(0);
     Path fullname = Paths.get(path.toString(), name);
 
@@ -159,18 +158,18 @@ public class AclToConfigLines {
   }
 
   String getRelevantLines(String router, IpAccessList acl, Collection<ConjunctHeaderSpace> regions,
-      @Nullable List<IpAccessListLine> lastLines, boolean hasImplicitDeny, boolean printMore) {
+      @Nullable List<AclLine> lastLines, boolean hasImplicitDeny, boolean printMore) {
 
     SortedMap<Integer, String> lines = getAclLineText(router, acl);
     ConfigurationFormat format;
     if (router.endsWith("-current")) {
       router = router.substring(0, router.length() - "-current".length());
-      format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
+      format = _batfish.loadConfigurations(_batfish.getSnapshot()).get(router).getConfigurationFormat();
     } else if (router.endsWith("-reference")) {
       router = router.substring(0, router.length() - "-reference".length());
       format = _referenceContext.getConfigs().get(router).getConfigurationFormat();
     } else {
-      format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
+      format = _batfish.loadConfigurations(_batfish.getSnapshot()).get(router).getConfigurationFormat();
     }
     String ret = "";
     if (format.getVendorString().equals("cisco")) {
@@ -193,19 +192,19 @@ public class AclToConfigLines {
   }
 
   void printRelevantLines(String router, IpAccessList acl, Collection<ConjunctHeaderSpace> regions,
-      @Nullable List<IpAccessListLine> lastLines, boolean hasImplicitDeny, boolean printMore) {
+      @Nullable List<AclLine> lastLines, boolean hasImplicitDeny, boolean printMore) {
 
     SortedMap<Integer, String> lines = getAclLineText(router, acl);
 
     ConfigurationFormat format;
     if (router.endsWith("-current")) {
       router = router.substring(0, router.length() - "-current".length());
-      format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
+      format = _batfish.loadConfigurations(_batfish.getSnapshot()).get(router).getConfigurationFormat();
     } else if (router.endsWith("-reference")) {
       router = router.substring(0, router.length() - "-reference".length());
       format = _referenceContext.getConfigs().get(router).getConfigurationFormat();
     } else {
-      format = _batfish.loadConfigurations().get(router).getConfigurationFormat();
+      format = _batfish.loadConfigurations(_batfish.getSnapshot()).get(router).getConfigurationFormat();
     }
     switch (format.getVendorString()) {
     case "juniper":
@@ -265,13 +264,13 @@ public class AclToConfigLines {
   }
 
   private String getRelevantLinesCisco(SortedMap<Integer, String> lines, IpAccessList acl,
-      Collection<ConjunctHeaderSpace> regions, @Nullable List<IpAccessListLine> lastLines,
+      Collection<ConjunctHeaderSpace> regions, @Nullable List<AclLine> lastLines,
       boolean hasImplicitDeny, boolean printMore) {
 
     StringBuilder ret = new StringBuilder();
-    List<IpAccessListLine> relevantAclLines = new ArrayList<>();
+    List<AclLine> relevantAclLines = new ArrayList<>();
     int prevPrint = 0;
-    for (IpAccessListLine aclLine : acl.getLines()) {
+    for (AclLine aclLine : acl.getLines()) {
       List<ConjunctHeaderSpace> lineRegions = AclToDescribedHeaderSpaces.createPrefixSpaces(aclLine);
       for (ConjunctHeaderSpace lineReg : lineRegions) {
         for (ConjunctHeaderSpace region : regions) {
@@ -282,16 +281,14 @@ public class AclToConfigLines {
       }
     }
     Set<String> relevantLineTexts =
-        relevantAclLines.stream()
-            .map(IpAccessListLine::getName)
+        relevantAclLines.stream().map(AclLine::getName).filter(Objects::nonNull)
             .map(String::trim)
             .collect(Collectors.toSet());
     if (lastLines == null) {
       lastLines = new ArrayList<>();
     }
     Set<String> lastLineTexts =
-        lastLines.stream()
-            .map(IpAccessListLine::getName)
+        lastLines.stream().map(AclLine::getName).filter(Objects::nonNull)
             .map(String::trim)
             .collect(Collectors.toSet());
     int lastLinesReached = 0;
@@ -338,7 +335,7 @@ public class AclToConfigLines {
   }
 
   private void printRelevantLinesCisco(SortedMap<Integer, String> lines, IpAccessList acl,
-      Collection<ConjunctHeaderSpace> regions, @Nullable List<IpAccessListLine> lastLines,
+      Collection<ConjunctHeaderSpace> regions, @Nullable List<AclLine> lastLines,
       boolean hasImplicitDeny, boolean printMore) {
 
     System.out.print(
@@ -347,11 +344,11 @@ public class AclToConfigLines {
 
   private String getRelevantLinesJuniper(int firstLine, int lastLine, String router,
       IpAccessList acl, Collection<ConjunctHeaderSpace> regions,
-      @Nullable List<IpAccessListLine> lastAclLines, boolean hasImplicitDeny, boolean printMore) {
+      @Nullable List<AclLine> lastAclLines, boolean hasImplicitDeny, boolean printMore) {
     StringBuilder ret = new StringBuilder();
     int prevPrint = 0;
-    List<IpAccessListLine> relevantAclLines = new ArrayList<>();
-    for (IpAccessListLine aclLine : acl.getLines()) {
+    List<AclLine> relevantAclLines = new ArrayList<>();
+    for (AclLine aclLine : acl.getLines()) {
       List<ConjunctHeaderSpace> lineRegions = AclToDescribedHeaderSpaces.createPrefixSpaces(aclLine);
       for (ConjunctHeaderSpace lineReg : lineRegions) {
         for (ConjunctHeaderSpace region : regions) {
@@ -362,15 +359,15 @@ public class AclToConfigLines {
       }
     }
     Set<String> relevantLineTexts =
-        relevantAclLines.stream().map(IpAccessListLine::getName).collect(Collectors.toSet());
+        relevantAclLines.stream().map(AclLine::getName).collect(Collectors.toSet());
     if (lastAclLines == null) {
       lastAclLines = new ArrayList<>();
     }
     Set<String> lastLineTexts =
-        lastAclLines.stream().map(IpAccessListLine::getName).collect(Collectors.toSet());
+        lastAclLines.stream().map(AclLine::getName).collect(Collectors.toSet());
 
-    Path path = _settings.getActiveTestrigSettings().getInputPath();
-    String name = new ArrayList<String>(_pvcae.getFileMap().get(router)).get(0);
+    Path path = _settings.getFlattenDestination();
+    String name = new ArrayList<>(_pvcae.getFileMap().get(router)).get(0);
     Path fullname = Paths.get(path.toString(), name);
 
     BufferedReader reader = null;
@@ -443,7 +440,7 @@ public class AclToConfigLines {
 
   private void printRelevantLinesJuniper(int firstLine, int lastLine, String router,
       IpAccessList acl, Collection<ConjunctHeaderSpace> regions,
-      @Nullable List<IpAccessListLine> lastAclLines, boolean hasImplicitDeny, boolean printMore) {
+      @Nullable List<AclLine> lastAclLines, boolean hasImplicitDeny, boolean printMore) {
 
     System.out.print(
         getRelevantLinesJuniper(

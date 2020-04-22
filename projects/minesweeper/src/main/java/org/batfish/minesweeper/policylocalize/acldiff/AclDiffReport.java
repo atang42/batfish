@@ -9,8 +9,9 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import org.batfish.common.plugin.IBatfish;
+import org.batfish.datamodel.ExprAclLine;
 import org.batfish.datamodel.IpAccessList;
-import org.batfish.datamodel.IpAccessListLine;
+import org.batfish.datamodel.AclLine;
 import org.batfish.datamodel.LineAction;
 import org.batfish.minesweeper.policylocalize.SymbolicResult;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
@@ -25,15 +26,15 @@ public class AclDiffReport {
     final String _router;
     final IpAccessList _acl;
     final SymbolicResult _result;
-    List<IpAccessListLine> _lastDiffs;
-    Set<IpAccessListLine> _allDiffs;
+    List<AclLine> _lastDiffs;
+    Set<AclLine> _allDiffs;
     boolean _implicitDeny;
 
     SingleRouterReport(
         String r,
         IpAccessList acl,
-        List<IpAccessListLine> lastLines,
-        Set<IpAccessListLine> allLines) {
+        List<AclLine> lastLines,
+        Set<AclLine> allLines) {
       _router = r;
       _acl = acl;
       _lastDiffs = new ArrayList<>(lastLines);
@@ -45,7 +46,7 @@ public class AclDiffReport {
       } else {
         _implicitDeny = false;
         _result =
-            _lastDiffs.get(0).getAction().equals(LineAction.PERMIT)
+            ((ExprAclLine)_lastDiffs.get(0)).getAction().equals(LineAction.PERMIT)
                 ? SymbolicResult.ACCEPT
                 : SymbolicResult.REJECT;
       }
@@ -86,12 +87,12 @@ public class AclDiffReport {
       Set<ConjunctHeaderSpace> subtractedRegions,
       String r1,
       IpAccessList acl1,
-      List<IpAccessListLine> last1,
-      Set<IpAccessListLine> all1,
+      List<AclLine> last1,
+      Set<AclLine> all1,
       String r2,
       IpAccessList acl2,
-      List<IpAccessListLine> last2,
-      Set<IpAccessListLine> all2) {
+      List<AclLine> last2,
+      Set<AclLine> all2) {
     _regions = new HashSet<>(regions);
     _subtractedRegions = new HashSet<>(subtractedRegions);
     _report1 = new SingleRouterReport(r1, acl1, last1, all1);
@@ -100,9 +101,9 @@ public class AclDiffReport {
 
   private BitSet getAclBitVector(SingleRouterReport report) {
     BitSet bitVector = new BitSet(report._acl.getLines().size());
-    Set<IpAccessListLine> lineDiffs = report._allDiffs;
+    Set<AclLine> lineDiffs = report._allDiffs;
     int i = 0;
-    for (IpAccessListLine line : report._acl.getLines()) {
+    for (AclLine line : report._acl.getLines()) {
       if (lineDiffs.contains(line)) {
         bitVector.set(i, true);
       } else {

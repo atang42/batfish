@@ -4,6 +4,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.batfish.datamodel.routing_policy.communities.CommunityContext;
+import org.batfish.datamodel.routing_policy.communities.CommunityExpr;
 import org.batfish.datamodel.routing_policy.communities.CommunityExprsSet;
 import org.batfish.datamodel.routing_policy.communities.CommunitySetDifference;
 import org.batfish.datamodel.routing_policy.communities.CommunitySetExprReference;
@@ -20,8 +21,13 @@ final class CommunityVarSetExprVisitor
   @Override
   public Set<CommunityVar> visitCommunityExprsSet(
       CommunityExprsSet communityExprsSet, CommunityContext arg) {
-    System.err.println("Unsupported operation in CommunityVarSetExprVisitor: CommunityExprsSet");
-    return new HashSet<CommunityVar>();
+    Set<CommunityVar> result = new HashSet<>();
+    Set<CommunityExpr> exprs = communityExprsSet.getExprs();
+    CommunityVarExprVisitor visitor = new CommunityVarExprVisitor();
+    for (CommunityExpr expr: exprs) {
+      result.addAll(expr.accept(visitor, arg));
+    }
+    return result;
   }
 
   @Override

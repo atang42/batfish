@@ -8,8 +8,9 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import net.sf.javabdd.BDD;
+import org.batfish.datamodel.AclLine;
+import org.batfish.datamodel.ExprAclLine;
 import org.batfish.datamodel.IpAccessList;
-import org.batfish.datamodel.IpAccessListLine;
 
 public class BDDPacketWithLines extends BDDPacket{
 
@@ -20,9 +21,9 @@ public class BDDPacketWithLines extends BDDPacket{
 
   private class AclLineRepr {
     final IpAccessList acl;
-    final IpAccessListLine line;
+    final ExprAclLine line;
 
-    AclLineRepr(IpAccessList acl, IpAccessListLine line) {
+    AclLineRepr(IpAccessList acl, ExprAclLine line) {
       this.acl = acl;
       this.line = line;
     }
@@ -70,11 +71,13 @@ public class BDDPacketWithLines extends BDDPacket{
     _numToAclLine.computeIfAbsent(router, x -> new HashMap<>());
     // BDDs for each line
     for (int i = 0; i < acl.getLines().size(); i++) {
-      IpAccessListLine line = acl.getLines().get(i);
-      BDD var = _aclVars.get(router).get(acl.getName()).value(i);
-      AclLineRepr repr = new AclLineRepr(acl, line);
-      _aclLineVars.get(router).put(repr, var);
-      _numToAclLine.get(router).put((long)i, repr);
+      AclLine line = acl.getLines().get(i);
+      if (line instanceof ExprAclLine) {
+        BDD var = _aclVars.get(router).get(acl.getName()).value(i);
+        AclLineRepr repr = new AclLineRepr(acl, (ExprAclLine) line);
+        _aclLineVars.get(router).put(repr, var);
+        _numToAclLine.get(router).put((long) i, repr);
+      }
     }
 
     // BDD for implicit action
@@ -84,15 +87,24 @@ public class BDDPacketWithLines extends BDDPacket{
     _numToAclLine.get(router).put((long)acl.getLines().size(), repr);
   }
 
-  public BDD getAclLine(String router, IpAccessList acl, IpAccessListLine line) {
-    AclLineRepr repr = new AclLineRepr(acl, line);
-    if (!_aclLineVars.containsKey(router) || !_aclLineVars.get(router).containsKey(repr)) {
+  public BDD getAclLine(String router, IpAccessList acl, AclLine line) {
+    if (!(line instanceof ExprAclLine)) {
       System.err.println("Cannot get variable for:");
       System.err.println(router);
       System.err.println(acl.getName());
       System.err.println(line.getName());
       System.err.println();
-      return null;
+      return getFactory().one();
+    }
+
+    AclLineRepr repr = new AclLineRepr(acl, (ExprAclLine) line);
+    if (!_aclLineVars.containsKey(router) || !_aclLineVars.get(router).containsKey(repr)){
+      System.err.println("Cannot get variable for:");
+      System.err.println(router);
+      System.err.println(acl.getName());
+      System.err.println(line.getName());
+      System.err.println();
+      return getFactory().one();
     }
     BDD result = _aclLineVars.get(router).get(repr);
     return result;
@@ -104,7 +116,7 @@ public class BDDPacketWithLines extends BDDPacket{
         .value(acl.getLines().size());
   }
 
-  public IpAccessListLine getLineFromSolution(String router, IpAccessList acl, BDD solution) {
+  public ExprAclLine getLineFromSolution(String router, IpAccessList acl, BDD solution) {
     Optional<Long> optional = _aclVars.get(router).get(acl.getName()).getValueSatisfying(solution);
     if (optional.isPresent()) {
       return _numToAclLine.get(router).get(optional.get()).line;

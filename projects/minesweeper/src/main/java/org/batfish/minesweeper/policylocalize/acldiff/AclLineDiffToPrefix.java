@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.batfish.datamodel.IpAccessList;
-import org.batfish.datamodel.IpAccessListLine;
+import org.batfish.datamodel.AclLine;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.AbstractHeaderSpace;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.AclToDescribedHeaderSpaces;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
@@ -18,17 +18,17 @@ public class AclLineDiffToPrefix {
 
   private IpAccessList _acl1;
   private IpAccessList _acl2;
-  private IpAccessListLine _line1;
-  private IpAccessListLine _line2;
-  private Set<IpAccessListLine> _diffLines1;
-  private Set<IpAccessListLine> _diffLines2;
+  private AclLine _line1;
+  private AclLine _line2;
+  private Set<AclLine> _diffLines1;
+  private Set<AclLine> _diffLines2;
 
   private boolean _differencesCalculated;
   private Map<ConjunctHeaderSpace, List<ConjunctHeaderSpace>> _differences;
   private StringBuilder _output;
 
-  AclLineDiffToPrefix(IpAccessList acl1, IpAccessList acl2, IpAccessListLine line1,
-      IpAccessListLine line2) {
+  AclLineDiffToPrefix(IpAccessList acl1, IpAccessList acl2, AclLine line1,
+      AclLine line2) {
     _acl1 = acl1;
     _acl2 = acl2;
     _line1 = line1;
@@ -60,7 +60,7 @@ public class AclLineDiffToPrefix {
     for (ConjunctHeaderSpace resultSpace : resultSpaces) {
       boolean doOutput = true;
       List<ConjunctHeaderSpace> diffs = new ArrayList<>();
-      for (IpAccessListLine line : _acl1.getLines()) {
+      for (AclLine line : _acl1.getLines()) {
         if (line.equals(_line1)) {
           _diffLines1.add(line);
           break;
@@ -94,7 +94,7 @@ public class AclLineDiffToPrefix {
           }
         }
       }
-      for (IpAccessListLine line : _acl2.getLines()) {
+      for (AclLine line : _acl2.getLines()) {
         if (line.equals(_line2)) {
           _diffLines2.add(line);
           break;
@@ -158,14 +158,14 @@ public class AclLineDiffToPrefix {
     return _differences;
   }
 
-  public Set<IpAccessListLine> getAcl1LineDifferences() {
+  public Set<AclLine> getAcl1LineDifferences() {
     if (!_differencesCalculated) {
       calculateDifference();
     }
     return _diffLines1;
   }
 
-  public Set<IpAccessListLine> getAcl2LineDifferences() {
+  public Set<AclLine> getAcl2LineDifferences() {
     if (!_differencesCalculated) {
       calculateDifference();
     }

@@ -27,7 +27,7 @@ import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpAccessList;
-import org.batfish.datamodel.IpAccessListLine;
+import org.batfish.datamodel.AclLine;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
@@ -64,40 +64,34 @@ public class BddDiff {
       return _headerVars;
     }
     _headerVars = _packet.getFactory().one();
-    BDD bddDstIp =
-        Arrays.stream(_packet.getDstIp().getBitvec()).reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddSrcIp =
-        Arrays.stream(_packet.getSrcIp().getBitvec()).reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddDstPort =
-        Arrays.stream(_packet.getDstPort().getBitvec()).reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddSrcPort =
-        Arrays.stream(_packet.getSrcPort().getBitvec()).reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddProtocol =
-        Arrays.stream(_packet.getIpProtocol().getBDDInteger().getBitvec())
-            .reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddIcmpType =
-        Arrays.stream(_packet.getIcmpType().getBDDInteger().getBitvec())
-            .reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddIcmpCode =
-        Arrays.stream(_packet.getIcmpCode().getBDDInteger().getBitvec())
-            .reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddDscp =
-        Arrays.stream(_packet.getDscp().getBitvec()).reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddEcn =
-        Arrays.stream(_packet.getEcn().getBitvec()).reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddFragOffset =
-        Arrays.stream(_packet.getFragmentOffset().getBitvec())
-            .reduce(_packet.getFactory().one(), BDD::and);
-    BDD bddTcpBits =
-        _packet
-            .getTcpAck()
-            .and(_packet.getTcpEce())
-            .and(_packet.getTcpFin())
-            .and(_packet.getTcpCwr())
-            .and(_packet.getTcpRst())
-            .and(_packet.getTcpPsh())
-            .and(_packet.getTcpUrg())
-            .and(_packet.getTcpSyn());
+    BDD bddDstIp = Arrays.stream(_packet.getDstIp().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddSrcIp = Arrays.stream(_packet.getSrcIp().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddDstPort = Arrays.stream(_packet.getDstPort().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddSrcPort = Arrays.stream(_packet.getSrcPort().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddProtocol = Arrays.stream(_packet.getIpProtocol().getBDDInteger().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddIcmpType = Arrays.stream(_packet.getIcmpType().getBDDInteger().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddIcmpCode = Arrays.stream(_packet.getIcmpCode().getBDDInteger().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddDscp = Arrays.stream(_packet.getDscp().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddEcn = Arrays.stream(_packet.getEcn().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddFragOffset = Arrays.stream(_packet.getFragmentOffset().getBitvec())
+        .reduce(_packet.getFactory().one(), BDD::and);
+    BDD bddTcpBits = _packet.getTcpAck()
+        .and(_packet.getTcpEce())
+        .and(_packet.getTcpFin())
+        .and(_packet.getTcpCwr())
+        .and(_packet.getTcpRst())
+        .and(_packet.getTcpPsh())
+        .and(_packet.getTcpUrg())
+        .and(_packet.getTcpSyn());
     _headerVars.andWith(bddDstIp);
     _headerVars.andWith(bddSrcIp);
     _headerVars.andWith(bddDstPort);
@@ -118,8 +112,8 @@ public class BddDiff {
   public SortedSet<LineDifference> findDiffWithLines() {
 
     SortedSet<LineDifference> differences = new TreeSet<>();
-    Set<String> routerNames = _specifier.getMatchingNodes(_batfish);
-    SortedMap<String, Configuration> configs = _batfish.loadConfigurations();
+    Set<String> routerNames = _specifier.getMatchingNodes(_batfish.specifierContext(_batfish.getSnapshot()));
+    SortedMap<String, Configuration> configs = _batfish.loadConfigurations(_batfish.getSnapshot());
     Map<String, Map<String, IpAccessList>> aclNameToAcls = new TreeMap<>();
     Map<IpAccessList, String> aclToRouterName = new HashMap<>();
     System.out.println("Matched Routers:");
@@ -137,8 +131,9 @@ public class BddDiff {
           continue;
         }
         IpAccessList acl = entry.getValue();
-        Map<String, IpAccessList> routerToAcl =
-            aclNameToAcls.getOrDefault(entry.getKey(), new HashMap<>());
+        Map<String, IpAccessList> routerToAcl = aclNameToAcls.getOrDefault(
+            entry.getKey(),
+            new HashMap<>());
         routerToAcl.put(rr, entry.getValue());
         aclNameToAcls.put(entry.getKey(), routerToAcl);
         aclToRouterName.put(acl, rr);
@@ -174,8 +169,8 @@ public class BddDiff {
     _headerVars = null;
   }
 
-  public SortedSet<LineDifference> compareAcls(
-      Map<String, IpAccessList> accessLists, boolean differential) {
+  public SortedSet<LineDifference> compareAcls(Map<String, IpAccessList> accessLists,
+      boolean differential) {
     assert (accessLists.size() == 2);
     initPacket();
     SortedSet<LineDifference> differences = new TreeSet<>();
@@ -200,10 +195,10 @@ public class BddDiff {
     } else {
       BDD linesNotEquivalent = notEquivalent.exist(getPacketHeaderFields());
       List<IpAccessList> aclList = new ArrayList<>(accessLists.values());
-      AclDiffToPrefix aclDiffToPrefix =
-          new AclDiffToPrefix(
-              routers.get(0), routers.get(1),
-              aclList.get(0), aclList.get(1));
+      AclDiffToPrefix aclDiffToPrefix = new AclDiffToPrefix(routers.get(0),
+          routers.get(1),
+          aclList.get(0),
+          aclList.get(1));
       old_time = System.currentTimeMillis();
       long comp_time = 0;
       long sat_time = 0;
@@ -215,9 +210,9 @@ public class BddDiff {
 
         ttime = System.currentTimeMillis();
         int i = 0;
-        IpAccessListLine[] lineDiff = new IpAccessListLine[2];
+        AclLine[] lineDiff = new AclLine[2];
         for (IpAccessList acl : aclList) {
-          for (IpAccessListLine line : acl.getLines()) {
+          for (AclLine line : acl.getLines()) {
             if (counterexample.andSat(_packet.getAclLine(routers.get(i), acl, line))) {
               lineDiff[i] = line;
             }
@@ -243,30 +238,32 @@ public class BddDiff {
   }
 
   public SortedSet<LineDifference> getTimeDiff() {
-    _batfish.pushBaseSnapshot();
-    SpecifierContext currentContext = _batfish.specifierContext();
-    _batfish.popSnapshot();
+    SpecifierContext currentContext = _batfish.specifierContext(_batfish.getSnapshot());
 
-    _batfish.pushDeltaSnapshot();
-    SpecifierContext referenceContext = _batfish.specifierContext();
-    _batfish.popSnapshot();
+    SpecifierContext referenceContext = _batfish.specifierContext(_batfish.getReferenceSnapshot());
 
     SortedSet<LineDifference> differences = new TreeSet<>();
     Set<String> routers = new TreeSet<>(_specifier.getMatchingNodes(currentContext));
     routers.retainAll(_specifier.getMatchingNodes(referenceContext));
 
     for (String router : routers) {
-      Set<String> currentInterfaces =
-          currentContext.getConfigs().get(router).getAllInterfaces().keySet();
-      Set<String> referenceInterfaces =
-          referenceContext.getConfigs().get(router).getAllInterfaces().keySet();
+      Set<String> currentInterfaces = currentContext.getConfigs()
+          .get(router)
+          .getAllInterfaces()
+          .keySet();
+      Set<String> referenceInterfaces = referenceContext.getConfigs()
+          .get(router)
+          .getAllInterfaces()
+          .keySet();
 
       Set<String> intersection = new HashSet<>(currentInterfaces);
       intersection.retainAll(referenceInterfaces);
       for (String intfName : intersection) {
         Interface intf1 = currentContext.getConfigs().get(router).getAllInterfaces().get(intfName);
-        Interface intf2 =
-            referenceContext.getConfigs().get(router).getAllInterfaces().get(intfName);
+        Interface intf2 = referenceContext.getConfigs()
+            .get(router)
+            .getAllInterfaces()
+            .get(intfName);
 
         IpAccessList inAcl1 = intf1.getIncomingFilter();
         IpAccessList inAcl2 = intf2.getIncomingFilter();
@@ -274,9 +271,7 @@ public class BddDiff {
         IpAccessList outAcl1 = intf1.getOutgoingFilter();
         IpAccessList outAcl2 = intf2.getOutgoingFilter();
 
-        if (inAcl1 != null
-            && inAcl2 != null
-            && inAcl1.getName().matches(_aclRegex)
+        if (inAcl1 != null && inAcl2 != null && inAcl1.getName().matches(_aclRegex)
             && inAcl2.getName().matches(_aclRegex)) {
           String fullIntfName = intfName + "-Incoming";
           differences.addAll(compareAclPair(router, fullIntfName, inAcl1, inAcl2));
@@ -286,9 +281,7 @@ public class BddDiff {
           // TODO: Handle case where only second router has ACL
         }
 
-        if (outAcl1 != null
-            && outAcl2 != null
-            && outAcl1.getName().matches(_aclRegex)
+        if (outAcl1 != null && outAcl2 != null && outAcl1.getName().matches(_aclRegex)
             && outAcl2.getName().matches(_aclRegex)) {
           String fullIntfName = intfName + "-Outgoing";
           differences.addAll(compareAclPair(router, fullIntfName, outAcl1, outAcl2));
@@ -303,8 +296,8 @@ public class BddDiff {
     return differences;
   }
 
-  private SortedSet<LineDifference> compareAclPair(
-      String router, String intfName, IpAccessList acl1, IpAccessList acl2) {
+  private SortedSet<LineDifference> compareAclPair(String router, String intfName,
+      IpAccessList acl1, IpAccessList acl2) {
     if (_comparisonCache.containsKey(acl1) && _comparisonCache.get(acl1).containsKey(acl2)) {
       _intfCache.get(acl1).get(acl2).add(intfName);
       TreeSet<LineDifference> result = new TreeSet<>();
@@ -322,37 +315,33 @@ public class BddDiff {
     SortedSet<LineDifference> lineDifferences = compareAcls(accessLists, true);
     lineDifferences.forEach(ld -> ld.setInterface(intfName));
     _comparisonCache.computeIfAbsent(acl1, x -> new HashMap<>()).put(acl2, lineDifferences);
-    _intfCache
-        .computeIfAbsent(acl1, x -> new HashMap<>())
+    _intfCache.computeIfAbsent(acl1, x -> new HashMap<>())
         .computeIfAbsent(acl2, x -> new ArrayList<>())
         .add(intfName);
     return lineDifferences;
   }
 
   /** Get filters specified by the given filter _specifier. */
-  public static Multimap<String, String> getSpecifiedFilters(
-      SpecifierContext specifierContext, NodesSpecifier nodesSpecifier, String aclRegex) {
+  public static Multimap<String, String> getSpecifiedFilters(SpecifierContext specifierContext,
+      NodesSpecifier nodesSpecifier, String aclRegex) {
     Set<String> nodes = nodesSpecifier.getMatchingNodes(specifierContext);
     ImmutableMultimap.Builder<String, String> filters = ImmutableMultimap.builder();
     Map<String, Configuration> configs = specifierContext.getConfigs();
-    FilterSpecifier filterSpecifier =
-        SpecifierFactories.getFilterSpecifierOrDefault(
-            aclRegex, AllFiltersFilterSpecifier.INSTANCE);
+    FilterSpecifier filterSpecifier = SpecifierFactories.getFilterSpecifierOrDefault(
+        aclRegex,
+        AllFiltersFilterSpecifier.INSTANCE);
     nodes.stream()
         .map(configs::get)
-        .forEach(
-            config ->
-                filterSpecifier
-                    .resolve(config.getHostname(), specifierContext)
-                    .forEach(filter -> filters.put(config.getHostname(), filter.getName())));
+        .forEach(config -> filterSpecifier.resolve(config.getHostname(), specifierContext)
+            .forEach(filter -> filters.put(config.getHostname(), filter.getName())));
     return filters.build();
   }
 
   public void doTest(IBatfish batfish, NodesSpecifier nodeRegex) {
     BDDPacket packet = new BDDPacket();
 
-    Set<String> routers = nodeRegex.getMatchingNodes(batfish);
-    SortedMap<String, Configuration> configs = batfish.loadConfigurations();
+    Set<String> routers = nodeRegex.getMatchingNodes(batfish.specifierContext(batfish.getSnapshot()));
+    SortedMap<String, Configuration> configs = batfish.loadConfigurations(batfish.getSnapshot());
     Map<String, List<IpAccessList>> aclNameToAcls = new TreeMap<>();
 
     for (String rr : routers) {
@@ -384,9 +373,8 @@ public class BddDiff {
             isEquivalent = first.and(second).or(first.not().and(second.not()));
             BDD pfxIsEquivalent = matchPrefix(packet, pfx).imp(isEquivalent);
 
-            BDD bddDstIp =
-                Arrays.stream(packet.getDstIp().getBitvec())
-                    .reduce(packet.getFactory().one(), BDD::and);
+            BDD bddDstIp = Arrays.stream(packet.getDstIp().getBitvec())
+                .reduce(packet.getFactory().one(), BDD::and);
             BDD pfxNotEquivalent = matchPrefix(packet, pfx).imp(isEquivalent.not());
             BDD forallNotEquivalent = pfxNotEquivalent.forAll(bddDstIp);
             if (pfxIsEquivalent.isOne()) {
@@ -465,15 +453,13 @@ public class BddDiff {
 
     bdd = bdd.veccompose(pairing);
 
-    BDD dstPortBDD =
-        pkt.getDstPort()
-            .leq(region.getDstPort().getEnd())
-            .and(pkt.getDstPort().geq(region.getDstPort().getStart()));
+    BDD dstPortBDD = pkt.getDstPort()
+        .leq(region.getDstPort().getEnd())
+        .and(pkt.getDstPort().geq(region.getDstPort().getStart()));
 
-    BDD srcPortBDD =
-        pkt.getSrcPort()
-            .leq(region.getSrcPort().getEnd())
-            .and(pkt.getSrcPort().geq(region.getSrcPort().getStart()));
+    BDD srcPortBDD = pkt.getSrcPort()
+        .leq(region.getSrcPort().getEnd())
+        .and(pkt.getSrcPort().geq(region.getSrcPort().getStart()));
 
     BDD protoBDD = pkt.getIpProtocol().value(region.getProtocol());
 

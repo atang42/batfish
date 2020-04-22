@@ -5,6 +5,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import org.batfish.common.Answerer;
+import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.PrefixRange;
@@ -28,9 +29,9 @@ public class StaticRouteDiffAnswerer extends Answerer {
   }
 
   @Override
-  public TableAnswerElement answer() {
+  public TableAnswerElement answer(NetworkSnapshot snapshot) {
 
-    SpecifierContext specifierContext = _batfish.specifierContext();
+    SpecifierContext specifierContext = _batfish.specifierContext(snapshot);
     Set<String> nodeSet = _nodeSpecifier.resolve(specifierContext);
 
     if (nodeSet.size() < 2) {
@@ -63,8 +64,8 @@ public class StaticRouteDiffAnswerer extends Answerer {
     return answerElement;
   }
 
-  public void printStaticRoutes() {
-    SpecifierContext specifierContext = _batfish.specifierContext();
+  public void printStaticRoutes(NetworkSnapshot snapshot) {
+    SpecifierContext specifierContext = _batfish.specifierContext(snapshot);
     Set<String> nodeSet = _nodeSpecifier.resolve(specifierContext);
     for (String node : nodeSet) {
       System.out.println(node);

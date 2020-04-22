@@ -9,6 +9,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import net.sf.javabdd.BDD;
 import org.batfish.common.Answerer;
+import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
@@ -63,31 +64,16 @@ public class FindRouteFilterLinesAnswerer extends Answerer {
         && findQuestion.getAccepted().equalsIgnoreCase("true");
   }
 
-  @Override public AnswerElement answer() {
+  @Override public AnswerElement answer(NetworkSnapshot snapshot) {
     printStaticRoutes();
     // test();
     printPaths();
     return new StringAnswerElement("DONE");
   }
 
-  private void test() {
-    BDDPacket pkt = new BDDPacket();
-    Graph graph = new Graph(_batfish);
-    BDDNetwork network = BDDNetwork.create(pkt, graph, NodesSpecifier.ALL);
-
-    for (Entry<GraphEdge, InterfacePolicy> ent : network.getImportPolicyMap().entrySet()) {
-      GraphEdge edge = ent.getKey();
-      InterfacePolicy policy = ent.getValue();
-
-      System.out.println(edge);
-      System.out.println(policy);
-      System.out.println((policy.getAcl() != null) + " " + (policy.getBgpPolicy() != null));
-    }
-  }
-
   private void printPaths() {
-    SpecifierContext specifierContext = _batfish.specifierContext();
-    Graph graph = new Graph(_batfish);
+    SpecifierContext specifierContext = _batfish.specifierContext(_batfish.getSnapshot());
+    Graph graph = new Graph(_batfish, _batfish.getSnapshot());
     PolicyQuotient policyQuotient = new PolicyQuotient();
     Set<String> nodeSet = _nodeSpecifier.resolve(specifierContext);
     for (String node : nodeSet) {
@@ -149,8 +135,8 @@ public class FindRouteFilterLinesAnswerer extends Answerer {
   }
 
   public void printAccepted() {
-    SpecifierContext specifierContext = _batfish.specifierContext();
-    Graph graph = new Graph(_batfish);
+    SpecifierContext specifierContext = _batfish.specifierContext(_batfish.getSnapshot());
+    Graph graph = new Graph(_batfish, _batfish.getSnapshot());
     PolicyQuotient policyQuotient = new PolicyQuotient();
     Set<String> nodeSet = _nodeSpecifier.resolve(specifierContext);
     for (String node : nodeSet) {
@@ -224,7 +210,7 @@ public class FindRouteFilterLinesAnswerer extends Answerer {
   }
 
   public void printStaticRoutes() {
-    SpecifierContext specifierContext = _batfish.specifierContext();
+    SpecifierContext specifierContext = _batfish.specifierContext(_batfish.getSnapshot());
     Set<String> nodeSet = _nodeSpecifier.resolve(specifierContext);
     for (String node : nodeSet) {
       System.out.println(node);

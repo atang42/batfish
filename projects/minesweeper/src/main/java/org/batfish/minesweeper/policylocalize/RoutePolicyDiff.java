@@ -126,7 +126,7 @@ public class RoutePolicyDiff {
       List<Configuration> configurations, List<PrefixRange> ranges) {
     _ignoredPrefixRanges = ranges;
 
-    _graph = new Graph(batfish);
+    _graph = new Graph(batfish, batfish.getSnapshot());
     _comms = new CommunityVarExtractor(configurations).getCommunityVars();
     _record = new BDDRoute(_comms.getVars());
     _policyQuotient = new PolicyQuotient();

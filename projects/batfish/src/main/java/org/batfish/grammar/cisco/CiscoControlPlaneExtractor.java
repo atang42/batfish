@@ -9124,6 +9124,12 @@ public class CiscoControlPlaneExtractor extends CiscoParserBaseListener
     return _configuration;
   }
 
+  private Set<Integer> getLineNums(ParserRuleContext ctx) {
+    int start = ctx.getStart().getLine();
+    int end = ctx.getStop().getLine();
+    return IntStream.rangeClosed(start, end).boxed().collect(Collectors.toSet());
+  }
+
   private String getLocation(ParserRuleContext ctx) {
     return ctx.getStart().getLine() + ":" + ctx.getStart().getCharPositionInLine() + ": ";
   }

@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.SortedSet;
 import org.batfish.common.Answerer;
 import org.batfish.common.BatfishException;
+import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.answers.Schema;
@@ -20,7 +21,6 @@ import org.batfish.minesweeper.policylocalize.acldiff.BddDiff;
 import org.batfish.minesweeper.policylocalize.acldiff.LineDifference;
 
 public final class AclTimeDiffAnswerer extends Answerer {
-
 
   private static final String COL_INTERFACE = "Interface";
   private static final String COL_ROUTE_INCLUDED_PREFIXES = "Included_Packets";
@@ -94,13 +94,13 @@ public final class AclTimeDiffAnswerer extends Answerer {
   }
 
   @Override
-  public AnswerElement answer() {
+  public AnswerElement answer(NetworkSnapshot snapshot) {
     throw new BatfishException(
         String.format("%s can only be run in differential mode.", _question.getName()));
   }
 
   @Override
-  public AnswerElement answerDiff() {
+  public AnswerElement answerDiff(NetworkSnapshot current, NetworkSnapshot reference) {
     AclTimeDiffQuestion question = (AclTimeDiffQuestion) _question;
     NodesSpecifier regex = question.getNodeRegex();
     String aclRegex = question.getAclRegex();
