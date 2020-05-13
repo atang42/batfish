@@ -124,9 +124,9 @@ public class AclToDescribedHeaderSpaces {
     @Override
     public List<ConjunctHeaderSpace> visitAndMatchExpr(AndMatchExpr andMatchExpr) {
       List<ConjunctHeaderSpace> ret = new ArrayList<>();
-      List<ConjunctHeaderSpace> temp = new ArrayList<>();
       ret.add(ConjunctHeaderSpace.getUniverseSpace());
       for (AclLineMatchExpr line : andMatchExpr.getConjuncts()) {
+        List<ConjunctHeaderSpace> temp = new ArrayList<>();
         for (ConjunctHeaderSpace ps1 : ret) {
           for (ConjunctHeaderSpace ps2 : visit(line)) {
             Optional<ConjunctHeaderSpace> optional = ps1.intersection(ps2);
@@ -135,7 +135,7 @@ public class AclToDescribedHeaderSpaces {
             }
           }
         }
-        ret = temp;
+        ret = new ArrayList<>(temp);
       }
       return ret;
     }

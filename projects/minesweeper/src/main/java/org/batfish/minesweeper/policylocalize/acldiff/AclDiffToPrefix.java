@@ -67,7 +67,7 @@ public class AclDiffToPrefix {
   }
 
   @Nonnull
-  AclDiffReport getReport(@Nullable AclLine line1, @Nullable AclLine line2) {
+  public AclDiffReport getReport(@Nullable AclLine line1, @Nullable AclLine line2) {
     AbstractHeaderSpace diffSpace = computeDifference(line1, line2);
     return new AclDiffReport(
         diffSpace.getIncluded(),

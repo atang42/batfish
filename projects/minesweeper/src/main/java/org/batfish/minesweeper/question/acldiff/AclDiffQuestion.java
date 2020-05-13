@@ -21,7 +21,7 @@ public final class AclDiffQuestion extends Question {
   private AclDiffQuestion(@Nullable NodesSpecifier regex, @Nullable String aclRegex) {
     _nodeRegex = regex != null ? regex : NodesSpecifier.ALL;
     _aclRegex = aclRegex != null ? aclRegex : ".*";
-    _printMore = true;
+    _printMore = false;
   }
 
   @JsonCreator

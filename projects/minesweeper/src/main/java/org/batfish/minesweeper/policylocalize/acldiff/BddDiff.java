@@ -182,14 +182,11 @@ public class BddDiff {
 
     BDD acceptVar = _packet.getAccept();
 
-    long old_time = System.currentTimeMillis();
     BDD acceptFirst = first.restrict(acceptVar);
     BDD acceptSecond = second.restrict(acceptVar);
     BDD rejectFirst = first.restrict(acceptVar.not());
     BDD rejectSecond = second.restrict(acceptVar.not());
     BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
-    long new_time = System.currentTimeMillis();
-    System.out.println("Check time " + (new_time - old_time));
     if (notEquivalent.isZero()) {
       // System.out.println("No Difference");
     } else {
@@ -199,16 +196,9 @@ public class BddDiff {
           routers.get(1),
           aclList.get(0),
           aclList.get(1));
-      old_time = System.currentTimeMillis();
-      long comp_time = 0;
-      long sat_time = 0;
       while (!linesNotEquivalent.isZero()) {
-        long ttime = System.currentTimeMillis();
         BDD lineSat = linesNotEquivalent.satOne();
         BDD counterexample = notEquivalent.and(lineSat).satOne();
-        sat_time += System.currentTimeMillis() - ttime;
-
-        ttime = System.currentTimeMillis();
         int i = 0;
         AclLine[] lineDiff = new AclLine[2];
         for (IpAccessList acl : aclList) {
@@ -219,8 +209,6 @@ public class BddDiff {
           }
           i++;
         }
-        comp_time += System.currentTimeMillis() - ttime;
-
         // diffToPrefix.printDifferenceInPrefix();
         AclDiffReport report = aclDiffToPrefix.getReport(lineDiff[0], lineDiff[1]);
         // report.print(_batfish, _printMore, differential);
@@ -228,10 +216,6 @@ public class BddDiff {
         BDD cond = counterexample.exist(getPacketHeaderFields()).not();
         linesNotEquivalent = linesNotEquivalent.and(cond);
       }
-      new_time = System.currentTimeMillis();
-      System.out.println("Extract time " + (new_time - old_time));
-      System.out.println("Comp time " + comp_time);
-      System.out.println("Sat time " + sat_time);
 
     }
     return differences;
@@ -256,6 +240,11 @@ public class BddDiff {
           .getAllInterfaces()
           .keySet();
 
+      Set<String> currAccessLists = currentContext.getConfigs().get(router).getIpAccessLists().keySet();
+      Set<String> refAccessLists = currentContext.getConfigs().get(router).getIpAccessLists().keySet();
+      Set<String> allAccessLists = new HashSet<>(currAccessLists);
+      allAccessLists.retainAll(refAccessLists);
+
       Set<String> intersection = new HashSet<>(currentInterfaces);
       intersection.retainAll(referenceInterfaces);
       for (String intfName : intersection) {
@@ -275,6 +264,8 @@ public class BddDiff {
             && inAcl2.getName().matches(_aclRegex)) {
           String fullIntfName = intfName + "-Incoming";
           differences.addAll(compareAclPair(router, fullIntfName, inAcl1, inAcl2));
+          allAccessLists.removeIf(inAcl1.getName()::equals);
+          allAccessLists.removeIf(inAcl2.getName()::equals);
         } else if (inAcl1 != null && inAcl1.getName().matches(_aclRegex)) {
           // TODO: Handle case where only first router has ACL
         } else if (inAcl2 != null && inAcl2.getName().matches(_aclRegex)) {
@@ -285,10 +276,20 @@ public class BddDiff {
             && outAcl2.getName().matches(_aclRegex)) {
           String fullIntfName = intfName + "-Outgoing";
           differences.addAll(compareAclPair(router, fullIntfName, outAcl1, outAcl2));
+          allAccessLists.removeIf(outAcl1.getName()::equals);
+          allAccessLists.removeIf(outAcl2.getName()::equals);
         } else if (outAcl1 != null && outAcl1.getName().matches(_aclRegex)) {
           // TODO: Handle case where only first router has ACL
         } else if (outAcl2 != null && outAcl2.getName().matches(_aclRegex)) {
           // TODO: Handle case where only second router has ACL
+        }
+
+        // Compare other ACLs with same name
+        for (String aclName : allAccessLists) {
+          String unusedIntf = "UNUSED";
+          IpAccessList acl1 = currentContext.getConfigs().get(router).getIpAccessLists().get(aclName);
+          IpAccessList acl2 = referenceContext.getConfigs().get(router).getIpAccessLists().get(aclName);
+          differences.addAll(compareAclPair(router, unusedIntf, acl1, acl2));
         }
       }
     }

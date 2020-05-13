@@ -22,7 +22,7 @@ public final class AclTimeDiffQuestion extends Question {
       @Nullable String aclRegex) {
     _nodeRegex = regex != null ? regex : NodesSpecifier.ALL;
     _aclRegex = aclRegex != null ? aclRegex : ".*";
-    _printMore = true;
+    _printMore = false;
     this.setDifferential(true);
   }
 

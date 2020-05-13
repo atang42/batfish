@@ -12,6 +12,8 @@ public final class LineDifference implements Comparable<LineDifference> {
   private @Nonnull String _interface;
   private @Nonnull String _filter1;
   private @Nonnull String _filter2;
+  private @Nonnull String _matchingLines1;
+  private @Nonnull String _matchingLines2;
   private @Nonnull String _snippet1;
   private @Nonnull String _snippet2;
   private @Nonnull SortedSet<String> _difference;
@@ -26,6 +28,8 @@ public final class LineDifference implements Comparable<LineDifference> {
       @Nonnull String filter2,
       @Nonnull String snippet1,
       @Nonnull String snippet2,
+      @Nonnull String _matchingLines1,
+      @Nonnull String _matchingLines2,
       @Nonnull SortedSet<String> difference,
       @Nonnull SortedSet<String> diffSub,
       @Nonnull SymbolicResult action1,
@@ -37,6 +41,8 @@ public final class LineDifference implements Comparable<LineDifference> {
       this._filter2 = filter2;
       this._snippet1 = snippet1;
       this._snippet2 = snippet2;
+      this._matchingLines1 = _matchingLines1;
+      this._matchingLines2 = _matchingLines2;
       this._action1 = action1;
       this._action2 = action2;
     } else {
@@ -46,6 +52,8 @@ public final class LineDifference implements Comparable<LineDifference> {
       this._filter2 = filter1;
       this._snippet1 = snippet2;
       this._snippet2 = snippet1;
+      this._matchingLines1 = _matchingLines2;
+      this._matchingLines2 = _matchingLines1;
       this._action1 = action2;
       this._action2 = action1;
     }
@@ -62,6 +70,8 @@ public final class LineDifference implements Comparable<LineDifference> {
         other._filter2,
         other._snippet1,
         other._snippet2,
+        other._matchingLines1,
+        other._matchingLines2,
         other._difference,
         other._diffSub,
         other._action1,
@@ -109,13 +119,29 @@ public final class LineDifference implements Comparable<LineDifference> {
     return _snippet1;
   }
 
-  public void set_snippet1(@Nonnull String snippet1) {
-    this._snippet1 = _snippet1;
+  public void setSnippet1(@Nonnull String snippet1) {
+    this._snippet1 = snippet1;
   }
 
   @Nonnull
   public String getSnippet2() {
     return _snippet2;
+  }
+
+  @Nonnull public String getMatchingLines1() {
+    return _matchingLines1;
+  }
+
+  public void setMatchingLines1(@Nonnull String matchingLines1) {
+    this._matchingLines1 = matchingLines1;
+  }
+
+  @Nonnull public String getMatchingLines2() {
+    return _matchingLines2;
+  }
+
+  public void setMatchingLines2(@Nonnull String matchingLines2) {
+    this._matchingLines2 = matchingLines2;
   }
 
   public void setSnippet2(@Nonnull String snippet2) {
@@ -175,6 +201,8 @@ public final class LineDifference implements Comparable<LineDifference> {
         .thenComparing(LineDifference::getAction2)
         .thenComparing(LineDifference::getSnippet1)
         .thenComparing(LineDifference::getSnippet2)
+        .thenComparing(LineDifference::getMatchingLines1)
+        .thenComparing(LineDifference::getMatchingLines2)
         .thenComparing(ld -> concatString(ld.getDifference()))
         .thenComparing(ld -> concatString(ld.getDiffSub()))
         .compare(this, lineDifference);

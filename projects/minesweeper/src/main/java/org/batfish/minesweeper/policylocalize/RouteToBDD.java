@@ -8,6 +8,7 @@ import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.SubRange;
+import org.batfish.minesweeper.Protocol;
 import org.batfish.minesweeper.bdd.BDDRoute;
 
 public class RouteToBDD {
@@ -67,16 +68,24 @@ public class RouteToBDD {
   */
   public BDD buildPrefixRangesBDD(List<PrefixRange> prefixRanges) {
     BDD acc = allRoutes();
-    return acc.and(
-        prefixRanges
-            .stream()
-            .map(range -> isRelevantFor(_record, range))
-            .reduce(BDD::or)
-            .orElse(BDDRoute.getFactory().zero()));
+    return acc.and(prefixRanges.stream()
+        .map(range -> isRelevantFor(_record, range))
+        .reduce(BDD::or)
+        .orElse(BDDRoute.getFactory().zero()));
   }
 
   public BDD allRoutes() {
     BDDInteger prefixLength = _record.getPrefixLength();
-    return prefixLength.range(0, 32);
+    BDD validPfxLen = prefixLength.range(0, 32);
+    BDD noCommunities = _record.getCommunities()
+        .values()
+        .stream()
+        .map(BDD::not)
+        .reduce(BDD::and)
+        .orElse(_factory.one());
+    BDD onlyBgpHasCommunities = _record.getProtocolHistory()
+        .value(Protocol.BGP)
+        .ite(_factory.one(), noCommunities);
+    return validPfxLen.and(onlyBgpHasCommunities);
   }
 }

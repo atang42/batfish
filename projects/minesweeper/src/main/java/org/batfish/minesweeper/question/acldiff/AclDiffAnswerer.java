@@ -17,7 +17,6 @@ import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.datamodel.table.TableMetadata;
 import org.batfish.minesweeper.policylocalize.acldiff.BddDiff;
 import org.batfish.minesweeper.policylocalize.acldiff.LineDifference;
-import org.batfish.representation.cisco_nxos.BgpVrfIpv4AddressFamilyConfiguration.Network;
 
 public final class AclDiffAnswerer extends Answerer {
 
@@ -59,15 +58,33 @@ public final class AclDiffAnswerer extends Answerer {
   private static final Map<String, ColumnMetadata> METADATA_MAP =
       TableMetadata.toColumnMap(COLUMN_METADATA);
 
+  private static final int MAX_INCLUDED_EXCLUDED = 5;
+
   private static Row lineDifferenceToRow(LineDifference ld) {
 
     StringBuilder included = new StringBuilder();
+    int count = 0;
     for (String s : ld.getDifference()) {
+      if (count >= MAX_INCLUDED_EXCLUDED) {
+        included.append("+ ")
+            .append(ld.getDifference().size() - MAX_INCLUDED_EXCLUDED)
+            .append(" more");
+        break;
+      }
       included.append(s).append("\n");
+      count++;
     }
     StringBuilder excluded = new StringBuilder();
+    count = 0;
     for (String s : ld.getDiffSub()) {
+      if (count >= MAX_INCLUDED_EXCLUDED) {
+        excluded.append("+ ")
+            .append(ld.getDiffSub().size() - MAX_INCLUDED_EXCLUDED)
+            .append(" more");
+        break;
+      }
       excluded.append(s).append("\n\n");
+      count++;
     }
 
     TypedRowBuilder builder =
@@ -78,8 +95,8 @@ public final class AclDiffAnswerer extends Answerer {
             .put(COL_FILTER2, ld.getFilter2())
             .put(COL_ROUTE_INCLUDED_PREFIXES, included)
             .put(COL_ROUTE_EXCLUDED_PREFIXES, excluded)
-            .put(COL_TEXT1, ld.getSnippet1())
-            .put(COL_TEXT2, ld.getSnippet2())
+            .put(COL_TEXT1, ld.getMatchingLines1())
+            .put(COL_TEXT2, ld.getMatchingLines2())
             .put(COL_ACTION1, ld.getAction1())
             .put(COL_ACTION2, ld.getAction2());
     return builder.build();

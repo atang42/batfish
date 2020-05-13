@@ -1,6 +1,7 @@
 package org.batfish.minesweeper.policylocalize.acldiff;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashSet;
 import java.util.List;
@@ -192,6 +193,11 @@ public class AclDiffReport {
             _report2._lastDiffs,
             _report2._implicitDeny,
             printMore);
+
+    String matches1 = Arrays.stream(rel1.split("\n")).filter(line -> line.startsWith("*")).reduce(String::concat).orElse("");
+    String matches2 = Arrays.stream(rel2.split("\n")).filter(line -> line.startsWith("*")).reduce(String::concat).orElse("");
+
+
     SortedSet<String> difference =
         _regions.stream()
             .map(ConjunctHeaderSpace::toString)
@@ -205,6 +211,7 @@ public class AclDiffReport {
         _report1.getRouterName(), _report2.getRouterName(),
         _report1.getAcl().getName(), _report2.getAcl().getName(),
         rel1, rel2,
+        matches1, matches2,
         difference, diffSub,
         _report1.permits(), _report2.permits());
   }

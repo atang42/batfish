@@ -28,6 +28,14 @@ public class PrefixExtractor {
   }
 
   /*
+  Add all prefix ranges from a collection of prefix ranges
+   */
+  public void addPrefixRanges(@Nonnull Collection<PrefixRange> ranges) {
+    _prefixRanges.addAll(ranges);
+    _changesOccurred = true;
+  }
+
+  /*
   Add prefix ranges for explicit prefix sets
    */
   public void addExplicitPrefixSet(@Nonnull ExplicitPrefixSet prefixSet) {
