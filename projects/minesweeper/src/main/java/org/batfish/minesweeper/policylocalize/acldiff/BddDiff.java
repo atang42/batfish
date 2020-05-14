@@ -241,9 +241,11 @@ public class BddDiff {
           .keySet();
 
       Set<String> currAccessLists = currentContext.getConfigs().get(router).getIpAccessLists().keySet();
-      Set<String> refAccessLists = currentContext.getConfigs().get(router).getIpAccessLists().keySet();
+      Set<String> refAccessLists = referenceContext.getConfigs().get(router).getIpAccessLists().keySet();
+      Set<String> bothAccessLists = new HashSet<>(currAccessLists);
+      bothAccessLists.retainAll(refAccessLists);
       Set<String> allAccessLists = new HashSet<>(currAccessLists);
-      allAccessLists.retainAll(refAccessLists);
+      allAccessLists.addAll(refAccessLists);
 
       Set<String> intersection = new HashSet<>(currentInterfaces);
       intersection.retainAll(referenceInterfaces);
@@ -264,8 +266,10 @@ public class BddDiff {
             && inAcl2.getName().matches(_aclRegex)) {
           String fullIntfName = intfName + "-Incoming";
           differences.addAll(compareAclPair(router, fullIntfName, inAcl1, inAcl2));
-          allAccessLists.removeIf(inAcl1.getName()::equals);
-          allAccessLists.removeIf(inAcl2.getName()::equals);
+          bothAccessLists.removeIf(inAcl1.getName()::equals);
+          bothAccessLists.removeIf(inAcl2.getName()::equals);
+          allAccessLists.remove(inAcl1.getName());
+          allAccessLists.remove(inAcl2.getName());
         } else if (inAcl1 != null && inAcl1.getName().matches(_aclRegex)) {
           // TODO: Handle case where only first router has ACL
         } else if (inAcl2 != null && inAcl2.getName().matches(_aclRegex)) {
@@ -276,22 +280,26 @@ public class BddDiff {
             && outAcl2.getName().matches(_aclRegex)) {
           String fullIntfName = intfName + "-Outgoing";
           differences.addAll(compareAclPair(router, fullIntfName, outAcl1, outAcl2));
-          allAccessLists.removeIf(outAcl1.getName()::equals);
-          allAccessLists.removeIf(outAcl2.getName()::equals);
+          bothAccessLists.removeIf(outAcl1.getName()::equals);
+          bothAccessLists.removeIf(outAcl2.getName()::equals);
+          allAccessLists.remove(outAcl1.getName());
+          allAccessLists.remove(outAcl2.getName());
         } else if (outAcl1 != null && outAcl1.getName().matches(_aclRegex)) {
           // TODO: Handle case where only first router has ACL
         } else if (outAcl2 != null && outAcl2.getName().matches(_aclRegex)) {
           // TODO: Handle case where only second router has ACL
         }
-
-        // Compare other ACLs with same name
-        for (String aclName : allAccessLists) {
-          String unusedIntf = "UNUSED";
-          IpAccessList acl1 = currentContext.getConfigs().get(router).getIpAccessLists().get(aclName);
-          IpAccessList acl2 = referenceContext.getConfigs().get(router).getIpAccessLists().get(aclName);
-          differences.addAll(compareAclPair(router, unusedIntf, acl1, acl2));
-        }
       }
+      // Compare other ACLs with same name
+      for (String aclName : bothAccessLists) {
+        String unusedIntf = "UNUSED";
+        IpAccessList acl1 = currentContext.getConfigs().get(router).getIpAccessLists().get(aclName);
+        IpAccessList acl2 = referenceContext.getConfigs().get(router).getIpAccessLists().get(aclName);
+        differences.addAll(compareAclPair(router, unusedIntf, acl1, acl2));
+        allAccessLists.remove(aclName);
+      }
+      System.err.println("Unmatched ACLs:");
+      allAccessLists.forEach(System.err::println);
     }
 
     return differences;
