@@ -10,7 +10,6 @@ import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.routing_policy.expr.DiscardNextHop;
 import org.batfish.datamodel.routing_policy.expr.IpNextHop;
 import org.batfish.datamodel.routing_policy.expr.NextHopExpr;
-import org.batfish.datamodel.routing_policy.expr.NextHopIp6;
 import org.batfish.datamodel.routing_policy.expr.SelfNextHop;
 import org.batfish.minesweeper.CommunityVar;
 
@@ -18,6 +17,7 @@ public class PolicyAction {
   private SymbolicResult _result;
   private boolean _setsCommunities;
   private boolean _setsMetric;
+  private boolean _incrementsMetric;
   private boolean _setsLocalPref;
   private boolean _setsAsPath;
 
@@ -63,6 +63,7 @@ public class PolicyAction {
     _setsCommunities = false;
     _setsLocalPref = false;
     _setsMetric = false;
+    _incrementsMetric = false;
     _addedCommunities = new ArrayList<>();
     _metricValue = 0;
     _localPrefValue = 0;
@@ -77,10 +78,19 @@ public class PolicyAction {
     }
   }
 
+  public void incMetric(long metric) {
+    if (_result != SymbolicResult.REJECT) {
+      _metricValue = metric;
+      _setsMetric = false;
+      _incrementsMetric = true;
+    }
+  }
+
   public void setMetric(long metric) {
     if (_result != SymbolicResult.REJECT) {
       _metricValue = metric;
       _setsMetric = true;
+      _incrementsMetric = false;
     }
   }
 
@@ -88,11 +98,12 @@ public class PolicyAction {
     return _setsMetric;
   }
 
+  public boolean incrementsMetric() {
+    return _incrementsMetric;
+  }
+
   public long getMetricValue() {
-    if (_setsMetric) {
-      return _metricValue;
-    }
-    return -1;
+    return _metricValue;
   }
 
   public void setLocalPref(long localPref) {
@@ -156,6 +167,12 @@ public class PolicyAction {
     StringBuilder builder = new StringBuilder();
     if (setsMetric()) {
       builder.append("SET METRIC ").append(_metricValue).append("\n");
+    } else if (incrementsMetric()) {
+      if (_metricValue >= 0) {
+        builder.append("INC METRIC ").append(_metricValue).append("\n");
+      } else {
+        builder.append("DEC METRIC ").append(-_metricValue).append("\n");
+      }
     }
     if (setsLocalPref()) {
       builder.append("SET LOCAL PREF ").append(_localPrefValue).append("\n");

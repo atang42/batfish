@@ -964,16 +964,16 @@ class EncoderSlice {
       for (Entry<CommunityVar, BoolExpr> entry : r.getCommunities().entrySet()) {
         CommunityVar cvar = entry.getKey();
         BoolExpr e = entry.getValue();
-        if (cvar.getType() == CommunityVar.Type.REGEX) {
-          BoolExpr acc = mkFalse();
-          List<CommunityVar> deps = getGraph().getCommunityDependencies().get(cvar);
-          for (CommunityVar dep : deps) {
-            BoolExpr depExpr = r.getCommunities().get(dep);
-            acc = mkOr(acc, depExpr);
-          }
-          BoolExpr regex = mkEq(acc, e);
-          add(regex);
-        }
+//        if (cvar.getType() == CommunityVar.Type.REGEX) {
+//          BoolExpr acc = mkFalse();
+//          List<CommunityVar> deps = getGraph().getCommunityDependencies().get(cvar);
+//          for (CommunityVar dep : deps) {
+//            BoolExpr depExpr = r.getCommunities().get(dep);
+//            acc = mkOr(acc, depExpr);
+//          }
+//          BoolExpr regex = mkEq(acc, e);
+//          add(regex);
+//        }
       }
     }
   }

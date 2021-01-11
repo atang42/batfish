@@ -2,7 +2,6 @@ package org.batfish.minesweeper.policylocalize;
 
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -21,6 +20,7 @@ import javax.annotation.Nullable;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import org.apache.commons.lang3.ObjectUtils;
+import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.BgpPeerConfig;
@@ -42,7 +42,6 @@ import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.Row.TypedRowBuilder;
 import org.batfish.datamodel.table.TableMetadata;
 import org.batfish.minesweeper.CommunityVar;
-import org.batfish.minesweeper.communities.CommunityVarExtractor;
 import org.batfish.minesweeper.Graph;
 import org.batfish.minesweeper.Protocol;
 import org.batfish.minesweeper.TransferResult;
@@ -50,6 +49,7 @@ import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.PolicyQuotient;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
+import org.batfish.minesweeper.communities.CommunityVarExtractor;
 import org.batfish.minesweeper.communities.CommunityVarSet;
 import org.batfish.minesweeper.policylocalize.resultrepr.IncludedExcludedPrefixRanges;
 import org.batfish.minesweeper.policylocalize.resultrepr.PrefixExtractor;
@@ -105,13 +105,15 @@ public class RoutePolicyDiff {
           Schema.STRING,
           "Action performed by the line (e.g., PERMIT or DENY)",
           true,
-          false),
-      new ColumnMetadata(COL_BDD_BITS, Schema.STRING, "BDD bits", true, false));
+          false)
+//      new ColumnMetadata(COL_BDD_BITS, Schema.STRING, "BDD bits", true, false)
+  );
 
   private static final Map<String, ColumnMetadata> METADATA_MAP = TableMetadata.toColumnMap(
       COLUMN_METADATA);
 
-  private final Graph _graph;
+  private final Graph _graph1;
+  private final Graph _graph2;
   private final BDDRoute _record;
   private final Configuration _config1;
   private final Configuration _config2;
@@ -123,10 +125,11 @@ public class RoutePolicyDiff {
   private final CommunityVarSet _comms;
 
   public RoutePolicyDiff(String router1, String router2, IBatfish batfish,
-      List<Configuration> configurations, List<PrefixRange> ranges) {
+      List<Configuration> configurations, List<PrefixRange> ranges, Graph graph1, Graph graph2) {
     _ignoredPrefixRanges = ranges;
 
-    _graph = new Graph(batfish, batfish.getSnapshot());
+    _graph1 = graph1;
+    _graph2 = graph2;
     _comms = new CommunityVarExtractor(configurations).getCommunityVars();
     _record = new BDDRoute(_comms.getVars());
     _policyQuotient = new PolicyQuotient();
@@ -403,8 +406,8 @@ public class RoutePolicyDiff {
     BgpActivePeerConfig bgpConfig1 = neighbors1.get(neighbor);
     BgpActivePeerConfig bgpConfig2 = neighbors2.get(neighbor);
 
-    Optional<Row> capabilityDifference = getCapabilityDifference(bgpConfig1, bgpConfig2, neighbor);
-    capabilityDifference.ifPresent(resultRows::add);
+//    Optional<Row> capabilityDifference = getCapabilityDifference(bgpConfig1, bgpConfig2, neighbor);
+//    capabilityDifference.ifPresent(resultRows::add);
 
     String r1ImportName = Optional.ofNullable(bgpConfig1)
         .map(BgpActivePeerConfig::getIpv4UnicastAddressFamily)
@@ -527,7 +530,7 @@ public class RoutePolicyDiff {
 
     List<Row> ret = new ArrayList<>();
 
-    TransferBDD transferBDD1 = new TransferBDD(_graph,
+    TransferBDD transferBDD1 = new TransferBDD(_graph1,
         _config1,
         r1Policy.getStatements(),
         _policyQuotient);
@@ -537,7 +540,7 @@ public class RoutePolicyDiff {
         _comms);
     BDD accepted1 = transferResult1.getReturnValue().getSecond();
 
-    TransferBDD transferBDD2 = new TransferBDD(_graph,
+    TransferBDD transferBDD2 = new TransferBDD(_graph2,
         _config2,
         r2Policy.getStatements(),
         _policyQuotient);
@@ -702,8 +705,8 @@ public class RoutePolicyDiff {
             .put(COL_TEXT1, stmtText1)
             .put(COL_TEXT2, stmtText2)
             .put(COL_ACTION1, action1)
-            .put(COL_ACTION2, action2)
-            .put(COL_BDD_BITS, bddbits);
+            .put(COL_ACTION2, action2);
+//            .put(COL_BDD_BITS, bddbits);
         ret.add(builder.build());
       }
     }

@@ -1,0 +1,52 @@
+{
+    "class": "org.batfish.minesweeper.question.AclTrace.AclTraceQuestion",
+    "differential": false,
+    "nodes": "${nodes}",
+    "headers": "${headers}",
+    "filters": "${filters}",
+    "instance": {
+        "description": "Find acl differences between router pairs",
+        "instanceName": "acltrace",
+        "longDescription": "Find route policy differences between router pairs",
+        "tags": [
+            "routing policy"
+        ],
+        "variables": {
+            "headers": {
+                "description": "Packet header constraints",
+                "optional": false,
+                "type": "headerConstraint",
+                "displayName": "Headers",
+                "fields": {
+                    "applications": { "optional": true, "type": "applicationSpec"},
+                    "dscps": { "optional": true },
+                    "dstIps": { "optional": false, "type": "ipSpaceSpec"},
+                    "dstPorts": { "optional": true },
+                    "ecns": { "optional": true },
+                    "flowStates": { "optional": true },
+                    "fragmentOffsets": { "optional": true },
+                    "icmpCodes": { "optional": true },
+                    "icmpTypes": { "optional": true },
+                    "ipProtocols": { "optional": true, "type": "ipProtocolSpec"},
+                    "packetLengths": { "optional": true },
+                    "srcIps": { "optional": true, "type": "ipSpaceSpec"},
+                    "srcPorts": { "optional": true },
+                    "tcpFlags": { "optional": true }
+                }
+            },
+            "nodes": {
+                "description": "Only evaluate filters present on nodes matching this specifier",
+                "type": "nodeSpec",
+                "optional": true,
+                "displayName": "nodes"
+            },
+            "filters": {
+                "description": "Only evaluate filters present this specifier",
+                "type": "String",
+                "optional": true,
+                "displayName": "filters"
+            }
+
+        }
+    }
+}

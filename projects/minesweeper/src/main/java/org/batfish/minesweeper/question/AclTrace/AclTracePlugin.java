@@ -14,6 +14,6 @@ public class AclTracePlugin extends QuestionPlugin {
   }
 
   @Override protected Question createQuestion() {
-    return new AclTraceQuestion(null, null);
+    return new AclTraceQuestion(null, null, null);
   }
 }

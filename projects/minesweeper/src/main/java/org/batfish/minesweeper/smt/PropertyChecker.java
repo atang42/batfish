@@ -951,11 +951,17 @@ public class PropertyChecker {
       Set<String> ifaces1 = interfaces(edges1);
       Set<String> ifaces2 = interfaces(edges2);
 
-      if (!(ifaces1.containsAll(ifaces2) && ifaces2.containsAll(ifaces1))) {
-        String msg = String.format("Routers %s and %s have different interfaces", r1, r2);
-        System.out.println(msg);
-        return new SmtManyAnswerElement(new TreeMap<>());
-      }
+//      if (!(ifaces1.containsAll(ifaces2) && ifaces2.containsAll(ifaces1))) {
+//        String msg = String.format("Routers %s and %s have different interfaces", r1, r2);
+//        System.out.println(msg);
+//        return new SmtManyAnswerElement(new TreeMap<>());
+//      }
+
+      TreeMap<String, String> ifaceMap = new TreeMap<>();
+      ifaceMap.put("GigabitEthernet0/0", "ge-0/0/0.0");
+      ifaceMap.put("GigabitEthernet1/0", "ge-1/0/0.0");
+      ifaceMap.put("GigabitEthernet2/0", "ge-2/0/0.0");
+      ifaceMap.put("Loopback0", "lo0.0");
 
       // TODO: check running same protocols?
       Map<String, Map<Protocol, Map<String, EnumMap<EdgeType, LogicalEdge>>>> lgeMap2 =
@@ -980,7 +986,11 @@ public class PropertyChecker {
 
             String ifaceName = lge1.getEdge().getStart().getName();
 
-            LogicalEdge lge2 = lgeMap2.get(r2).get(proto1).get(ifaceName).get(lge1.getEdgeType());
+            String iface2Name = ifaceMap.get(ifaceName);
+            if (iface2Name == null) {
+              continue;
+            }
+            LogicalEdge lge2 = lgeMap2.get(r2).get(proto1).get(iface2Name).get(lge1.getEdgeType());
 
             if (lge1.getEdgeType() == EdgeType.IMPORT) {
 
@@ -1027,11 +1037,11 @@ public class PropertyChecker {
                   if (ce2 == null) {
                     if (!communities.contains(cvar.getRegex())) {
                       communities.add(cvar.getRegex());
-                      /* String msg =
+                      String msg =
                        String.format(
                            "Warning: community %s found for router %s but not %s.",
-                           cvar.getRegex(), conf1.getEnvName(), conf2.getEnvName());
-                      System.out.println(msg); */
+                           cvar.getRegex(), conf1.getHostname(), conf2.getHostname());
+                      System.out.println(msg);
                     }
                     unsetComms = e1.mkAnd(unsetComms, e1.mkNot(ce1));
                   }
@@ -1117,7 +1127,11 @@ public class PropertyChecker {
         Map<String, GraphEdge> geMap2 = interfaceMap(edges2);
         BoolExpr sameForwarding = ctx.mkBool(true);
         for (GraphEdge ge1 : edges1) {
-          GraphEdge ge2 = geMap2.get(ge1.getStart().getName());
+          String iface2name = ifaceMap.get(ge1.getStart().getName());
+          if (iface2name == null) {
+            continue;
+          }
+          GraphEdge ge2 = geMap2.get(iface2name);
           BoolExpr dataFwd1 = slice1.getSymbolicDecisions().getDataForwarding().get(r1, ge1);
           BoolExpr dataFwd2 = slice2.getSymbolicDecisions().getDataForwarding().get(r2, ge2);
           assert (dataFwd1 != null);
@@ -1130,9 +1144,56 @@ public class PropertyChecker {
       e2.add(assumptions);
       e2.add(ctx.mkNot(required));
 
-      VerificationResult res = e2.verify().getFirst();
-      String name = r1 + "<-->" + r2;
-      result.put(name, res);
+      int count = 100;
+      for (int k = 0; k < count; k++) {
+        Tuple<VerificationResult, Model> verified = e2.verify();
+        VerificationResult res = verified.getFirst();
+        String name = String.format("%s <--> %s %2d", r1, r2, k);
+        result.put(name, res);
+        if (res.isVerified()) {
+          break;
+        }
+        BoolExpr sameResult = ctx.mkTrue();
+        BitVecExpr dstIpExpr = e2.getMainSlice().getSymbolicPacket().getDstIp();
+        for (String process : res.getEnvModel().keySet()) {
+          for (String field : res.getEnvModel().get(process).keySet()) {
+            String value = res.getEnvModel().get(process).get(field);
+
+            for (LogicalEdge le : e2.getMainSlice().getLogicalGraph().getEnvironmentVars().keySet()) {
+              SymbolicRoute route = e2.getMainSlice().getLogicalGraph().getEnvironmentVars().get(le);
+              Expr var = ctx.mkTrue();
+              Expr fieldValue = ctx.mkTrue();
+              if (field.equals("prefix")) {
+                var = route.getPrefixLength();
+                fieldValue = ctx.mkInt(value.split("/")[1]);
+                Prefix prefix = Prefix.parse(value);
+                long low = prefix.getStartIp().asLong();
+                long high = prefix.getEndIp().asLong();
+                sameResult = ctx.mkAnd(sameResult, ctx.mkBVULE(ctx.mkBV(low, 32), dstIpExpr));
+                sameResult = ctx.mkAnd(sameResult, ctx.mkBVUGE(ctx.mkBV(high, 32), dstIpExpr));
+              } else if (field.equals("protocol metric")) {
+                var = route.getMetric();
+                fieldValue = ctx.mkInt(value);
+              } else if (field.startsWith("community")) {
+                String comm = field.split(" ")[1];
+                CommunityVar cvar = CommunityVar.from(comm);
+                if (route.getCommunities() != null) {
+                  var = route.getCommunities().get(cvar);
+                  fieldValue = ctx.mkTrue();
+                }
+              } else {
+                System.out.println("Warning: " + field);
+              }
+              if (var != null) {
+                sameResult = ctx.mkAnd(sameResult, ctx.mkEq(var, fieldValue));
+              } else {
+                System.out.println("Warning: null " + field);
+              }
+            }
+          }
+        }
+        e2.add(ctx.mkNot(sameResult));
+      }
     }
 
     return new SmtManyAnswerElement(result);

@@ -1,0 +1,28 @@
+{
+    "class": "org.batfish.minesweeper.question.SmtLocalConsistencyQuestionPlugin$LocalConsistencyQuestion",
+    "differential": false,
+    "nodeRegex": "${nodeRegex}",
+    "strict": "${strict}",
+    "instance": {
+        "description": "Find route policy differences between router pairs",
+        "instanceName": "smtlocalconsistency",
+        "longDescription": "Find route policy differences between router pairs",
+        "tags": [
+            "routing policy"
+        ],
+        "variables": {
+            "strict": {
+                "description": "ignore prefixes matching a prefix range in this list",
+                "type": "string",
+                "optional": true,
+                "displayName": "strict"
+            },
+            "nodeRegex": {
+                "description": "Only evaluate filters present on nodes matching this specifier",
+                "type": "string",
+                "optional": true,
+                "displayName": "nodeRegex"
+            }
+        }
+    }
+}

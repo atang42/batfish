@@ -5,10 +5,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import net.sf.javabdd.BDD;
@@ -18,9 +21,9 @@ import org.batfish.common.bdd.BDDAcl;
 import org.batfish.common.bdd.BDDPacketWithLines;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.AclLine;
-import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ExprAclLine;
 import org.batfish.datamodel.IpAccessList;
+import org.batfish.datamodel.PacketHeaderConstraints;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.answers.Schema;
 import org.batfish.datamodel.questions.Question;
@@ -32,6 +35,7 @@ import org.batfish.datamodel.table.TableMetadata;
 import org.batfish.minesweeper.policylocalize.acldiff.AclDiffReport;
 import org.batfish.minesweeper.policylocalize.acldiff.AclDiffToPrefix;
 import org.batfish.minesweeper.policylocalize.acldiff.LineDifference;
+import org.batfish.specifier.FilterSpecifier;
 import org.batfish.specifier.NodeSpecifier;
 import org.batfish.specifier.SpecifierContext;
 
@@ -50,22 +54,27 @@ public final class AclTraceAnswerer extends Answerer {
   @Nonnull private BDDPacketWithLines _packet;
   @Nullable private BDD _headerVars = null;
 
-  private static final List<ColumnMetadata> COLUMN_METADATA =
-      ImmutableList.of(
-          new ColumnMetadata(COL_ROUTE_INCLUDED_PREFIXES, Schema.STRING, "Included Prefixes", true, false),
-          new ColumnMetadata(COL_ROUTE_EXCLUDED_PREFIXES, Schema.STRING, "Excluded Prefixes", true, false),
-          new ColumnMetadata(COL_NODE1, Schema.STRING, "Node", true, false),
-          new ColumnMetadata(COL_FILTER1, Schema.STRING, "Filter name", true, false),
-          new ColumnMetadata(COL_TEXT1, Schema.STRING, "Line text", true, false),
-          new ColumnMetadata(
-              COL_ACTION1,
-              Schema.STRING,
-              "Action performed by the line (e.g., PERMIT or DENY)",
-              true,
-              false));
+  private static final List<ColumnMetadata> COLUMN_METADATA = ImmutableList.of(new ColumnMetadata(COL_ROUTE_INCLUDED_PREFIXES,
+          Schema.STRING,
+          "Included Prefixes",
+          true,
+          false),
+      new ColumnMetadata(COL_ROUTE_EXCLUDED_PREFIXES,
+          Schema.STRING,
+          "Excluded Prefixes",
+          true,
+          false),
+      new ColumnMetadata(COL_NODE1, Schema.STRING, "Node", true, false),
+      new ColumnMetadata(COL_FILTER1, Schema.STRING, "Filter name", true, false),
+      new ColumnMetadata(COL_TEXT1, Schema.STRING, "Line text", true, false),
+      new ColumnMetadata(COL_ACTION1,
+          Schema.STRING,
+          "Action performed by the line (e.g., PERMIT or DENY)",
+          true,
+          false));
 
-  private static final Map<String, ColumnMetadata> METADATA_MAP =
-      TableMetadata.toColumnMap(COLUMN_METADATA);
+  private static final Map<String, ColumnMetadata> METADATA_MAP = TableMetadata.toColumnMap(
+      COLUMN_METADATA);
 
   public AclTraceAnswerer(Question question, IBatfish batfish) {
     super(question, batfish);
@@ -98,34 +107,64 @@ public final class AclTraceAnswerer extends Answerer {
       count++;
     }
 
-    TypedRowBuilder builder =
-        Row.builder(METADATA_MAP)
-            .put(COL_NODE1, ld.getRouter1())
-            .put(COL_FILTER1, ld.getFilter1())
-            .put(COL_ROUTE_INCLUDED_PREFIXES, included)
-            .put(COL_ROUTE_EXCLUDED_PREFIXES, excluded)
-            .put(COL_TEXT1, ld.getMatchingLines1())
-            .put(COL_ACTION1, ld.getMatchingLines2());
+    TypedRowBuilder builder = Row.builder(METADATA_MAP)
+        .put(COL_NODE1, ld.getRouter1())
+        .put(COL_FILTER1, ld.getFilter1())
+        .put(COL_ROUTE_INCLUDED_PREFIXES, included)
+        .put(COL_ROUTE_EXCLUDED_PREFIXES, excluded)
+        .put(COL_TEXT1, ld.getMatchingLines1())
+        .put(COL_ACTION1, ld.getAction1());
     return builder.build();
   }
 
-  @Override
-  public TableAnswerElement answer(NetworkSnapshot snapshot) {
+  BDD headerToBDD(PacketHeaderConstraints headers) {
+    List<Prefix> dstPrefixes = Optional.ofNullable(headers.getDstIps())
+        .map(s -> s.isEmpty() ? "0.0.0.0/0" : s)
+        .map(s -> s.split(","))
+        .map(Arrays::stream)
+        .orElse(Stream.of("0.0.0.0/0"))
+        .map(Prefix::parse)
+        .collect(Collectors.toList());
+    List<Prefix> srcPrefixes = Optional.ofNullable(headers.getSrcIps())
+        .map(s -> s.isEmpty() ? "0.0.0.0/0" : s)
+        .map(s -> s.split(","))
+        .map(Arrays::stream)
+        .orElse(Stream.of("0.0.0.0/0"))
+        .map(Prefix::parse)
+        .collect(Collectors.toList());
+
+    BDD dstBDD = _packet.getFactory().zero();
+    for (Prefix pfx : dstPrefixes) {
+      BDD relevantPkts = _packet.getDstIp().geq(pfx.getStartIp().asLong());
+      relevantPkts.andWith(_packet.getDstIp().leq(pfx.getEndIp().asLong()));
+      dstBDD.orWith(relevantPkts);
+    }
+
+    BDD srcBDD = _packet.getFactory().zero();
+    for (Prefix pfx : srcPrefixes) {
+      BDD relevantPkts = _packet.getSrcIp().geq(pfx.getStartIp().asLong());
+      relevantPkts.andWith(_packet.getSrcIp().leq(pfx.getEndIp().asLong()));
+      srcBDD.orWith(relevantPkts);
+    }
+
+    return dstBDD.and(srcBDD);
+  }
+
+  @Override public TableAnswerElement answer(NetworkSnapshot snapshot) {
     AclTraceQuestion question = (AclTraceQuestion) _question;
     NodeSpecifier nodeSpecifier = question.getNodeSpecifier();
-    Prefix dstPrefix = question.getPrefix();
+    FilterSpecifier filterSpecifier = question.getFilterSpecifier();
     SpecifierContext context = _batfish.specifierContext(snapshot);
     Set<String> nodes = nodeSpecifier.resolve(context);
     TreeSet<LineDifference> diffs = new TreeSet<>();
+    PacketHeaderConstraints headerConstraints = ((AclTraceQuestion) _question).getHeaderConstraints();
     for (String node : nodes) {
-      Configuration config = context.getConfigs().get(node);
-      for (IpAccessList accessList : config.getIpAccessLists().values()) {
-        diffs.addAll(compareAcls(node, accessList, true, dstPrefix));
-        diffs.addAll(compareAcls(node, accessList, false, dstPrefix));
+      for (IpAccessList accessList : filterSpecifier.resolve(node, context)) {
+        diffs.addAll(compareAcls(node, accessList, true, headerConstraints));
+        diffs.addAll(compareAcls(node, accessList, false, headerConstraints));
       }
     }
-    TableAnswerElement result =
-        new TableAnswerElement(new TableMetadata(COLUMN_METADATA));
+    TableAnswerElement result = new TableAnswerElement(new TableMetadata(COLUMN_METADATA));
     for (LineDifference diff : diffs) {
       result.addRow(lineDifferenceToRow(diff));
     }
@@ -145,7 +184,8 @@ public final class AclTraceAnswerer extends Answerer {
     _headerVars = null;
   }
 
-  public SortedSet<LineDifference> compareAcls(String name, IpAccessList accessList, boolean result, Prefix dstPrefix) {
+  public SortedSet<LineDifference> compareAcls(String name, IpAccessList accessList, boolean result,
+      PacketHeaderConstraints headers) {
 
     Map<String, IpAccessList> accessLists = new TreeMap<>();
     accessLists.put(name, accessList);
@@ -166,9 +206,7 @@ public final class AclTraceAnswerer extends Answerer {
     BDD rejectSecond = second.restrict(acceptVar.not());
     BDD notEquivalent = acceptFirst.and(rejectSecond).or(acceptSecond.and(rejectFirst));
 
-    BDD relevantPkts = _packet.getDstIp().geq(dstPrefix.getStartIp().asLong());
-    relevantPkts.andWith(_packet.getDstIp().leq(dstPrefix.getEndIp().asLong()));
-    notEquivalent.andWith(relevantPkts);
+    notEquivalent.andWith(headerToBDD(headers));
     if (notEquivalent.isZero()) {
       // System.out.println("No Difference");
     } else {
@@ -194,7 +232,7 @@ public final class AclTraceAnswerer extends Answerer {
         // diffToPrefix.printDifferenceInPrefix();
         AclDiffReport report = aclDiffToPrefix.getReport(lineDiff[0], lineDiff[1]);
         // report.print(_batfish, _printMore, differential);
-        differences.add(report.toLineDifference(_batfish, false, false));
+        differences.add(report.toLineDifference(_batfish, false, false, counterexample, _packet));
         BDD cond = counterexample.exist(getPacketHeaderFields()).not();
         linesNotEquivalent = linesNotEquivalent.and(cond);
       }
@@ -249,6 +287,5 @@ public final class AclTraceAnswerer extends Answerer {
     _headerVars.andWith(bddTcpBits);
     return _headerVars;
   }
-
 
 }

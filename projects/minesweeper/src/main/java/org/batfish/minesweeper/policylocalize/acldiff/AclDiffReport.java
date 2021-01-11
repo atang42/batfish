@@ -8,13 +8,18 @@ import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import net.sf.javabdd.BDD;
+import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.ExprAclLine;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.AclLine;
 import org.batfish.datamodel.LineAction;
 import org.batfish.minesweeper.policylocalize.SymbolicResult;
+import org.batfish.minesweeper.policylocalize.acldiff.headerpresent.AclHeaderPresent;
+import org.batfish.minesweeper.policylocalize.acldiff.headerpresent.IncludedExcludedHeaderSpaces;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
 
 public class AclDiffReport {
@@ -22,6 +27,7 @@ public class AclDiffReport {
   private Set<ConjunctHeaderSpace> _subtractedRegions;
   private SingleRouterReport _report1;
   private SingleRouterReport _report2;
+  private AclHeaderPresent _headerPresent;
 
   private static class SingleRouterReport {
     final String _router;
@@ -175,24 +181,26 @@ public class AclDiffReport {
 
 
   public LineDifference toLineDifference(
-      IBatfish batfish, boolean printMore, boolean differential) {
-    AclToConfigLines aclToConfig = new AclToConfigLines(batfish, differential);
-    String rel1 =
-        aclToConfig.getRelevantLines(
-            _report1.getRouterName(),
-            _report1.getAcl(),
-            _regions,
-            _report1._lastDiffs,
-            _report1._implicitDeny,
-            printMore);
-    String rel2 =
-        aclToConfig.getRelevantLines(
-            _report2.getRouterName(),
-            _report2.getAcl(),
-            _regions,
-            _report2._lastDiffs,
-            _report2._implicitDeny,
-            printMore);
+      IBatfish batfish, boolean printMore, boolean differential, BDD diff, BDDPacket packet) {
+    // AclToConfigLines aclToConfig = new AclToConfigLines(batfish, differential);
+    String rel1 = _report1._implicitDeny ? "DEFAULT REJECT" : _report1._lastDiffs.stream().map(AclLine::getName).collect(
+        Collectors.joining(", "));
+//        aclToConfig.getRelevantLines(
+//            _report1.getRouterName(),
+//            _report1.getAcl(),
+//            _regions,
+//            _report1._lastDiffs,
+//            _report1._implicitDeny,
+//            printMore);
+    String rel2 = _report2._implicitDeny ? "DEFAULT REJECT" : _report2._lastDiffs.stream().map(AclLine::getName).collect(
+        Collectors.joining(", "));
+//        aclToConfig.getRelevantLines(
+//            _report2.getRouterName(),
+//            _report2.getAcl(),
+//            _regions,
+//            _report2._lastDiffs,
+//            _report2._implicitDeny,
+//            printMore);
 
     String matches1 = Arrays.stream(rel1.split("\n")).filter(line -> line.startsWith("*")).reduce(String::concat).orElse("");
     String matches2 = Arrays.stream(rel2.split("\n")).filter(line -> line.startsWith("*")).reduce(String::concat).orElse("");
@@ -206,6 +214,19 @@ public class AclDiffReport {
         _subtractedRegions.stream()
             .map(ConjunctHeaderSpace::toString)
             .collect(Collectors.toCollection(TreeSet::new));
+//
+//    if (_headerPresent == null) {
+//      _headerPresent = new AclHeaderPresent(Arrays.asList(_report1.getAcl(), _report2.getAcl()),
+//          packet);
+//    }
+//    List<IncludedExcludedHeaderSpaces> includedExcludedHeaderSpaces =
+//        _headerPresent.getIncludedExcludedHeaderSpaces(diff, null);
+//    difference = includedExcludedHeaderSpaces.stream()
+//        .map(IncludedExcludedHeaderSpaces::getIncludedPrefixString)
+//        .collect(Collectors.toCollection(TreeSet::new));
+//    diffSub = includedExcludedHeaderSpaces.stream()
+//        .map(IncludedExcludedHeaderSpaces::getExcludedPrefixString)
+//        .collect(Collectors.toCollection(TreeSet::new));
 
     return new LineDifference(
         _report1.getRouterName(), _report2.getRouterName(),

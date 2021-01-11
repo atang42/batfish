@@ -1,0 +1,24 @@
+{
+    "class": "org.batfish.minesweeper.question.BgpEdgeDiff.BgpEdgeDiffQuestion",
+    "differential": false,
+    "nodes": "${nodes}",
+    "instance": {
+        "description": "Find route policy differences between router pairs",
+        "instanceName": "bgpedgediff",
+        "longDescription": "Find bgp edge property differences between router pairs",
+        "orderedVariableNames": [
+            "nodes"
+        ],
+        "tags": [
+            "routing policy"
+        ],
+        "variables": {
+            "nodes": {
+                "description": "Only evaluate filters present on nodes matching this specifier",
+                "type": "nodeSpec",
+                "optional": true,
+                "displayName": "nodes"
+            }
+        }
+    }
+}

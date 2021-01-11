@@ -99,8 +99,8 @@ public final class AclTimeDiffAnswerer extends Answerer {
             .put(COL_FILTER2, ld.getFilter2())
             .put(COL_ROUTE_INCLUDED_PREFIXES, included)
             .put(COL_ROUTE_EXCLUDED_PREFIXES, excluded)
-            .put(COL_TEXT1, ld.getMatchingLines1())
-            .put(COL_TEXT2, ld.getMatchingLines2())
+            .put(COL_TEXT1, ld.getSnippet1())
+            .put(COL_TEXT2, ld.getSnippet2())
             .put(COL_ACTION1, ld.getAction1())
             .put(COL_ACTION2, ld.getAction2());
     return builder.build();

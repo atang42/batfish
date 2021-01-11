@@ -1,0 +1,28 @@
+{
+    "class": "org.batfish.minesweeper.question.RouteHeaderTrace.RouteHeaderTraceQuestion",
+    "differential": false,
+    "nodes": "${nodes}",
+    "prefixRange": "${prefixRange}",
+    "instance": {
+        "description": "Find route policy differences between router pairs",
+        "instanceName": "routeheadertrace",
+        "longDescription": "Find route policy differences between router pairs",
+        "tags": [
+            "routing policy"
+        ],
+        "variables": {
+            "prefixRange": {
+                "description": "only look at prefixes matching a prefix range in this list",
+                "type": "string",
+                "optional": true,
+                "displayName": "prefixRange"
+            },
+            "nodes": {
+                "description": "Only evaluate filters present on nodes matching this specifier",
+                "type": "nodeSpec",
+                "optional": true,
+                "displayName": "nodes"
+            }
+        }
+    }
+}

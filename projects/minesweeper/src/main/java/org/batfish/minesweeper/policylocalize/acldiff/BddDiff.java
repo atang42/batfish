@@ -1,5 +1,6 @@
 package org.batfish.minesweeper.policylocalize.acldiff;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
 import java.util.ArrayDeque;
@@ -22,12 +23,17 @@ import net.sf.javabdd.BDDPairing;
 import org.batfish.common.bdd.BDDAcl;
 import org.batfish.common.bdd.BDDPacket;
 import org.batfish.common.bdd.BDDPacketWithLines;
+import org.batfish.common.bdd.BDDSourceManager;
+import org.batfish.common.bdd.IpAccessListToBdd;
+import org.batfish.common.bdd.IpAccessListToBddImpl;
+import org.batfish.common.bdd.PermitAndDenyBdds;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.AclLine;
+import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.questions.NodesSpecifier;
 import org.batfish.minesweeper.policylocalize.acldiff.representation.ConjunctHeaderSpace;
@@ -169,6 +175,48 @@ public class BddDiff {
     _headerVars = null;
   }
 
+
+  public SortedSet<LineDifference> compareAclsNew(Map<String, IpAccessList> accessLists,
+      boolean differential) {
+    assert (accessLists.size() == 2);
+    initPacket();
+    BDDPacket packet = new BDDPacket();
+    SortedSet<LineDifference> differences = new TreeSet<>();
+    List<String> routers = new ArrayList<>(accessLists.keySet());
+
+    IpAccessListToBdd currentToBdd =
+        new IpAccessListToBddImpl(packet, BDDSourceManager.empty(packet), ImmutableMap.of(), ImmutableMap.of());
+
+    IpAccessList acl1 = accessLists.get(routers.get(0));
+    IpAccessList acl2 = accessLists.get(routers.get(1));
+
+    List<IpAccessList> aclList = new ArrayList<>(accessLists.values());
+    AclDiffToPrefix aclDiffToPrefix = new AclDiffToPrefix(routers.get(0),
+        routers.get(1),
+        aclList.get(0),
+        aclList.get(1));
+    List<PermitAndDenyBdds> bddList1 = currentToBdd.reachAndMatchLines(acl1);
+    List<PermitAndDenyBdds> bddList2 = currentToBdd.reachAndMatchLines(acl2);
+    for (int i = 0; i <= acl1.getLines().size(); i++) {
+      PermitAndDenyBdds line1Bdds = bddList1.get(i);
+      for (int j = 0; j <= acl2.getLines().size(); j++) {
+        PermitAndDenyBdds line2Bdds = bddList2.get(j);
+        if (PermitAndDenyBdds.takeDifferentActions(line1Bdds, line2Bdds)) {
+          AclLine line1 = i < acl1.getLines().size() ? acl1.getLines().get(i) : null;
+          AclLine line2 = j < acl2.getLines().size() ? acl2.getLines().get(j) : null;
+          AclDiffReport report = aclDiffToPrefix.getReport(line1, line2);
+          BDD diff1 = line1Bdds.getPermitBdd().and(line2Bdds.getDenyBdd());
+          BDD diff2 = line2Bdds.getPermitBdd().and(line1Bdds.getDenyBdd());
+          differences.add(report.toLineDifference(_batfish, _printMore, differential, diff1.or(diff2), packet));
+        }
+      }
+    }
+
+    return differences;
+  }
+
+
+
   public SortedSet<LineDifference> compareAcls(Map<String, IpAccessList> accessLists,
       boolean differential) {
     assert (accessLists.size() == 2);
@@ -212,7 +260,7 @@ public class BddDiff {
         // diffToPrefix.printDifferenceInPrefix();
         AclDiffReport report = aclDiffToPrefix.getReport(lineDiff[0], lineDiff[1]);
         // report.print(_batfish, _printMore, differential);
-        differences.add(report.toLineDifference(_batfish, _printMore, differential));
+        differences.add(report.toLineDifference(_batfish, _printMore, differential, counterexample, _packet));
         BDD cond = counterexample.exist(getPacketHeaderFields()).not();
         linesNotEquivalent = linesNotEquivalent.and(cond);
       }
@@ -292,11 +340,15 @@ public class BddDiff {
       }
       // Compare other ACLs with same name
       for (String aclName : bothAccessLists) {
-        String unusedIntf = "UNUSED";
-        IpAccessList acl1 = currentContext.getConfigs().get(router).getIpAccessLists().get(aclName);
-        IpAccessList acl2 = referenceContext.getConfigs().get(router).getIpAccessLists().get(aclName);
-        differences.addAll(compareAclPair(router, unusedIntf, acl1, acl2));
-        allAccessLists.remove(aclName);
+        try {
+          String unusedIntf = "UNUSED";
+          IpAccessList acl1 = currentContext.getConfigs().get(router).getIpAccessLists().get(aclName);
+          IpAccessList acl2 = referenceContext.getConfigs().get(router).getIpAccessLists().get(aclName);
+          differences.addAll(compareAclPair(router, unusedIntf, acl1, acl2));
+          allAccessLists.remove(aclName);
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
       }
       System.err.println("Unmatched ACLs:");
       allAccessLists.forEach(System.err::println);
@@ -307,6 +359,12 @@ public class BddDiff {
 
   private SortedSet<LineDifference> compareAclPair(String router, String intfName,
       IpAccessList acl1, IpAccessList acl2) {
+    if (acl1 == null) {
+      acl1 = IpAccessList.builder().build();
+    }
+    if (acl2 == null) {
+      acl2 = IpAccessList.builder().build();
+    }
     if (_comparisonCache.containsKey(acl1) && _comparisonCache.get(acl1).containsKey(acl2)) {
       _intfCache.get(acl1).get(acl2).add(intfName);
       TreeSet<LineDifference> result = new TreeSet<>();
@@ -321,7 +379,7 @@ public class BddDiff {
     Map<String, IpAccessList> accessLists = new HashMap<>();
     accessLists.put(router + "-current", acl1);
     accessLists.put(router + "-reference", acl2);
-    SortedSet<LineDifference> lineDifferences = compareAcls(accessLists, true);
+    SortedSet<LineDifference> lineDifferences = compareAclsNew(accessLists, true);
     lineDifferences.forEach(ld -> ld.setInterface(intfName));
     _comparisonCache.computeIfAbsent(acl1, x -> new HashMap<>()).put(acl2, lineDifferences);
     _intfCache.computeIfAbsent(acl1, x -> new HashMap<>())

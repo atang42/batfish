@@ -32,6 +32,7 @@ import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.ospf.OspfMetricType;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.datamodel.routing_policy.communities.MatchCommunities;
 import org.batfish.datamodel.routing_policy.expr.AsPathListExpr;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
 import org.batfish.datamodel.routing_policy.expr.BooleanExprs;
@@ -65,6 +66,7 @@ import org.batfish.datamodel.routing_policy.expr.Not;
 import org.batfish.datamodel.routing_policy.expr.PrefixSetExpr;
 import org.batfish.datamodel.routing_policy.expr.WithEnvironmentExpr;
 import org.batfish.datamodel.routing_policy.statement.AddCommunity;
+import org.batfish.datamodel.routing_policy.statement.CallStatement;
 import org.batfish.datamodel.routing_policy.statement.DeleteCommunity;
 import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.PrependAsPath;
@@ -88,6 +90,7 @@ import org.batfish.minesweeper.TransferParam;
 import org.batfish.minesweeper.TransferResult;
 import org.batfish.minesweeper.collections.PList;
 import org.batfish.minesweeper.utils.MsPair;
+import sun.plugin2.main.client.CALayerProvider;
 
 /**
  * Class that computes a symbolic transfer function between two symbolic control plane records. The
@@ -319,6 +322,10 @@ class TransferSSA {
       boolean action = (line.getAction() == LineAction.PERMIT);
       CommunityVar cvar = toCommunityVar(line.getMatchCondition());
       BoolExpr c = other.getCommunities().get(cvar);
+      if (c == null) {
+        // Hack for cases when program confuses literal and regex communities
+        c = other.getCommunities().get(CommunityVar.from("^" + cvar.getRegex() + "$"));
+      }
       acc = _enc.mkIf(c, _enc.mkBool(action), acc);
     }
     return acc;
@@ -556,6 +563,10 @@ class TransferSSA {
     } else if (expr instanceof MatchAsPath) {
       pCur.debug("MatchAsPath");
       System.out.println("Warning: use of unimplemented feature MatchAsPath");
+      return fromExpr(_enc.mkFalse());
+    } else if (expr instanceof MatchCommunities) {
+      pCur.debug("MatchCommunities");
+      System.out.println("Warning: use of unimplemented feature MatchCommunities");
       return fromExpr(_enc.mkFalse());
     }
 
@@ -1273,6 +1284,11 @@ class TransferSSA {
         curP.debug("SetNextHop");
         System.out.println("Warning: use of unimplemented feature SetNextHop");
 
+      } else if (stmt instanceof CallStatement) {
+        curP.debug("CallStatement");
+        CallStatement cStmt = (CallStatement) stmt;
+        String policyName = cStmt.getCalledPolicyName();
+        compute(_conf.getRoutingPolicies().get(policyName).getStatements(), curP.indent(), result);
       } else {
 
         String s = (_isExport ? "export" : "import");

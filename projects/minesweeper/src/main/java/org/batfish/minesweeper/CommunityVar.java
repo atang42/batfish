@@ -65,12 +65,12 @@ public final class CommunityVar implements Comparable<CommunityVar> {
    * Create a community var of type {@link Type#EXACT} based on a literal {@link Community} value
    */
   public static CommunityVar from(Community literalCommunity) {
-    return new CommunityVar(Type.EXACT, literalCommunity.matchString(), literalCommunity, null);
+    return new CommunityVar(Type.REGEX, "^" + literalCommunity.matchString() + "$", null, null);
   }
 
   /** Create a community var of type {@link Type#OTHER} based on a REGEX community var. */
   public static CommunityVar other(String regex) {
-    return new CommunityVar(Type.OTHER, regex, null, null);
+    return new CommunityVar(Type.REGEX, regex, null, null);
   }
 
   private static Collection<CommunityVar> flattenCommunityVars(Collection<CommunityVar> conjuncts) {

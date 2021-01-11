@@ -17,6 +17,7 @@ import org.batfish.datamodel.questions.Question;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.datamodel.table.TableMetadata;
+import org.batfish.minesweeper.Graph;
 import org.batfish.minesweeper.policylocalize.RoutePolicyDiff;
 import org.batfish.specifier.NodeSpecifier;
 import org.batfish.specifier.SpecifierContext;
@@ -54,6 +55,8 @@ public class RouterTimeDiffAnswerer extends Answerer {
     List<Row> bgpDiffs = new ArrayList<>();
     List<Row> ospfDiffs = new ArrayList<>();
 
+    Graph graph1 = new Graph(_batfish, current);
+    Graph graph2 = new Graph(_batfish, reference);
     for (String routerName : routersInBoth) {
       List<Configuration> configurations =
           Arrays.asList(
@@ -66,7 +69,7 @@ public class RouterTimeDiffAnswerer extends Answerer {
               routerName + "-REFERENCE",
               _batfish,
               configurations,
-              _ignoredPrefixRanges);
+              _ignoredPrefixRanges, graph1, graph2);
       try {
         bgpDiffs.addAll(diff.getBGPDiff());
         ospfDiffs.addAll(diff.getOspfDiff());

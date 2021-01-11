@@ -1,5 +1,6 @@
 package org.batfish.minesweeper.question.RouterDiff;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -12,8 +13,8 @@ import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.questions.Question;
 import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.datamodel.table.TableMetadata;
+import org.batfish.minesweeper.Graph;
 import org.batfish.minesweeper.policylocalize.RoutePolicyDiff;
-import org.batfish.representation.cisco_nxos.BgpVrfIpv4AddressFamilyConfiguration.Network;
 import org.batfish.specifier.NodeSpecifier;
 import org.batfish.specifier.SpecifierContext;
 
@@ -52,13 +53,14 @@ public class RouterDiffAnswerer extends Answerer {
     List<Configuration> configurations =
         nodeSet.stream().map(specifierContext.getConfigs()::get).collect(Collectors.toList());
 
+    Graph graph = new Graph(_batfish, snapshot);
     RoutePolicyDiff diff =
         new RoutePolicyDiff(
             configurations.get(0).getHostname(),
             configurations.get(1).getHostname(),
             _batfish,
             configurations,
-            _ignoredPrefixRanges);
+            _ignoredPrefixRanges, graph, graph);
 
     TableAnswerElement answerElement =
         new TableAnswerElement(new TableMetadata(RoutePolicyDiff.COLUMN_METADATA));

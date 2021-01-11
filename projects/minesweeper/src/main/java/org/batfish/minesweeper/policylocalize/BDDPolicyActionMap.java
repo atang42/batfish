@@ -1,17 +1,25 @@
 package org.batfish.minesweeper.policylocalize;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.Nonnull;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import org.batfish.common.bdd.BDDInteger;
+import org.batfish.datamodel.routing_policy.expr.DecrementMetric;
+import org.batfish.datamodel.routing_policy.expr.IncrementMetric;
 import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.expr.LongExpr;
 import org.batfish.datamodel.routing_policy.expr.NextHopExpr;
-import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.bdd.BDDRoute;
@@ -157,7 +165,14 @@ public class BDDPolicyActionMap {
     if (metric instanceof LiteralLong) {
       getPolicyActionsMatchingBDD(bdd)
           .forEach(pair -> pair.action.setMetric(((LiteralLong) metric).getValue()));
-    } else {
+    } else if (metric instanceof DecrementMetric) {
+      getPolicyActionsMatchingBDD(bdd)
+          .forEach(pair -> pair.action.incMetric(-((DecrementMetric) metric).getSubtrahend()));
+    } else if (metric instanceof IncrementMetric) {
+      getPolicyActionsMatchingBDD(bdd)
+          .forEach(pair -> pair.action.incMetric(-((IncrementMetric) metric).getAddend()));
+    }
+      else {
       throw new UnsupportedOperationException("Unsupported set metric expression");
     }
   }

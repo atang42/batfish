@@ -1,0 +1,24 @@
+{
+    "class": "org.batfish.minesweeper.question.OriginateDiff.OriginateDiffQuestion",
+    "differential": false,
+    "nodes": "${nodes}",
+    "instance": {
+        "description": "Find originated route differences between router pairs",
+        "instanceName": "originatediff",
+        "longDescription": "Find originated route differences between router pairs",
+        "orderedVariableNames": [
+            "nodes"
+        ],
+        "tags": [
+            "routing policy"
+        ],
+        "variables": {
+            "nodes": {
+                "description": "Only evaluate filters present on nodes matching this specifier",
+                "type": "nodeSpec",
+                "optional": true,
+                "displayName": "nodes"
+            }
+        }
+    }
+}

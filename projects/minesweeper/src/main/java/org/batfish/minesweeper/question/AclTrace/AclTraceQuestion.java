@@ -3,39 +3,38 @@ package org.batfish.minesweeper.question.AclTrace;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.PacketHeaderConstraints;
 import org.batfish.datamodel.questions.Question;
 import org.batfish.specifier.AllNodesNodeSpecifier;
+import org.batfish.specifier.FilterSpecifier;
+import org.batfish.specifier.NameRegexFilterSpecifier;
 import org.batfish.specifier.NodeSpecifier;
 import org.batfish.specifier.SpecifierFactories;
 
 public class AclTraceQuestion extends Question {
 
   private static final String PROP_NODES = "nodes";
-  private static final String PROP_PREFIX = "prefix";
-
+  private static final String PROP_HEADER_CONSTRAINTS = "headers";
+  private static final String PROP_FILTERS = "filters";
 
   @Nonnull private final String _nodes;
   @Nonnull private final NodeSpecifier _nodeSpecifier;
-  @Nonnull private final String _prefix;
-  @Nonnull private final Prefix _prefixRepr;
+  private final PacketHeaderConstraints _headerConstraints;
+  @Nonnull private final String _filters;
 
 
   @JsonCreator
   public AclTraceQuestion(@JsonProperty(PROP_NODES) @Nullable String nodes,
-      @JsonProperty(PROP_PREFIX) @Nullable String ranges) {
+      @JsonProperty(PROP_HEADER_CONSTRAINTS) @Nullable PacketHeaderConstraints headers, @JsonProperty(PROP_FILTERS) @Nullable String filters) {
     _nodes = (nodes != null) ? nodes : ".*";
     _nodeSpecifier =
         SpecifierFactories.getNodeSpecifierOrDefault(nodes, AllNodesNodeSpecifier.INSTANCE);
-    if (ranges == null || ranges.isEmpty()) {
-      _prefix = "";
-      _prefixRepr = Prefix.ZERO;
-    } else {
-      _prefix = ranges;
-      _prefixRepr = Prefix.parse(ranges);
-    }
+    _filters = (filters != null) ? filters : ".*";
+    _headerConstraints = (headers != null) ? headers : PacketHeaderConstraints.unconstrained();
+
   }
 
   @JsonProperty(PROP_NODES)
@@ -49,15 +48,21 @@ public class AclTraceQuestion extends Question {
     return _nodeSpecifier;
   }
 
-  @JsonProperty(PROP_PREFIX)
+  @JsonProperty(PROP_HEADER_CONSTRAINTS)
   @Nonnull
-  public String getRanges() {
-    return _prefix;
+  public PacketHeaderConstraints getHeaderConstraints() {
+    return _headerConstraints;
   }
 
+  @JsonProperty(PROP_FILTERS)
   @Nonnull
-  public Prefix getPrefix() {
-    return _prefixRepr;
+  public String getFilters() {
+    return _filters;
+  }
+
+  @JsonIgnore
+  @Nonnull public FilterSpecifier getFilterSpecifier() {
+    return new NameRegexFilterSpecifier(Pattern.compile(_filters));
   }
 
   @Override public boolean getDataPlane() {
