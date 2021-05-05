@@ -4,15 +4,15 @@ Instructions for running:
 
 1. Build Batfish with the following commands:
  
-> git clone --branch rm-localize https://github.com/atang42/batfish.git
-> cd batfish
-> . tools/batfish_functions.sh
-> batfish_build_all
+    git clone --branch rm-localize https://github.com/atang42/batfish.git
+    cd batfish
+    . tools/batfish_functions.sh
+    batfish_build_all
  
 2. Install pybatfish if not installed:
  
-> sudo python3 -m pip install --upgrade pip
-> sudo python3 -m pip install --upgrade git+https://github.com/batfish/pybatfish.git
+     sudo python3 -m pip install --upgrade pip
+     sudo python3 -m pip install --upgrade git+https://github.com/batfish/pybatfish.git
  
 3a. I have created scripts that call my questions in Batfish. One is for comparing two backups and some are for comparing two versions of the same router across time.
  
