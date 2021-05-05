@@ -1,0 +1,109 @@
+version 16.1R5.7;
+system {
+    host-name juniper_router;
+    domain-name example.net;
+    backup-router 10.0.0.2;
+    name-server {
+        10.2.3.4;
+    }
+}
+interfaces {
+    ge-0/0/0 {
+        unit 0 {
+            family inet {
+                no-redirects;
+                address 10.12.11.2/24;
+                filter {
+                    input reject_list;
+                }                    
+            }
+        }
+    }
+    ge-1/0/0 {
+        unit 0 {
+            family inet {
+                address 2.12.11.1/24;
+            }
+        }
+    }
+    ge-2/0/0 {
+        unit 0 {
+            family inet {
+                address 2.12.12.1/24;
+            }
+        }
+    }
+    lo0 {
+        description "Loopback Interface 0";
+        unit 0 {
+            family inet {
+                no-redirects;
+                address 2.1.1.1/32;
+            }
+        }
+    }
+}
+protocols {
+    bgp {
+        traceoptions {
+            file nsr_bgp_trace_file;
+            flag nsr-synchronization detail;
+        }
+        log-updown;
+        damping;
+        group GROUP1 {
+            type internal;
+            local-address 2.1.1.1;
+            family inet {
+                unicast;
+            }
+            import POL;
+            local-as 2;
+            neighbor 10.12.11.1 {
+                description R1;
+            }
+        }
+    }
+}
+policy-options {
+    prefix-list NETS {
+        10.9.0.0/16;
+        10.100.0.0/16;
+    }
+    community COMM members [10:10 10:11];
+    policy-statement POL {
+        term rule1 {
+            from prefix-list NETS;
+            then reject;
+        }
+        term rule2 {
+            from community COMM;
+            then reject;
+        }
+        term rule3 {
+            then {
+                local-preference 30;
+                accept;
+            }
+        }
+    }
+}
+firewall {
+    family inet {
+        filter reject_list {
+            term rule1 {
+                from {
+                    source-address {
+                        128.0.0.0/16;
+                        128.1.0.0/16;
+                        128.2.0.0/16;
+                    }
+                }
+                then reject;
+            }
+            term rule2 {
+                then accept;
+            }
+        }
+    }
+}

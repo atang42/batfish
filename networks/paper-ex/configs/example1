@@ -1,0 +1,141 @@
+!
+version 15.2
+service timestamps debug datetime msec
+service timestamps log datetime msec
+!
+hostname cisco_router
+!
+boot-start-marker
+boot-end-marker
+!
+!
+ntp server 18.18.18.18
+ntp server 23.23.23.23
+!
+!
+no aaa new-model
+no ip icmp rate-limit unreachable
+ip cef
+!
+!
+!
+!
+!
+!
+no ip domain lookup
+ip domain name lab.local
+no ipv6 cef
+!
+aaa new-model
+aaa authentication login privilege-mode
+!
+multilink bundle-name authenticated
+!
+!
+!
+!
+!
+!
+!
+!
+!
+ip tcp synwait-time 5
+! 
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+interface Loopback0
+ ip address 2.1.1.1 255.255.255.255
+!
+interface GigabitEthernet0/0
+ ip address 10.12.11.2 255.255.255.0
+ media-type gbic
+ speed 1000
+ duplex full
+ negotiation auto
+ ip access-group reject_list in
+!
+interface GigabitEthernet1/0
+ ip address 2.12.11.1 255.255.255.0
+ negotiation auto
+!
+interface GigabitEthernet2/0
+ ip address 2.12.12.1 255.255.255.0
+ negotiation auto
+!
+router ospf 1
+ router-id 2.1.1.1
+ redistribute connected subnets
+ network 2.0.0.0 0.255.255.255 area 1
+!
+router bgp 2
+ bgp router-id 2.1.1.1
+ bgp log-neighbor-changes
+ neighbor as1 peer-group
+ neighbor as1 remote-as 1
+ neighbor 10.12.11.1 peer-group as1
+ !
+ address-family ipv4
+  network 1.0.0.0 mask 0.255.255.255
+  neighbor as1 send-community
+  neighbor as1 route-map POL in
+  neighbor 10.12.11.1 activate
+  maximum-paths 5
+ exit-address-family
+!
+ip forward-protocol nd
+!
+ip bgp-community new-format
+!
+no ip http server
+no ip http secure-server
+!
+ip prefix-list NETS permit 10.9.0.0/16 le 32
+ip prefix-list NETS permit 10.100.0.0/16 le 31
+!
+ip community-list standard COMM permit 10:10
+ip community-list standard COMM permit 10:11
+!
+route-map POL deny 10
+ match ip address NETS
+route-map POL deny 20
+ match community COMM
+route-map POL permit 30
+ set local-preference 30
+!
+ip route 1.2.3.4 255.255.255.255 GigabitEthernet0/0
+ip route 1.0.0.0 255.0.0.0 GigabitEthernet0/0
+!
+ip access-list extended reject_list
+ deny ip 128.0.0.0 0.0.255.255 any 
+ deny ip 128.1.0.0 0.0.255.255 any 
+ deny ip 128.2.0.0 0.0.255.255 any 
+ deny ip 128.3.0.0 0.0.255.255 any 
+ permit ip any any
+!
+control-plane
+!
+!
+line con 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+ stopbits 1
+line aux 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+ stopbits 1
+line vty 0 4
+ login
+!
+!
+end

@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
@@ -148,8 +149,14 @@ public class OspfDiffAnswerer extends Answerer {
     keys.addAll(ospfProcesses2.keySet());
 
     // TODO: Check OSPF process ids
-    OspfProcess ospfProcess1 = ospfProcesses1.values().iterator().next();
-    OspfProcess ospfProcess2 = ospfProcesses2.values().iterator().next();
+    OspfProcess ospfProcess1 = null;
+    OspfProcess ospfProcess2 = null;
+    if (!ospfProcesses1.values().isEmpty()) {
+      ospfProcess1 = ospfProcesses1.values().iterator().next();
+    }
+    if (!ospfProcesses2.values().isEmpty()) {
+      ospfProcess2 = ospfProcesses2.values().iterator().next();
+    }
 
     Map<String, String> interfaceMap = getDefaultInterfaceMap(configurations.get(0),
         configurations.get(1),
@@ -176,27 +183,28 @@ public class OspfDiffAnswerer extends Answerer {
     TreeMap<String, OspfInterfaceFeatures> features1 = new TreeMap<>();
     Topology topo1 = _batfish.getTopologyProvider().getInitialLayer3Topology(snapshot1);
     Topology topo2 = _batfish.getTopologyProvider().getInitialLayer3Topology(snapshot2);
-    for (OspfNeighborConfigId id : ospfProcess1.getOspfNeighborConfigs().keySet()) {
-      boolean intfActive = configurations.get(0)
-          .getAllInterfaces()
-          .get(id.getInterfaceName())
-          .getActive();
-      if (intfActive) {
-        String neighbor = findNeighbor(configurations.get(0), id.getInterfaceName(), topo1);
-        features1.put(id.getInterfaceName(),
-            new OspfInterfaceFeatures(configurations.get(0), ospfProcess1, id, neighbor));
+
+    if (ospfProcess1 != null) {
+      for (OspfNeighborConfigId id : ospfProcess1.getOspfNeighborConfigs().keySet()) {
+        boolean intfActive = configurations.get(0).getAllInterfaces().get(id.getInterfaceName()).getActive();
+        if (intfActive) {
+          String neighbor = findNeighbor(configurations.get(0), id.getInterfaceName(), topo1);
+          features1.put(
+              id.getInterfaceName(),
+              new OspfInterfaceFeatures(configurations.get(0), ospfProcess1, id, neighbor));
+        }
       }
     }
     TreeMap<String, OspfInterfaceFeatures> features2 = new TreeMap<>();
-    for (OspfNeighborConfigId id : ospfProcess2.getOspfNeighborConfigs().keySet()) {
-      boolean intfActive = configurations.get(1)
-          .getAllInterfaces()
-          .get(id.getInterfaceName())
-          .getActive();
-      if (intfActive) {
-        String neighbor = findNeighbor(configurations.get(1), id.getInterfaceName(), topo2);
-        features2.put(id.getInterfaceName(),
-            new OspfInterfaceFeatures(configurations.get(1), ospfProcess2, id, neighbor));
+    if (ospfProcess2 != null) {
+      for (OspfNeighborConfigId id : ospfProcess2.getOspfNeighborConfigs().keySet()) {
+        boolean intfActive = configurations.get(1).getAllInterfaces().get(id.getInterfaceName()).getActive();
+        if (intfActive) {
+          String neighbor = findNeighbor(configurations.get(1), id.getInterfaceName(), topo2);
+          features2.put(
+              id.getInterfaceName(),
+              new OspfInterfaceFeatures(configurations.get(1), ospfProcess2, id, neighbor));
+        }
       }
     }
 
@@ -289,8 +297,10 @@ public class OspfDiffAnswerer extends Answerer {
   Map<String, String> getTopologyInterfaceMap(Configuration config1, Configuration config2,
       IBatfish batfish, NetworkSnapshot snapshot) {
     Topology topology = batfish.getTopologyProvider().getInitialLayer3Topology(snapshot);
-    SortedSet<Edge> edges1 = topology.getNodeEdges().get(config1.getHostname());
-    SortedSet<Edge> edges2 = topology.getNodeEdges().get(config2.getHostname());
+    SortedSet<Edge> edges1 = Optional.ofNullable(topology.getNodeEdges().get(config1.getHostname()))
+        .orElse(new TreeSet<>());
+    SortedSet<Edge> edges2 = Optional.ofNullable(topology.getNodeEdges().get(config2.getHostname()))
+        .orElse(new TreeSet<>());
 
     Map<String, Set<String>> neighbors1 = new TreeMap<>();
     for (Edge e : edges1) {

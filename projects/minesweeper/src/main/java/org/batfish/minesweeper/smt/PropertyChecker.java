@@ -927,7 +927,7 @@ public class PropertyChecker {
       // Create transfer function for router 1
       Set<String> toModel1 = new TreeSet<>();
       toModel1.add(r1);
-      Graph g1 = new Graph(_batfish, snapshot, null, toModel1);
+      Graph g1 = new Graph(_batfish, snapshot);
       Encoder e1 = new Encoder(g1, q);
       e1.computeEncoding();
 
@@ -936,7 +936,7 @@ public class PropertyChecker {
       // Create transfer function for router 2
       Set<String> toModel2 = new TreeSet<>();
       toModel2.add(r2);
-      Graph g2 = new Graph(_batfish, snapshot, null, toModel2);
+      Graph g2 = new Graph(_batfish, snapshot);
       Encoder e2 = new Encoder(e1, g2);
       e2.computeEncoding();
 
@@ -958,10 +958,14 @@ public class PropertyChecker {
 //      }
 
       TreeMap<String, String> ifaceMap = new TreeMap<>();
-      ifaceMap.put("GigabitEthernet0/0", "ge-0/0/0.0");
-      ifaceMap.put("GigabitEthernet1/0", "ge-1/0/0.0");
-      ifaceMap.put("GigabitEthernet2/0", "ge-2/0/0.0");
-      ifaceMap.put("Loopback0", "lo0.0");
+//      ifaceMap.put("GigabitEthernet0/0", "ge-0/0/0.0");
+//      ifaceMap.put("GigabitEthernet1/0", "ge-1/0/0.0");
+//      ifaceMap.put("GigabitEthernet2/0", "ge-2/0/0.0");
+//      ifaceMap.put("Loopback0", "lo0.0");
+      ifaceMap.put("GigabitEthernet0/0", "GigabitEthernet0/0");
+      ifaceMap.put("GigabitEthernet1/0", "GigabitEthernet1/0");
+      ifaceMap.put("GigabitEthernet2/0", "GigabitEthernet2/0");
+      ifaceMap.put("Loopback0", "Loopback0");
 
       // TODO: check running same protocols?
       Map<String, Map<Protocol, Map<String, EnumMap<EdgeType, LogicalEdge>>>> lgeMap2 =
@@ -990,8 +994,11 @@ public class PropertyChecker {
             if (iface2Name == null) {
               continue;
             }
-            LogicalEdge lge2 = lgeMap2.get(r2).get(proto1).get(iface2Name).get(lge1.getEdgeType());
-
+            LogicalEdge lge2 = Optional.ofNullable(lgeMap2.get(r2))
+                .map(x -> x.get(proto1))
+                .map(x -> x.get(iface2Name))
+                .map(x -> x.get(lge1.getEdgeType()))
+                .orElse(null);
             if (lge1.getEdgeType() == EdgeType.IMPORT) {
 
               SymbolicRoute vars1 = slice1.getLogicalGraph().getEnvironmentVars().get(lge1);
@@ -1106,6 +1113,7 @@ public class PropertyChecker {
       BoolExpr validDest;
       validDest = ignoredDestinations(ctx, slice1, r1, conf1);
       validDest = ctx.mkAnd(validDest, ignoredDestinations(ctx, slice2, r2, conf2));
+      validDest = ctx.mkTrue();
       SymbolicPacket p1 = slice1.getSymbolicPacket();
       SymbolicPacket p2 = slice2.getSymbolicPacket();
       BoolExpr equalPackets = p1.mkEqual(p2);
@@ -1124,9 +1132,12 @@ public class PropertyChecker {
         required = equal(e2, conf2, best1, best2);
       } else {
         // Forwarding decisions should be the sames
-        Map<String, GraphEdge> geMap2 = interfaceMap(edges2);
+        Map<String, GraphEdge> geMap2 = interfaceMap(edges2, r2);
         BoolExpr sameForwarding = ctx.mkBool(true);
         for (GraphEdge ge1 : edges1) {
+          if (!ge1.getRouter().equals(r1)) {
+            continue;
+          }
           String iface2name = ifaceMap.get(ge1.getStart().getName());
           if (iface2name == null) {
             continue;
@@ -1136,7 +1147,9 @@ public class PropertyChecker {
           BoolExpr dataFwd2 = slice2.getSymbolicDecisions().getDataForwarding().get(r2, ge2);
           assert (dataFwd1 != null);
           assert (dataFwd2 != null);
-          sameForwarding = ctx.mkAnd(sameForwarding, ctx.mkEq(dataFwd1, dataFwd2));
+          if (dataFwd1 != null && dataFwd2 != null) {
+            sameForwarding = ctx.mkAnd(sameForwarding, ctx.mkEq(dataFwd1, dataFwd2));
+          }
         }
         required = ctx.mkAnd(sameForwarding); // equalOutputs, equalIncomingAcls);
       }
@@ -1264,10 +1277,12 @@ public class PropertyChecker {
   /*
    * Create a map from interface name to graph edge.
    */
-  private Map<String, GraphEdge> interfaceMap(List<GraphEdge> edges) {
+  private Map<String, GraphEdge> interfaceMap(List<GraphEdge> edges, String name) {
     Map<String, GraphEdge> ifaceMap = new HashMap<>();
     for (GraphEdge edge : edges) {
-      ifaceMap.put(edge.getStart().getName(), edge);
+      if (edge.getRouter().equals(name)) {
+        ifaceMap.put(edge.getStart().getName(), edge);
+      }
     }
     return ifaceMap;
   }

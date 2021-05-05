@@ -1056,7 +1056,7 @@ public class Graph {
    * Find the router Id for a router and a protocol.
    */
   private long routerId(Configuration conf, Protocol proto) {
-    if (proto.isBgp()) {
+    if (proto.isBgp() && conf.getDefaultVrf().getBgpProcess() != null) {
       return conf.getDefaultVrf().getBgpProcess().getRouterId().asLong();
     }
     if (proto.isOspf()) {

@@ -122,7 +122,6 @@ public class BddDiff {
     SortedMap<String, Configuration> configs = _batfish.loadConfigurations(_batfish.getSnapshot());
     Map<String, Map<String, IpAccessList>> aclNameToAcls = new TreeMap<>();
     Map<IpAccessList, String> aclToRouterName = new HashMap<>();
-    System.out.println("Matched Routers:");
     routerNames.forEach(x -> System.out.println("    " + x));
     System.out.println();
 
