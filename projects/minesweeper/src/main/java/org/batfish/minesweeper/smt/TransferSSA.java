@@ -90,7 +90,6 @@ import org.batfish.minesweeper.TransferParam;
 import org.batfish.minesweeper.TransferResult;
 import org.batfish.minesweeper.collections.PList;
 import org.batfish.minesweeper.utils.MsPair;
-import sun.plugin2.main.client.CALayerProvider;
 
 /**
  * Class that computes a symbolic transfer function between two symbolic control plane records. The
