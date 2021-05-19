@@ -8,8 +8,8 @@ from pybatfish.question import bfq
 from pathlib import Path
 
 # Input configurations and outputs
-curr_snapshot = 'directoryA'
-ref_snapshot = 'directoryB'
+curr_snapshot = 'networks/paper-ex'
+ref_snapshot = 'networks/paper-ex2'
 
 output_directory = "output/"
 router_regex = ".*"
@@ -18,15 +18,15 @@ router_regex = ".*"
 bf_session.host = 'localhost'
 bf_set_network('network_name')
 
-bf_init_snapshot(ref_snapshot, name=ref_snapshot, overwrite=True)
-bf_init_snapshot(curr_snapshot, name=curr_snapshot, overwrite=True)
+bf_init_snapshot(ref_snapshot, name='ref', overwrite=True)
+bf_init_snapshot(curr_snapshot, name='curr', overwrite=True)
 
 # Load Questions
 load_questions()
 
 # Run Batfish Questions
-snap = curr_snapshot
-ref = ref_snapshot
+snap = 'curr'
+ref = 'ref'
 
 Path(output_directory).mkdir(parents=True, exist_ok=True)
 

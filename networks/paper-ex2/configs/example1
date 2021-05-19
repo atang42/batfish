@@ -61,17 +61,17 @@ interface GigabitEthernet0/0
  speed 1000
  duplex full
  negotiation auto
- ip access-group reject_list in
+ ip access-group local_addrs in
 !
 interface GigabitEthernet1/0
  ip address 2.12.11.1 255.255.255.0
  negotiation auto
 !
 interface GigabitEthernet2/0
- ip address 2.12.12.1 255.255.255.0
+ ip address 3.12.12.1 255.255.255.0
  negotiation auto
 !
-router ospf 1
+router ospf 2
  router-id 2.1.1.1
  redistribute connected subnets
  network 2.0.0.0 0.255.255.255 area 1
@@ -86,7 +86,7 @@ router bgp 2
  address-family ipv4
   network 1.0.0.0 mask 0.255.255.255
   neighbor as1 send-community
-  neighbor as1 route-map POL in
+  neighbor as1 route-map fromIspPeer in
   neighbor 10.12.11.1 activate
   maximum-paths 5
  exit-address-family
@@ -98,27 +98,28 @@ ip bgp-community new-format
 no ip http server
 no ip http secure-server
 !
-ip prefix-list NETS permit 10.9.0.0/16 le 32
-ip prefix-list NETS permit 10.100.0.0/16 le 32
+ip prefix-list internal_service permit 10.9.0.0/16 le 32
+ip prefix-list internal_service permit 10.100.0.0/16 le 32
 !
-ip community-list standard COMM permit 10:10
-ip community-list standard COMM permit 10:11
+ip community-list expanded blackhole deny 10:10
+ip community-list expanded blackhole deny 10:11
 !
-route-map POL deny 10
- match ip address NETS
-route-map POL deny 20
- match community COMM
-route-map POL permit 30
+route-map fromIspPeer deny 10
+ match ip address internal_service
+route-map fromIspPeer permit 20
+ match community blackhole
  set local-preference 30
+route-map fromIspPeer deny 30
 !
-ip route 1.2.3.4 255.255.255.255 GigabitEthernet0/0
+ip route 1.2.3.5 255.255.255.255 GigabitEthernet0/0
 ip route 1.0.0.0 255.0.0.0 GigabitEthernet0/0
 !
-ip access-list extended reject_list
- deny ip 128.0.0.0 0.0.255.255 any 
+ip access-list extended local_addrs
+ deny ip 128.0.0.0 0.0.127.255 any 
+ deny ip 128.0.128.0 0.0.127.255 any 
  deny ip 128.1.0.0 0.0.255.255 any 
  deny ip 128.2.0.0 0.0.255.255 any 
- deny ip 128.3.0.0 0.0.255.255 any 
+ deny ip 128.4.0.0 0.0.255.255 any 
  permit ip any any
 !
 control-plane

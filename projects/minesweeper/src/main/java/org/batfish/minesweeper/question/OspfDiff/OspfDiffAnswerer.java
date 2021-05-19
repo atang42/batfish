@@ -1,21 +1,23 @@
 package org.batfish.minesweeper.question.OspfDiff;
 
-import com.google.common.base.MoreObjects;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.annotation.Nonnull;
 import org.batfish.common.Answerer;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
+import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Edge;
 import org.batfish.datamodel.Prefix;
@@ -240,6 +242,32 @@ public class OspfDiffAnswerer extends Answerer {
     return result;
   }
 
+  private boolean checkHeuristicConsistency(
+      String intf, Map<String, String> map1, Map<String, String> map2,
+      String text, Configuration config1, Configuration config2) {
+    String val1 = map1.get(intf);
+    String val2 = map2.get(intf);
+
+    if (val1 != null && val2 != null && !val1.equals(val2)) {
+      System.out.println(String.format("%s: %s:%s %s:%s %s:%s",
+          text,
+          config1.getHostname(),
+          intf,
+          config2.getHostname(),
+          val1,
+          config2.getHostname(),
+          val2));
+      return false;
+    }
+    return true;
+  }
+
+  /*
+  Applies heuristics to match interfaces. Uses three heuristics:
+  1. Same interface name
+  2. Same node on the other end (based on inferred topology
+  3. Same Ip mask
+   */
   private Map<String, String> getDefaultInterfaceMap(Configuration config1, Configuration config2,
       IBatfish batfish, NetworkSnapshot snapshot) {
     Map<String, String> sameNameInterfaceMap = getSameNameInterfaceMap(config1, config2);
@@ -247,22 +275,30 @@ public class OspfDiffAnswerer extends Answerer {
         config2,
         batfish,
         snapshot);
+    Map<String, String> sameIpInterfaceMap = getSameIpInterfaceMatching(config1, config2);
 
     Set<String> keys = new TreeSet<>(sameNameInterfaceMap.keySet());
     keys.addAll(topologyInterfaceMap.keySet());
+    keys.addAll(sameIpInterfaceMap.keySet());
 
     Map<String, String> result = new TreeMap<>();
     for (String key : keys) {
-      if (sameNameInterfaceMap.containsKey(key) && topologyInterfaceMap.containsKey(key)
-          && !sameNameInterfaceMap.get(key).equals(topologyInterfaceMap.get(key))) {
-        System.out.println(String.format("Same name interface to different neighbors: %s:%s %s:%s",
-            config1.getHostname(),
-            key,
-            config2.getHostname(),
-            key));
+
+      boolean check1 = checkHeuristicConsistency(key, sameNameInterfaceMap, topologyInterfaceMap,
+          "Mismatch between similarly named interfaces", config1, config2);
+      boolean check2 = checkHeuristicConsistency(key, sameNameInterfaceMap, sameIpInterfaceMap,
+          "Mismatch between similarly named interfaces", config1, config2);
+      boolean check3 = checkHeuristicConsistency(key, sameIpInterfaceMap, topologyInterfaceMap,
+          "Mismatch between interfaces to same node", config1, config2);
+      if (check1 && check2 && check3) {
+        result.put(key,
+            Stream.of(sameNameInterfaceMap.get(key),
+                topologyInterfaceMap.get(key),
+                sameIpInterfaceMap.get(key))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null));
       }
-      result.put(key,
-          MoreObjects.firstNonNull(topologyInterfaceMap.get(key), sameNameInterfaceMap.get(key)));
     }
     return result;
   }
@@ -294,7 +330,10 @@ public class OspfDiffAnswerer extends Answerer {
     return String.join(", ", neighbors);
   }
 
-  Map<String, String> getTopologyInterfaceMap(Configuration config1, Configuration config2,
+  /*
+  Creates a map matching interfaces in config1 with interfaces from config2 based on inferred topology
+   */
+  private Map<String, String> getTopologyInterfaceMap(Configuration config1, Configuration config2,
       IBatfish batfish, NetworkSnapshot snapshot) {
     Topology topology = batfish.getTopologyProvider().getInitialLayer3Topology(snapshot);
     SortedSet<Edge> edges1 = Optional.ofNullable(topology.getNodeEdges().get(config1.getHostname()))
@@ -343,6 +382,34 @@ public class OspfDiffAnswerer extends Answerer {
     }
 
     return result;
+  }
+
+  /*
+  Creates a mapping of interfaces from config1 and config2 based on having the same IP mask
+   */
+  private Map<String, String> getSameIpInterfaceMatching(Configuration config1, Configuration config2) {
+
+    Set<String> interfaces1 = new TreeSet<>(config1.getAllInterfaces().keySet());
+    Set<String> interfaces2 = new TreeSet<>(config2.getAllInterfaces().keySet());
+
+    interfaces1.removeIf(key -> !config1.getAllInterfaces().get(key).getActive());
+    interfaces2.removeIf(key -> !config2.getAllInterfaces().get(key).getActive());
+
+    Map<String, String> matching = new TreeMap<>();
+    for (String intf1 : interfaces1) {
+      ConcreteInterfaceAddress addr1 = config1.getAllInterfaces().get(intf1).getConcreteAddress();
+      if (addr1 != null) {
+        for (String intf2 : interfaces2) {
+          ConcreteInterfaceAddress addr2 =
+              config2.getAllInterfaces().get(intf2).getConcreteAddress();
+          if (addr2 != null && addr1.getPrefix().equals(addr2.getPrefix())) {
+            matching.put(intf1, intf2);
+            break;
+          }
+        }
+      }
+    }
+    return matching;
   }
 
   /*
