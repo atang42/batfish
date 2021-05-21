@@ -1,5 +1,7 @@
 ## Campion
 
+Campion is implemented as an extension of Batfish, an open-source network configuration analysis tool. For more information on Batfish, visit https://www.batfish.org/.
+
 ### Running the Docker Image (Recommended)
 
 1. Pull the Docker image
